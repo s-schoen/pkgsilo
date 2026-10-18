@@ -1,0 +1,45 @@
+version: '3'
+
+tasks:
+  build:
+    cmds:
+      - go build -o build/pkgsilo ./cmd
+
+  "build:prod":
+    cmds:
+      - go build -ldflags "-s -w" -o build/pkgsilo ./cmd/
+    sources:
+      - ./**/*.go
+    generates:
+      - build/pkgsilo
+
+  run:
+    interactive: true
+    dotenv:
+      - .env
+    deps:
+      - build
+    cmds:
+      - ./build/pkgsilo {{.CLI_ARGS}}
+
+  lint:
+    cmds:
+      - golangci-lint run
+
+  lint:fix:
+    cmds:
+      - golangci-lint run --fix
+
+  test:
+    cmds:
+      - go test -coverprofile build/coverage ./...
+
+  "coverage:html":
+    deps:
+      - test
+    cmds:
+      - go tool cover -html=build/coverage
+
+  clean:
+    cmds:
+      - rm -r build/
