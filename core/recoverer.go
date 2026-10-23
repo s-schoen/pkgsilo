@@ -6,9 +6,11 @@ import (
 	"runtime/debug"
 
 	"github.com/go-chi/chi/v5/middleware"
+
+	"pkgsilo/envelope"
 )
 
-// Recoverer recovers panics in downstream handlers, logs them and responds with 500.
+// Recoverer recovers panics in downstream handlers, logs them and responds with a 500 problem.
 //
 // The stack trace is attached to the log record, unless prettyStack is set (meant for development):
 // then it is printed to stderr in a readable form instead, since log handlers escape it onto one line.
@@ -38,8 +40,9 @@ func Recoverer(logger *slog.Logger, prettyStack bool) func(http.Handler) http.Ha
 				}
 
 				// The response may already be underway; its status can't be changed anymore.
+				// The panic value is not exposed to the client.
 				if ww.Status() == 0 {
-					ww.WriteHeader(http.StatusInternalServerError)
+					envelope.WriteProblem(ww, envelope.InternalServerErrorProblem.New(envelope.Occurrence{}))
 				}
 			}()
 

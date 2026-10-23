@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"pkgsilo/envelope"
 )
 
 func TestRecoverer(t *testing.T) {
@@ -19,6 +21,8 @@ func TestRecoverer(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Equal(t, envelope.ProblemJSONMediaType, rec.Header().Get("Content-Type"))
+	assert.JSONEq(t, `{"type":"about:blank","title":"Internal Server Error","status":500}`, rec.Body.String())
 
 	entries := logEntries(t, buf)
 	require.Len(t, entries, 1)
