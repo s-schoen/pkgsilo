@@ -31,7 +31,7 @@ func run() error {
 	logger := core.NewLogger(os.Stderr, cfg)
 	slog.SetDefault(logger)
 
-	r := core.NewRouter(logger)
+	r := core.NewRouter(cfg, logger)
 	r.Mount("/health", health.NewHandler().Routes())
 
 	return core.RunServer(ctx, cfg, logger, r)

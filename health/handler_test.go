@@ -13,7 +13,7 @@ import (
 )
 
 func TestHealth(t *testing.T) {
-	r := core.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r := core.NewRouter(core.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	r.Mount("/health", NewHandler().Routes())
 
 	rec := httptest.NewRecorder()
