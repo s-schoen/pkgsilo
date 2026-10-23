@@ -12,6 +12,9 @@ type Config struct {
 	Env      string     `env:"ENV"       envDefault:"prod"`
 	HTTPAddr string     `env:"HTTP_ADDR" envDefault:":8080"`
 	LogLevel slog.Level `env:"LOG_LEVEL" envDefault:"info"`
+	// TrustedProxies are the reverse proxies (IPs or CIDRs, comma-separated) whose
+	// X-Forwarded-For header is used to determine the client IP. Empty: the header is ignored.
+	TrustedProxies TrustedProxies `env:"TRUSTED_PROXIES"`
 }
 
 // LoadConfig parses the configuration from the process environment.
