@@ -21,5 +21,5 @@ func TestHealth(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-	assert.JSONEq(t, `{"status":"ok"}`, rec.Body.String())
+	assert.JSONEq(t, `{"status":"healthy","service":"pkgsilo"}`, rec.Body.String())
 }

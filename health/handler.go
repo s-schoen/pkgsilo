@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"pkgsilo/core"
+	"pkgsilo/envelope"
 )
 
 // Handler serves the health check endpoint.
@@ -24,5 +24,5 @@ func (h *Handler) Routes() chi.Router {
 }
 
 func (h *Handler) check(w http.ResponseWriter, _ *http.Request) {
-	core.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	envelope.WriteHealth(w, envelope.Health{Status: envelope.HealthHealthy, Service: "pkgsilo"})
 }
