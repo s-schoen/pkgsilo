@@ -22,6 +22,14 @@ tasks:
     cmds:
       - ./build/pkgsilo {{.CLI_ARGS}}
 
+  "db:up":
+    cmds:
+      - docker compose -f docker-compose.dev.yaml up -d --wait
+
+  "db:down":
+    cmds:
+      - docker compose -f docker-compose.dev.yaml down
+
   lint:
     cmds:
       - golangci-lint run
@@ -33,6 +41,10 @@ tasks:
   test:
     cmds:
       - go test -coverprofile build/coverage ./...
+
+  "test:short":
+    cmds:
+      - go test -short ./...
 
   "coverage:html":
     deps:
