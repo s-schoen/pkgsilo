@@ -30,6 +30,19 @@ tasks:
     cmds:
       - docker compose -f docker-compose.dev.yaml down
 
+  "db:migrate":
+    dotenv:
+      - .env
+    cmds:
+      - migrate -path migrations -database "$DATABASE_URL" up {{.CLI_ARGS}}
+
+  "db:migrate:new":
+    preconditions:
+      - sh: test -n "{{.CLI_ARGS}}"
+        msg: "usage: task db:migrate:new -- <name>"
+    cmds:
+      - migrate create -ext sql -dir migrations {{.CLI_ARGS}}
+
   lint:
     cmds:
       - golangci-lint run
