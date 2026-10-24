@@ -15,6 +15,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "")
 	t.Setenv("LOG_LEVEL", "")
 	t.Setenv("TRUSTED_PROXIES", "")
+	t.Setenv("DATABASE_MAX_CONNS", "")
+	t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
 
 	cfg, err := LoadConfig()
 	require.NoError(t, err)
@@ -24,6 +26,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	assert.Equal(t, ":8080", cfg.HTTPAddr)
 	assert.Equal(t, slog.LevelInfo, cfg.LogLevel)
 	assert.Empty(t, cfg.TrustedProxies)
+	assert.Equal(t, "postgres://localhost/pkgsilo", cfg.DatabaseURL)
+	assert.Equal(t, 10, cfg.DatabaseMaxConns)
 }
 
 func TestLoadConfig_FromEnv(t *testing.T) {
@@ -31,6 +35,8 @@ func TestLoadConfig_FromEnv(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "127.0.0.1:9000")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("TRUSTED_PROXIES", "10.0.0.1, 192.168.0.0/16")
+	t.Setenv("DATABASE_URL", "postgres://db.internal/pkgsilo")
+	t.Setenv("DATABASE_MAX_CONNS", "25")
 
 	cfg, err := LoadConfig()
 	require.NoError(t, err)
@@ -42,16 +48,22 @@ func TestLoadConfig_FromEnv(t *testing.T) {
 		netip.MustParsePrefix("10.0.0.1/32"),
 		netip.MustParsePrefix("192.168.0.0/16"),
 	}, cfg.TrustedProxies)
+	assert.Equal(t, "postgres://db.internal/pkgsilo", cfg.DatabaseURL)
+	assert.Equal(t, 25, cfg.DatabaseMaxConns)
 }
 
 func TestLoadConfig_Invalid(t *testing.T) {
 	tests := map[string]string{
-		"LOG_LEVEL":       "loud",
-		"TRUSTED_PROXIES": "10.0.0.1,proxy.local",
+		"LOG_LEVEL":          "loud",
+		"TRUSTED_PROXIES":    "10.0.0.1,proxy.local",
+		"DATABASE_URL":       "",
+		"DATABASE_MAX_CONNS": "many",
 	}
 
 	for key, value := range tests {
 		t.Run(key, func(t *testing.T) {
+			// A valid required value, so each case fails only because of its own key.
+			t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
 			t.Setenv(key, value)
 
 			_, err := LoadConfig()
