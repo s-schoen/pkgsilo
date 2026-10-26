@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"pkgsilo/envelope"
+	"pkgsilo/core/envelope"
 )
 
 // Handler serves the health check endpoint.

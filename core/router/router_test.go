@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/config"
+	"pkgsilo/core/envelope"
 	"pkgsilo/core/logger/loggertest"
 	"pkgsilo/core/middleware"
-	"pkgsilo/envelope"
 )
 
 func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {

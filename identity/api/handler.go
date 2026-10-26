@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"pkgsilo/envelope"
+	"pkgsilo/core/envelope"
+	"pkgsilo/core/request"
 	"pkgsilo/identity/service"
-	"pkgsilo/request"
 )
 
 // Handler serves the identity endpoints.

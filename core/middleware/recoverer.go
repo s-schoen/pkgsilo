@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	"pkgsilo/envelope"
+	"pkgsilo/core/envelope"
 )
 
 // Recoverer recovers panics in downstream handlers, logs them and responds with a 500 problem.

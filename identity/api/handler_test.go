@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"pkgsilo/core/config"
+	"pkgsilo/core/envelope"
 	"pkgsilo/core/router"
-	"pkgsilo/envelope"
 	"pkgsilo/identity/service"
 	"pkgsilo/identity/service/mocks"
 )

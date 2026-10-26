@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/envelope"
 	"pkgsilo/core/logger/loggertest"
 	"pkgsilo/core/middleware"
-	"pkgsilo/envelope"
 )
 
 func TestRecoverer(t *testing.T) {

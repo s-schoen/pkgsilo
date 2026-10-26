@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"pkgsilo/envelope"
+	"pkgsilo/core/envelope"
 	"pkgsilo/identity/service"
 )
 

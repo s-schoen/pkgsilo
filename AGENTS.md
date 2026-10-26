@@ -16,7 +16,7 @@ Each layer package has the same files:
 
 - **Repository**: one interface, implemented for PostgreSQL with sqlx. Tests run against a real PostgreSQL testcontainer with `migrations/` applied. Never mock the database.
 - **Service**: all logic lives here: IDs, timestamps, audit fields, domain rules. Tests mock the repository.
-- **API**: a chi handler with `Routes()`, mounted in `cmd/main.go`. Validate all input with ozzo-validation through the shared `request` package (`DecodeJSON`, `ParsePagination`). Respond with the `envelope` types. Tests mock the service and mount the handler on `router.New` (`core/router`).
+- **API**: a chi handler with `Routes()`, mounted in `cmd/main.go`. Validate all input with ozzo-validation through the shared `core/request` package (`DecodeJSON`, `ParsePagination`). Respond with the `core/envelope` types. Tests mock the service and mount the handler on `router.New` (`core/router`).
 
 Translate only errors that have a meaning in the layer above. Wrap every other error with `%w`, so it reaches the API's log intact and is answered with a 500 without details.
 

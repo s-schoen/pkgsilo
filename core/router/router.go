@@ -8,8 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"pkgsilo/core/config"
+	"pkgsilo/core/envelope"
 	"pkgsilo/core/middleware"
-	"pkgsilo/envelope"
 )
 
 // New returns a chi router with the middleware shared by all features.
