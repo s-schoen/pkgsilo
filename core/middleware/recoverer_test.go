@@ -1,4 +1,4 @@
-package core
+package middleware_test
 
 import (
 	"net/http"
@@ -8,12 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/logger/loggertest"
+	"pkgsilo/core/middleware"
 	"pkgsilo/envelope"
 )
 
 func TestRecoverer(t *testing.T) {
-	logger, buf := newJSONLogger()
-	h := Recoverer(logger, false)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	logger, buf := loggertest.NewJSON()
+	h := middleware.Recoverer(logger, false)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	}))
 
@@ -24,7 +26,7 @@ func TestRecoverer(t *testing.T) {
 	assert.Equal(t, envelope.ProblemJSONMediaType, rec.Header().Get("Content-Type"))
 	assert.JSONEq(t, `{"type":"about:blank","title":"Internal Server Error","status":500}`, rec.Body.String())
 
-	entries := logEntries(t, buf)
+	entries := loggertest.Entries(t, buf)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "ERROR", entries[0]["level"])
 	assert.Equal(t, "panic recovered", entries[0]["msg"])
@@ -44,8 +46,8 @@ func (w *writeHeaderCounter) WriteHeader(code int) {
 }
 
 func TestRecoverer_KeepsStatusOfStartedResponse(t *testing.T) {
-	logger, buf := newJSONLogger()
-	h := Recoverer(logger, false)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	logger, buf := loggertest.NewJSON()
+	h := middleware.Recoverer(logger, false)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		panic("boom")
 	}))
@@ -55,12 +57,12 @@ func TestRecoverer_KeepsStatusOfStartedResponse(t *testing.T) {
 
 	assert.Equal(t, http.StatusAccepted, w.Code)
 	assert.Equal(t, 1, w.calls)
-	assert.Len(t, logEntries(t, buf), 1)
+	assert.Len(t, loggertest.Entries(t, buf), 1)
 }
 
 func TestRecoverer_RepanicsErrAbortHandler(t *testing.T) {
-	logger, buf := newJSONLogger()
-	h := Recoverer(logger, false)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	logger, buf := loggertest.NewJSON()
+	h := middleware.Recoverer(logger, false)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic(http.ErrAbortHandler)
 	}))
 

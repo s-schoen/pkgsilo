@@ -1,4 +1,4 @@
-package core
+package middleware_test
 
 import (
 	"net/http"
@@ -9,15 +9,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"pkgsilo/core/middleware"
 )
 
-// serveRequestID runs a request through RequestID and returns the ID seen by the handler.
+// serveRequestID runs a request through middleware.RequestID and returns the ID seen by the handler.
 func serveRequestID(t *testing.T, req *http.Request) (string, *httptest.ResponseRecorder) {
 	t.Helper()
 
 	var ctxID string
-	h := RequestID(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		ctxID = RequestIDFromContext(r.Context())
+	h := middleware.RequestID(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		ctxID = middleware.RequestIDFromContext(r.Context())
 	}))
 
 	rec := httptest.NewRecorder()
@@ -28,12 +30,12 @@ func serveRequestID(t *testing.T, req *http.Request) (string, *httptest.Response
 
 func TestRequestID_ReusesValidIncomingID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set(RequestIDHeader, "client-id_1.0")
+	req.Header.Set(middleware.RequestIDHeader, "client-id_1.0")
 
 	ctxID, rec := serveRequestID(t, req)
 
 	assert.Equal(t, "client-id_1.0", ctxID)
-	assert.Equal(t, "client-id_1.0", rec.Header().Get(RequestIDHeader))
+	assert.Equal(t, "client-id_1.0", rec.Header().Get(middleware.RequestIDHeader))
 }
 
 func TestRequestID_GeneratesUUIDv7WhenMissing(t *testing.T) {
@@ -42,7 +44,7 @@ func TestRequestID_GeneratesUUIDv7WhenMissing(t *testing.T) {
 	id, err := uuid.Parse(ctxID)
 	require.NoError(t, err)
 	assert.Equal(t, 7, int(id[6]>>4), "UUID version")
-	assert.Equal(t, ctxID, rec.Header().Get(RequestIDHeader))
+	assert.Equal(t, ctxID, rec.Header().Get(middleware.RequestIDHeader))
 
 	otherID, _ := serveRequestID(t, httptest.NewRequest(http.MethodGet, "/", nil))
 	assert.NotEqual(t, ctxID, otherID)
@@ -58,18 +60,18 @@ func TestRequestID_ReplacesInvalidIncomingID(t *testing.T) {
 	for name, incoming := range tests {
 		t.Run(name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
-			req.Header.Set(RequestIDHeader, incoming)
+			req.Header.Set(middleware.RequestIDHeader, incoming)
 
 			ctxID, rec := serveRequestID(t, req)
 
 			assert.NotEqual(t, incoming, ctxID)
 			_, err := uuid.Parse(ctxID)
 			require.NoError(t, err)
-			assert.Equal(t, ctxID, rec.Header().Get(RequestIDHeader))
+			assert.Equal(t, ctxID, rec.Header().Get(middleware.RequestIDHeader))
 		})
 	}
 }
 
 func TestRequestIDFromContext_Empty(t *testing.T) {
-	assert.Empty(t, RequestIDFromContext(t.Context()))
+	assert.Empty(t, middleware.RequestIDFromContext(t.Context()))
 }

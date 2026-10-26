@@ -1,4 +1,4 @@
-package core
+package middleware_test
 
 import (
 	"net/http"
@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"pkgsilo/core/middleware"
 )
 
 func TestSecurityHeaders(t *testing.T) {
-	h := SecurityHeaders(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	h := middleware.SecurityHeaders(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))

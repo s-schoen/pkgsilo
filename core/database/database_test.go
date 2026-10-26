@@ -1,4 +1,4 @@
-package core
+package database
 
 import (
 	"context"
@@ -8,9 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	"pkgsilo/core/config"
 )
 
-func TestOpenDatabase(t *testing.T) {
+func TestOpen(t *testing.T) {
 	if testing.Short() {
 		t.Skip("starts a PostgreSQL container")
 	}
@@ -24,7 +26,7 @@ func TestOpenDatabase(t *testing.T) {
 	url, err := ctr.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
 
-	db, err := OpenDatabase(ctx, Config{DatabaseURL: url, DatabaseMaxConns: 3})
+	db, err := Open(ctx, config.Config{DatabaseURL: url, DatabaseMaxConns: 3})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -34,15 +36,15 @@ func TestOpenDatabase(t *testing.T) {
 	assert.Equal(t, 3, db.Stats().MaxOpenConnections)
 }
 
-func TestOpenDatabase_InvalidURL(t *testing.T) {
-	_, err := OpenDatabase(context.Background(), Config{DatabaseURL: "postgres://:invalid", DatabaseMaxConns: 1})
+func TestOpen_InvalidURL(t *testing.T) {
+	_, err := Open(context.Background(), config.Config{DatabaseURL: "postgres://:invalid", DatabaseMaxConns: 1})
 	assert.ErrorContains(t, err, "parse database url")
 }
 
-func TestOpenDatabase_Unreachable(t *testing.T) {
-	cfg := Config{DatabaseURL: "postgres://u:secret@127.0.0.1:1/db?connect_timeout=1", DatabaseMaxConns: 1}
+func TestOpen_Unreachable(t *testing.T) {
+	cfg := config.Config{DatabaseURL: "postgres://u:secret@127.0.0.1:1/db?connect_timeout=1", DatabaseMaxConns: 1}
 
-	_, err := OpenDatabase(context.Background(), cfg)
+	_, err := Open(context.Background(), cfg)
 	require.ErrorContains(t, err, "ping database")
 	assert.NotContains(t, err.Error(), "secret")
 }

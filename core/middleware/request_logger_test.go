@@ -1,4 +1,4 @@
-package core
+package middleware_test
 
 import (
 	"net/http"
@@ -7,6 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"pkgsilo/core/logger/loggertest"
+	"pkgsilo/core/middleware"
 )
 
 func TestRequestLogger(t *testing.T) {
@@ -34,17 +37,17 @@ func TestRequestLogger(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			logger, buf := newJSONLogger()
-			h := RequestID(ClientIP(nil)(RequestLogger(logger)(tt.handler)))
+			logger, buf := loggertest.NewJSON()
+			h := middleware.RequestID(middleware.ClientIP(nil)(middleware.RequestLogger(logger)(tt.handler)))
 
 			req := httptest.NewRequest(http.MethodPost, "/things", nil)
 			req.RemoteAddr = "10.0.0.1:1234"
-			req.Header.Set(RequestIDHeader, "req-1")
+			req.Header.Set(middleware.RequestIDHeader, "req-1")
 			// Not from a trusted proxy, so it must not be logged as the client IP.
 			req.Header.Set("X-Forwarded-For", "6.6.6.6")
 			h.ServeHTTP(httptest.NewRecorder(), req)
 
-			entries := logEntries(t, buf)
+			entries := loggertest.Entries(t, buf)
 			require.Len(t, entries, 1)
 			entry := entries[0]
 

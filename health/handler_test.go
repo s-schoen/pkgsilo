@@ -9,11 +9,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"pkgsilo/core"
+	"pkgsilo/core/config"
+	"pkgsilo/core/router"
 )
 
 func TestHealth(t *testing.T) {
-	r := core.NewRouter(core.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r := router.New(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	r.Mount("/health", NewHandler().Routes())
 
 	rec := httptest.NewRecorder()

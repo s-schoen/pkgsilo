@@ -1,4 +1,4 @@
-package core
+package middleware_test
 
 import (
 	"net/http"
@@ -8,13 +8,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"pkgsilo/core/middleware"
 )
 
 func TestTrustedProxies_UnmarshalText(t *testing.T) {
-	var tp TrustedProxies
+	var tp middleware.TrustedProxies
 	require.NoError(t, tp.UnmarshalText([]byte(" 10.0.0.1, 172.16.5.4/12 ,::1,,::ffff:192.0.2.1")))
 
-	assert.Equal(t, TrustedProxies{
+	assert.Equal(t, middleware.TrustedProxies{
 		netip.MustParsePrefix("10.0.0.1/32"),
 		netip.MustParsePrefix("172.16.0.0/12"),
 		netip.MustParsePrefix("::1/128"),
@@ -25,18 +27,18 @@ func TestTrustedProxies_UnmarshalText(t *testing.T) {
 func TestTrustedProxies_UnmarshalTextInvalid(t *testing.T) {
 	for _, input := range []string{"proxy.local", "10.0.0.0/33", "10.0.0.1:80"} {
 		t.Run(input, func(t *testing.T) {
-			var tp TrustedProxies
+			var tp middleware.TrustedProxies
 			assert.ErrorContains(t, tp.UnmarshalText([]byte(input)), input)
 		})
 	}
 }
 
 func TestClientIP(t *testing.T) {
-	var trusted TrustedProxies
+	var trusted middleware.TrustedProxies
 	require.NoError(t, trusted.UnmarshalText([]byte("10.0.0.0/8, 2001:db8:ffff::1")))
 
 	tests := map[string]struct {
-		trusted      TrustedProxies
+		trusted      middleware.TrustedProxies
 		remoteAddr   string
 		forwardedFor []string
 		wantClientIP string
@@ -110,8 +112,8 @@ func TestClientIP(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			var got netip.Addr
-			h := ClientIP(tt.trusted)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				got = ClientIPFromContext(r.Context())
+			h := middleware.ClientIP(tt.trusted)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				got = middleware.ClientIPFromContext(r.Context())
 			}))
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -127,5 +129,5 @@ func TestClientIP(t *testing.T) {
 }
 
 func TestClientIPFromContext_Empty(t *testing.T) {
-	assert.False(t, ClientIPFromContext(t.Context()).IsValid())
+	assert.False(t, middleware.ClientIPFromContext(t.Context()).IsValid())
 }

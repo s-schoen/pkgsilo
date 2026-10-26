@@ -16,7 +16,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"pkgsilo/core"
+	"pkgsilo/core/config"
+	"pkgsilo/core/database"
 )
 
 // testDB is shared by all tests of the package. It is nil in short mode.
@@ -59,7 +60,7 @@ func runWithDatabase(m *testing.M) (int, error) {
 		return 0, fmt.Errorf("connection string: %w", err)
 	}
 
-	testDB, err = core.OpenDatabase(ctx, core.Config{DatabaseURL: url, DatabaseMaxConns: 2})
+	testDB, err = database.Open(ctx, config.Config{DatabaseURL: url, DatabaseMaxConns: 2})
 	if err != nil {
 		return 0, fmt.Errorf("open database: %w", err)
 	}

@@ -1,4 +1,4 @@
-package core
+package router
 
 import (
 	"io"
@@ -11,11 +11,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/config"
+	"pkgsilo/core/logger/loggertest"
+	"pkgsilo/core/middleware"
 	"pkgsilo/envelope"
 )
 
-func TestNewRouter_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
-	r := NewRouter(Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
+	r := New(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	// chi only builds the middleware chain once at least one route exists.
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
@@ -23,18 +26,18 @@ func TestNewRouter_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/does-not-exist", nil))
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
-	assert.NotEmpty(t, rec.Header().Get(RequestIDHeader))
+	assert.NotEmpty(t, rec.Header().Get(middleware.RequestIDHeader))
 	assert.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
 	assert.Equal(t, envelope.ProblemJSONMediaType, rec.Header().Get("Content-Type"))
 	assert.JSONEq(t, `{"type":"about:blank","title":"Not Found","status":404}`, rec.Body.String())
 }
 
-func TestNewRouter_MethodNotAllowed(t *testing.T) {
-	r := NewRouter(Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+func TestNew_MethodNotAllowed(t *testing.T) {
+	r := New(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	noop := func(http.ResponseWriter, *http.Request) {}
 	r.Get("/root", noop)
 	r.Delete("/root", noop)
-	// Mounted after NewRouter, so the subrouter inherits the 404 and 405 handlers.
+	// Mounted after New, so the subrouter inherits the 404 and 405 handlers.
 	sub := chi.NewRouter()
 	sub.Put("/", noop)
 	sub.Get("/item", noop)
@@ -64,8 +67,8 @@ func TestNewRouter_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestNewRouter_MountedSubrouterNotFound(t *testing.T) {
-	r := NewRouter(Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+func TestNew_MountedSubrouterNotFound(t *testing.T) {
+	r := New(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	sub := chi.NewRouter()
 	sub.Get("/", func(http.ResponseWriter, *http.Request) {})
 	r.Mount("/sub", sub)
@@ -77,12 +80,12 @@ func TestNewRouter_MountedSubrouterNotFound(t *testing.T) {
 	assert.JSONEq(t, `{"type":"about:blank","title":"Not Found","status":404}`, rec.Body.String())
 }
 
-func TestNewRouter_LogsClientIPFromTrustedProxy(t *testing.T) {
-	logger, buf := newJSONLogger()
-	var trusted TrustedProxies
+func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {
+	logger, buf := loggertest.NewJSON()
+	var trusted middleware.TrustedProxies
 	require.NoError(t, trusted.UnmarshalText([]byte("10.0.0.0/8")))
 
-	r := NewRouter(Config{TrustedProxies: trusted}, logger)
+	r := New(config.Config{TrustedProxies: trusted}, logger)
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -90,14 +93,14 @@ func TestNewRouter_LogsClientIPFromTrustedProxy(t *testing.T) {
 	req.Header.Set("X-Forwarded-For", "203.0.113.7")
 	r.ServeHTTP(httptest.NewRecorder(), req)
 
-	entries := logEntries(t, buf)
+	entries := loggertest.Entries(t, buf)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "203.0.113.7", entries[0]["client_ip"])
 }
 
-func TestNewRouter_RecoveredPanicIsLoggedAs500(t *testing.T) {
-	logger, buf := newJSONLogger()
-	r := NewRouter(Config{}, logger)
+func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
+	logger, buf := loggertest.NewJSON()
+	r := New(config.Config{}, logger)
 	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
 
 	rec := httptest.NewRecorder()
@@ -106,7 +109,7 @@ func TestNewRouter_RecoveredPanicIsLoggedAs500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.JSONEq(t, `{"type":"about:blank","title":"Internal Server Error","status":500}`, rec.Body.String())
 
-	entries := logEntries(t, buf)
+	entries := loggertest.Entries(t, buf)
 	require.Len(t, entries, 2)
 	panicEntry, requestEntry := entries[0], entries[1]
 

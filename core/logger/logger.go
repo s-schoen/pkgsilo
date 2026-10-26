@@ -1,4 +1,4 @@
-package core
+package logger
 
 import (
 	"context"
@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"github.com/lmittmann/tint"
+
+	"pkgsilo/core/config"
+	"pkgsilo/core/middleware"
 )
 
-// NewLogger returns a colored, human-readable logger in development and a JSON logger otherwise.
+// New returns a colored, human-readable logger in development and a JSON logger otherwise.
 // Records logged with a request context automatically include its request ID.
-func NewLogger(w io.Writer, cfg Config) *slog.Logger {
+func New(w io.Writer, cfg config.Config) *slog.Logger {
 	var h slog.Handler
 	if cfg.IsDev() {
 		h = tint.NewTextHandler(w, &tint.Options{
@@ -31,7 +34,7 @@ type contextHandler struct {
 }
 
 func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
-	if id := RequestIDFromContext(ctx); id != "" {
+	if id := middleware.RequestIDFromContext(ctx); id != "" {
 		r.AddAttrs(slog.String("request_id", id))
 	}
 

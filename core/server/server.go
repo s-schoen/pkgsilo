@@ -1,4 +1,4 @@
-package core
+package server
 
 import (
 	"context"
@@ -7,12 +7,14 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"pkgsilo/core/config"
 )
 
 const shutdownTimeout = 10 * time.Second
 
-// RunServer serves handler on cfg.HTTPAddr until ctx is cancelled, then shuts down gracefully.
-func RunServer(ctx context.Context, cfg Config, logger *slog.Logger, handler http.Handler) error {
+// Run serves handler on cfg.HTTPAddr until ctx is cancelled, then shuts down gracefully.
+func Run(ctx context.Context, cfg config.Config, logger *slog.Logger, handler http.Handler) error {
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           handler,

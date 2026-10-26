@@ -1,4 +1,4 @@
-package core
+package database
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+
+	"pkgsilo/core/config"
 )
 
 const (
@@ -15,9 +17,9 @@ const (
 	databaseConnMaxIdleTime = 5 * time.Minute
 )
 
-// OpenDatabase connects to PostgreSQL at cfg.DatabaseURL and verifies the connection.
+// Open connects to PostgreSQL at cfg.DatabaseURL and verifies the connection.
 // The caller must close the returned database.
-func OpenDatabase(ctx context.Context, cfg Config) (*sqlx.DB, error) {
+func Open(ctx context.Context, cfg config.Config) (*sqlx.DB, error) {
 	// pgx redacts the password in parse errors, so the error is safe to log.
 	connCfg, err := pgx.ParseConfig(cfg.DatabaseURL)
 	if err != nil {

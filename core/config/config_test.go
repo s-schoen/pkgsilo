@@ -1,4 +1,4 @@
-package core
+package config
 
 import (
 	"log/slog"
@@ -7,9 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"pkgsilo/core/middleware"
 )
 
-func TestLoadConfig_Defaults(t *testing.T) {
+func TestLoad_Defaults(t *testing.T) {
 	// Empty values fall back to the defaults, isolating the test from the shell environment.
 	t.Setenv("ENV", "")
 	t.Setenv("HTTP_ADDR", "")
@@ -18,7 +20,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	t.Setenv("DATABASE_MAX_CONNS", "")
 	t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
 
-	cfg, err := LoadConfig()
+	cfg, err := Load()
 	require.NoError(t, err)
 
 	assert.Equal(t, "prod", cfg.Env)
@@ -30,7 +32,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	assert.Equal(t, 10, cfg.DatabaseMaxConns)
 }
 
-func TestLoadConfig_FromEnv(t *testing.T) {
+func TestLoad_FromEnv(t *testing.T) {
 	t.Setenv("ENV", "dev")
 	t.Setenv("HTTP_ADDR", "127.0.0.1:9000")
 	t.Setenv("LOG_LEVEL", "debug")
@@ -38,13 +40,13 @@ func TestLoadConfig_FromEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://db.internal/pkgsilo")
 	t.Setenv("DATABASE_MAX_CONNS", "25")
 
-	cfg, err := LoadConfig()
+	cfg, err := Load()
 	require.NoError(t, err)
 
 	assert.True(t, cfg.IsDev())
 	assert.Equal(t, "127.0.0.1:9000", cfg.HTTPAddr)
 	assert.Equal(t, slog.LevelDebug, cfg.LogLevel)
-	assert.Equal(t, TrustedProxies{
+	assert.Equal(t, middleware.TrustedProxies{
 		netip.MustParsePrefix("10.0.0.1/32"),
 		netip.MustParsePrefix("192.168.0.0/16"),
 	}, cfg.TrustedProxies)
@@ -52,7 +54,7 @@ func TestLoadConfig_FromEnv(t *testing.T) {
 	assert.Equal(t, 25, cfg.DatabaseMaxConns)
 }
 
-func TestLoadConfig_Invalid(t *testing.T) {
+func TestLoad_Invalid(t *testing.T) {
 	tests := map[string]string{
 		"LOG_LEVEL":          "loud",
 		"TRUSTED_PROXIES":    "10.0.0.1,proxy.local",
@@ -66,7 +68,7 @@ func TestLoadConfig_Invalid(t *testing.T) {
 			t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
 			t.Setenv(key, value)
 
-			_, err := LoadConfig()
+			_, err := Load()
 			assert.Error(t, err)
 		})
 	}

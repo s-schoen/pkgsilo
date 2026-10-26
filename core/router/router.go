@@ -1,4 +1,4 @@
-package core
+package router
 
 import (
 	"log/slog"
@@ -7,23 +7,25 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"pkgsilo/core/config"
+	"pkgsilo/core/middleware"
 	"pkgsilo/envelope"
 )
 
-// NewRouter returns a chi router with the middleware shared by all features.
+// New returns a chi router with the middleware shared by all features.
 //
 // Unmatched routes and methods are answered with Problem Details. Subrouters inherit these
-// handlers only when mounted after NewRouter returns.
-func NewRouter(cfg Config, logger *slog.Logger) *chi.Mux {
+// handlers only when mounted after New returns.
+func New(cfg config.Config, logger *slog.Logger) *chi.Mux {
 	r := chi.NewRouter()
 	// Order matters: RequestLogger reads the request ID and client IP from the context it
 	// receives, so both must be set before it. Recoverer must sit inside RequestLogger so
 	// that recovered panics are logged with their 500 status.
-	r.Use(RequestID)
-	r.Use(ClientIP(cfg.TrustedProxies))
-	r.Use(RequestLogger(logger))
-	r.Use(Recoverer(logger, cfg.IsDev()))
-	r.Use(SecurityHeaders)
+	r.Use(middleware.RequestID)
+	r.Use(middleware.ClientIP(cfg.TrustedProxies))
+	r.Use(middleware.RequestLogger(logger))
+	r.Use(middleware.Recoverer(logger, cfg.IsDev()))
+	r.Use(middleware.SecurityHeaders)
 
 	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 		envelope.WriteProblem(w, envelope.NotFoundProblem.New(envelope.Occurrence{}))
