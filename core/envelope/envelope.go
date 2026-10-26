@@ -8,10 +8,8 @@ import (
 	"net/http"
 )
 
-// WriteJSON writes v as a JSON response with the given status code.
-func WriteJSON(w http.ResponseWriter, status int, v any) {
-	writeJSON(w, status, "application/json", v)
-}
+// jsonMediaType is the media type of every successful JSON response.
+const jsonMediaType = "application/json"
 
 func writeJSON(w http.ResponseWriter, status int, contentType string, v any) {
 	w.Header().Set("Content-Type", contentType)

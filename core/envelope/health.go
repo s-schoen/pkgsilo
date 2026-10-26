@@ -43,5 +43,5 @@ func (h Health) HTTPStatus() int {
 
 // WriteHealth writes h as a JSON response with the status matching its aggregate health.
 func WriteHealth(w http.ResponseWriter, h Health) {
-	WriteJSON(w, h.HTTPStatus(), h)
+	writeJSON(w, h.HTTPStatus(), jsonMediaType, h)
 }

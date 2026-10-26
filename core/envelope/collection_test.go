@@ -1,6 +1,8 @@
 package envelope
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -94,4 +96,13 @@ func TestNewCollectionFromLookahead(t *testing.T) {
 
 		assert.Error(t, err)
 	})
+}
+
+func TestWriteCollection(t *testing.T) {
+	rec := httptest.NewRecorder()
+	WriteCollection(rec, NewCollection[user](nil, Pagination{Offset: 10, Limit: 5}))
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.JSONEq(t, `{"data":[],"pagination":{"offset":10,"limit":5,"nextOffset":null}}`, rec.Body.String())
 }

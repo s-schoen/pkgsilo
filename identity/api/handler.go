@@ -59,7 +59,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	envelope.WriteJSON(w, http.StatusOK, c)
+	envelope.WriteCollection(w, c)
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -74,8 +74,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Location", path.Join(r.URL.Path, identity.ID.String()))
-	envelope.WriteJSON(w, http.StatusCreated, envelope.NewResource(toIdentityResponse(identity)))
+	envelope.WriteCreated(w, path.Join(r.URL.Path, identity.ID.String()), toIdentityResponse(identity))
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +89,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	envelope.WriteJSON(w, http.StatusOK, envelope.NewResource(toIdentityResponse(identity)))
+	envelope.WriteResource(w, toIdentityResponse(identity))
 }
 
 func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +109,7 @@ func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	envelope.WriteJSON(w, http.StatusOK, envelope.NewResource(toIdentityResponse(identity)))
+	envelope.WriteResource(w, toIdentityResponse(identity))
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,9 @@
 package envelope
 
-import "fmt"
+import (
+	"fmt"
+	"net/http"
+)
 
 // Pagination describes a page of a collection and how to continue through it.
 type Pagination struct {
@@ -73,4 +76,9 @@ func NewCollectionFromLookahead[T any](rows []T, o LookaheadOptions) (Collection
 		NextOffset: nextOffset,
 		Total:      o.Total,
 	}), nil
+}
+
+// WriteCollection writes c as a collection response with status 200.
+func WriteCollection[T any](w http.ResponseWriter, c Collection[T]) {
+	writeJSON(w, http.StatusOK, jsonMediaType, c)
 }
