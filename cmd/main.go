@@ -10,6 +10,9 @@ import (
 
 	"pkgsilo/core"
 	"pkgsilo/health"
+	identityapi "pkgsilo/identity/api"
+	identityrepo "pkgsilo/identity/repository"
+	identityservice "pkgsilo/identity/service"
 )
 
 func main() {
@@ -45,6 +48,9 @@ func run() error {
 
 	r := core.NewRouter(cfg, logger)
 	r.Mount("/health", health.NewHandler().Routes())
+
+	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db))
+	r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
 
 	return core.RunServer(ctx, cfg, logger, r)
 }
