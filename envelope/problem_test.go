@@ -72,3 +72,22 @@ func TestWriteProblem(t *testing.T) {
 	assert.Equal(t, ProblemJSONMediaType, rec.Header().Get("Content-Type"))
 	assert.JSONEq(t, `{"type":"about:blank","title":"Conflict","status":409,"detail":"Already exists."}`, rec.Body.String())
 }
+
+func TestValidationError_MarshalJSON(t *testing.T) {
+	p := UnprocessableEntityProblem.New(Occurrence{Extensions: map[string]any{
+		ValidationErrorsExtension: []ValidationError{
+			{Detail: "cannot be blank", Pointer: "#/name"},
+			{Detail: "must be an integer", Parameter: "limit"},
+		},
+	}})
+
+	assert.JSONEq(t, `{
+		"type": "about:blank",
+		"title": "Unprocessable Entity",
+		"status": 422,
+		"errors": [
+			{"detail":"cannot be blank","pointer":"#/name"},
+			{"detail":"must be an integer","parameter":"limit"}
+		]
+	}`, encode(t, p))
+}

@@ -122,12 +122,28 @@ func defineAboutBlankProblem(status int) ProblemType {
 
 // Generic HTTP errors, using the about:blank problem type.
 var (
-	BadRequestProblem           = defineAboutBlankProblem(http.StatusBadRequest)
-	UnauthorizedProblem         = defineAboutBlankProblem(http.StatusUnauthorized)
-	ForbiddenProblem            = defineAboutBlankProblem(http.StatusForbidden)
-	NotFoundProblem             = defineAboutBlankProblem(http.StatusNotFound)
-	MethodNotAllowedProblem     = defineAboutBlankProblem(http.StatusMethodNotAllowed)
-	ConflictProblem             = defineAboutBlankProblem(http.StatusConflict)
-	UnsupportedMediaTypeProblem = defineAboutBlankProblem(http.StatusUnsupportedMediaType)
-	InternalServerErrorProblem  = defineAboutBlankProblem(http.StatusInternalServerError)
+	BadRequestProblem            = defineAboutBlankProblem(http.StatusBadRequest)
+	UnauthorizedProblem          = defineAboutBlankProblem(http.StatusUnauthorized)
+	ForbiddenProblem             = defineAboutBlankProblem(http.StatusForbidden)
+	NotFoundProblem              = defineAboutBlankProblem(http.StatusNotFound)
+	MethodNotAllowedProblem      = defineAboutBlankProblem(http.StatusMethodNotAllowed)
+	ConflictProblem              = defineAboutBlankProblem(http.StatusConflict)
+	RequestEntityTooLargeProblem = defineAboutBlankProblem(http.StatusRequestEntityTooLarge)
+	UnsupportedMediaTypeProblem  = defineAboutBlankProblem(http.StatusUnsupportedMediaType)
+	UnprocessableEntityProblem   = defineAboutBlankProblem(http.StatusUnprocessableEntity)
+	InternalServerErrorProblem   = defineAboutBlankProblem(http.StatusInternalServerError)
 )
+
+// ValidationErrorsExtension is the problem extension member that lists ValidationErrors.
+const ValidationErrorsExtension = "errors"
+
+// ValidationError describes one invalid value of a request. Exactly one of Pointer and
+// Parameter locates the value.
+type ValidationError struct {
+	Detail string `json:"detail"`
+	// Pointer is a JSON Pointer (RFC 6901) to the invalid member of the request body, in URI
+	// fragment form such as "#/displayName".
+	Pointer string `json:"pointer,omitempty"`
+	// Parameter is the name of the invalid query parameter.
+	Parameter string `json:"parameter,omitempty"`
+}
