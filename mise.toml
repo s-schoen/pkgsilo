@@ -2,4 +2,5 @@
 go = "1.27"
 golangci-lint = "2.15"
 gomigrate = "4.20"
+mockery = "3.8"
 task = "3"

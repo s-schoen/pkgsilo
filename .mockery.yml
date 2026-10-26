@@ -1,0 +1,12 @@
+template: testify
+dir: "{{.InterfaceDir}}/mocks"
+pkgname: mocks
+filename: mocks.go
+structname: "Mock{{.InterfaceName}}"
+packages:
+  pkgsilo/identity/repository:
+    interfaces:
+      IdentityRepository: {}
+  pkgsilo/identity/service:
+    interfaces:
+      IdentityService: {}

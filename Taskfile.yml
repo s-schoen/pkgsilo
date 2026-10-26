@@ -43,6 +43,10 @@ tasks:
     cmds:
       - migrate create -ext sql -dir migrations {{.CLI_ARGS}}
 
+  generate:
+    cmds:
+      - mockery
+
   lint:
     cmds:
       - golangci-lint run
