@@ -10,3 +10,9 @@ packages:
   pkgsilo/identity/service:
     interfaces:
       IdentityService: {}
+  pkgsilo/health/repository:
+    interfaces:
+      HealthRepository: {}
+  pkgsilo/health/service:
+    interfaces:
+      HealthService: {}

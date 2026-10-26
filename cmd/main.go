@@ -13,7 +13,9 @@ import (
 	"pkgsilo/core/logger"
 	"pkgsilo/core/router"
 	"pkgsilo/core/server"
-	"pkgsilo/health"
+	healthapi "pkgsilo/health/api"
+	healthrepo "pkgsilo/health/repository"
+	healthservice "pkgsilo/health/service"
 	identityapi "pkgsilo/identity/api"
 	identityrepo "pkgsilo/identity/repository"
 	identityservice "pkgsilo/identity/service"
@@ -51,7 +53,8 @@ func run() error {
 	logger.Info("database connected")
 
 	r := router.New(cfg, logger)
-	r.Mount("/health", health.NewHandler().Routes())
+	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
+	r.Mount("/health", healthapi.NewHandler(health, logger).Routes())
 
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db))
 	r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
