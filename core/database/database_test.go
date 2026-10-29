@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,6 +35,11 @@ func TestOpen(t *testing.T) {
 	require.NoError(t, db.GetContext(ctx, &n, "SELECT 1"))
 	assert.Equal(t, 1, n)
 	assert.Equal(t, 3, db.Stats().MaxOpenConnections)
+
+	var ts time.Time
+	require.NoError(t, db.GetContext(ctx, &ts, "SELECT '2026-10-24 12:00:00+02'::timestamptz"))
+	assert.Equal(t, time.UTC, ts.Location())
+	assert.Equal(t, time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC), ts)
 }
 
 func TestOpen_InvalidURL(t *testing.T) {

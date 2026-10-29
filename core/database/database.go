@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
@@ -17,8 +18,8 @@ const (
 	databaseConnMaxIdleTime = 5 * time.Minute
 )
 
-// Open connects to PostgreSQL at cfg.DatabaseURL and verifies the connection.
-// The caller must close the returned database.
+// Open connects to PostgreSQL at cfg.DatabaseURL and verifies the connection. Scanned
+// timestamptz values are in UTC. The caller must close the returned database.
 func Open(ctx context.Context, cfg config.Config) (*sqlx.DB, error) {
 	// pgx redacts the password in parse errors, so the error is safe to log.
 	connCfg, err := pgx.ParseConfig(cfg.DatabaseURL)
@@ -26,7 +27,7 @@ func Open(ctx context.Context, cfg config.Config) (*sqlx.DB, error) {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 
-	db := sqlx.NewDb(stdlib.OpenDB(*connCfg), "pgx")
+	db := sqlx.NewDb(stdlib.OpenDB(*connCfg, stdlib.OptionAfterConnect(scanTimestamptzInUTC)), "pgx")
 	db.SetMaxOpenConns(cfg.DatabaseMaxConns)
 	db.SetMaxIdleConns(cfg.DatabaseMaxConns)
 	db.SetConnMaxIdleTime(databaseConnMaxIdleTime)
@@ -40,4 +41,16 @@ func Open(ctx context.Context, cfg config.Config) (*sqlx.DB, error) {
 	}
 
 	return db, nil
+}
+
+// scanTimestamptzInUTC makes conn return timestamptz values in UTC instead of the local
+// time zone.
+func scanTimestamptzInUTC(_ context.Context, conn *pgx.Conn) error {
+	conn.TypeMap().RegisterType(&pgtype.Type{
+		Name:  "timestamptz",
+		OID:   pgtype.TimestamptzOID,
+		Codec: &pgtype.TimestamptzCodec{ScanLocation: time.UTC},
+	})
+
+	return nil
 }
