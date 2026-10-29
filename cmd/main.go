@@ -40,6 +40,7 @@ func run() error {
 	}
 
 	logger := logger.New(os.Stderr, cfg)
+	// Only for third-party code logging through slog: our own code uses the injected logger.
 	slog.SetDefault(logger)
 
 	db, err := database.Open(ctx, cfg)

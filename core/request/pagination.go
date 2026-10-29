@@ -1,6 +1,7 @@
 package request
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -36,7 +37,7 @@ func ParsePagination(w http.ResponseWriter, r *http.Request) (Pagination, bool) 
 		"limit":  intParam(query, "limit", &p.Limit, validation.Min(1), validation.Max(MaxLimit)),
 	}
 	if err := errs.Filter(); err != nil {
-		writeQueryProblem(w, r, err)
+		writeQueryProblem(w, err)
 		return Pagination{}, false
 	}
 
@@ -59,13 +60,12 @@ func intParam(query url.Values, name string, dst *int, rules ...validation.Rule)
 	return validation.Validate(v, rules...)
 }
 
-func writeQueryProblem(w http.ResponseWriter, r *http.Request, err error) {
+func writeQueryProblem(w http.ResponseWriter, err error) {
 	errs, ok := validationErrors(err, func(path []string) envelope.ValidationError {
 		return envelope.ValidationError{Parameter: path[0]}
 	})
 	if !ok {
-		writeInternalError(w, r, err)
-		return
+		panic(fmt.Errorf("request: validate query: %w", err))
 	}
 
 	envelope.WriteProblem(w, envelope.BadRequestProblem.New(envelope.Occurrence{

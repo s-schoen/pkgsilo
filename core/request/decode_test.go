@@ -186,11 +186,8 @@ func TestDecodeJSON_InternalErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 
-			ok := DecodeJSON(rec, newJSONRequest("application/json", `{}`), tt.dst)
-
-			assert.False(t, ok)
-			assert.Equal(t, http.StatusInternalServerError, rec.Code)
-			assert.JSONEq(t, `{"type":"about:blank","title":"Internal Server Error","status":500}`, rec.Body.String())
+			assert.Panics(t, func() { DecodeJSON(rec, newJSONRequest("application/json", `{}`), tt.dst) })
+			assert.Empty(t, rec.Body.String())
 		})
 	}
 }

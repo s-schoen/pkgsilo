@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"mime"
 	"net/http"
 	"reflect"
@@ -27,7 +26,8 @@ const MaxBodyBytes = 1 << 20
 //
 // On failure it writes the problem response and returns false: 415 when the body isn't
 // application/json, 413 when it exceeds MaxBodyBytes, 400 when it isn't a single JSON value
-// matching dst and 422 with the invalid members when dst fails validation.
+// matching dst and 422 with the invalid members when dst fails validation. It panics when dst
+// isn't a pointer or a validation rule is misconfigured: bugs in the caller, not in the request.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst validation.Validatable) bool {
 	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
 		envelope.WriteProblem(w, envelope.UnsupportedMediaTypeProblem.New(envelope.Occurrence{
@@ -39,7 +39,7 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst validation.Validatab
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		writeDecodeProblem(w, r, err)
+		writeDecodeProblem(w, err)
 		return false
 	}
 	// A second value, even an empty one, makes the body ambiguous.
@@ -47,12 +47,12 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst validation.Validatab
 		if err == nil {
 			err = errTrailingData
 		}
-		writeDecodeProblem(w, r, err)
+		writeDecodeProblem(w, err)
 		return false
 	}
 
 	if err := dst.Validate(); err != nil {
-		writeValidationProblem(w, r, err)
+		writeValidationProblem(w, err)
 		return false
 	}
 
@@ -61,7 +61,7 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst validation.Validatab
 
 var errTrailingData = errors.New("trailing data after JSON value")
 
-func writeDecodeProblem(w http.ResponseWriter, r *http.Request, err error) {
+func writeDecodeProblem(w http.ResponseWriter, err error) {
 	var (
 		maxBytesErr *http.MaxBytesError
 		syntaxErr   *json.SyntaxError
@@ -78,8 +78,7 @@ func writeDecodeProblem(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	case errors.As(err, &invalidErr):
 		// dst isn't a pointer: a bug in the caller, not in the request.
-		writeInternalError(w, r, err)
-		return
+		panic(fmt.Errorf("request: decode body: %w", err))
 	case errors.Is(err, io.EOF):
 		detail = "The request body must not be empty."
 	case errors.As(err, &syntaxErr), errors.Is(err, io.ErrUnexpectedEOF):
@@ -119,13 +118,12 @@ func jsonType(t reflect.Type) string {
 	}
 }
 
-func writeValidationProblem(w http.ResponseWriter, r *http.Request, err error) {
+func writeValidationProblem(w http.ResponseWriter, err error) {
 	errs, ok := validationErrors(err, func(path []string) envelope.ValidationError {
 		return envelope.ValidationError{Pointer: jsonPointer(path)}
 	})
 	if !ok {
-		writeInternalError(w, r, err)
-		return
+		panic(fmt.Errorf("request: validate body: %w", err))
 	}
 
 	envelope.WriteProblem(w, envelope.UnprocessableEntityProblem.New(envelope.Occurrence{
@@ -186,10 +184,4 @@ func jsonPointer(path []string) string {
 	}
 
 	return b.String()
-}
-
-// writeInternalError logs an error caused by the server rather than the request and responds with 500.
-func writeInternalError(w http.ResponseWriter, r *http.Request, err error) {
-	slog.ErrorContext(r.Context(), "failed to read request", "error", err)
-	envelope.WriteProblem(w, envelope.InternalServerErrorProblem.New(envelope.Occurrence{}))
 }
