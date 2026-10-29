@@ -18,6 +18,8 @@ Each layer package has the same files:
 - **Service**: all logic lives here: IDs, timestamps, audit fields, domain rules. List methods query the repository for `limit+1` rows and return a `pagination.Page` built with `pagination.FromLookahead` (`core/pagination`). Tests mock the repository.
 - **API**: a chi handler with `Routes()`, mounted under `/api/v1` in `cmd/main.go`. Validate all input with ozzo-validation through the shared `core/request` package (`DecodeJSON`, `ParsePagination`). Respond through the `core/envelope` writers (`WriteResource`, `WriteCreated`, `WriteCollection`, `WriteProblem`); a service page becomes a collection with `NewPagedCollection`. Tests mock the service and mount the handler on `router.New` (`core/router`).
 
+Shared `core` packages never log. Bugs such as an unencodable response or a misconfigured validation rule panic, and the router's recoverer logs them with the request ID. Everything else is logged by the handler through its injected logger.
+
 Translate only errors that have a meaning in the layer above. Wrap every other error with `%w`, so it reaches the API's log intact and is answered with a 500 without details.
 
 ### Mocks
