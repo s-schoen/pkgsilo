@@ -25,17 +25,14 @@ import (
 )
 
 var (
-	cest = time.FixedZone("CEST", 2*60*60)
-
 	ada = service.Identity{
 		ID:          uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
 		Username:    "ada",
 		DisplayName: "Ada Lovelace",
 		CreatedBy:   service.SystemActor,
 		UpdatedBy:   uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
-		// Not in UTC, to show that responses are.
-		CreatedAt: time.Date(2026, 10, 24, 12, 0, 0, 0, cest),
-		UpdatedAt: time.Date(2026, 10, 24, 13, 30, 0, 123456000, cest),
+		CreatedAt:   time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC),
+		UpdatedAt:   time.Date(2026, 10, 24, 11, 30, 0, 123456000, time.UTC),
 	}
 	adaJSON = `{
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",

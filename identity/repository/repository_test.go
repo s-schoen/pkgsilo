@@ -36,22 +36,6 @@ func newRecord(username string, createdAt time.Time) IdentityRecord {
 
 var baseTime = time.Date(2026, 10, 24, 12, 0, 0, 123456000, time.UTC)
 
-// inUTC returns rec with its timestamps in UTC, since PostgreSQL returns them in local time.
-func inUTC(rec IdentityRecord) IdentityRecord {
-	rec.CreatedAt = rec.CreatedAt.UTC()
-	rec.UpdatedAt = rec.UpdatedAt.UTC()
-
-	return rec
-}
-
-func inUTCAll(recs []IdentityRecord) []IdentityRecord {
-	for i := range recs {
-		recs[i] = inUTC(recs[i])
-	}
-
-	return recs
-}
-
 func TestPostgresIdentityRepository_InsertAndGet(t *testing.T) {
 	t.Parallel()
 	repo := newTestRepo(t)
@@ -59,11 +43,11 @@ func TestPostgresIdentityRepository_InsertAndGet(t *testing.T) {
 
 	stored, err := repo.Insert(t.Context(), rec)
 	require.NoError(t, err)
-	assert.Equal(t, rec, inUTC(stored))
+	assert.Equal(t, rec, stored)
 
 	got, err := repo.Get(t.Context(), rec.ID)
 	require.NoError(t, err)
-	assert.Equal(t, rec, inUTC(got))
+	assert.Equal(t, rec, got)
 }
 
 func TestPostgresIdentityRepository_Insert_DuplicateUsername(t *testing.T) {
@@ -115,7 +99,7 @@ func TestPostgresIdentityRepository_List(t *testing.T) {
 			got, err := repo.List(t.Context(), tt.offset, tt.limit)
 			require.NoError(t, err)
 
-			assert.Equal(t, tt.want, inUTCAll(got))
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -152,11 +136,11 @@ func TestPostgresIdentityRepository_Update(t *testing.T) {
 
 	stored, err := repo.Update(t.Context(), update)
 	require.NoError(t, err)
-	assert.Equal(t, want, inUTC(stored))
+	assert.Equal(t, want, stored)
 
 	got, err := repo.Get(t.Context(), rec.ID)
 	require.NoError(t, err)
-	assert.Equal(t, want, inUTC(got))
+	assert.Equal(t, want, got)
 }
 
 func TestPostgresIdentityRepository_Update_NotFound(t *testing.T) {

@@ -78,7 +78,7 @@ func toIdentityResponse(i service.Identity) IdentityResponse {
 		DisplayName: i.DisplayName,
 		CreatedBy:   i.CreatedBy,
 		UpdatedBy:   i.UpdatedBy,
-		CreatedAt:   i.CreatedAt.UTC(),
-		UpdatedAt:   i.UpdatedAt.UTC(),
+		CreatedAt:   i.CreatedAt,
+		UpdatedAt:   i.UpdatedAt,
 	}
 }
