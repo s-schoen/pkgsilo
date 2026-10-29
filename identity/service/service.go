@@ -6,6 +6,7 @@ import (
 	"time"
 	"uuid"
 
+	"pkgsilo/core/pagination"
 	"pkgsilo/identity/repository"
 )
 
@@ -13,8 +14,9 @@ import (
 type IdentityService interface {
 	Create(ctx context.Context, actor uuid.UUID, in IdentityInput) (Identity, error)
 	Get(ctx context.Context, id uuid.UUID) (Identity, error)
-	// List returns up to limit identities, skipping the first offset, ordered by creation time.
-	List(ctx context.Context, offset, limit int) ([]Identity, error)
+	// List returns the page of up to limit identities that skips the first offset, ordered by
+	// creation time.
+	List(ctx context.Context, offset, limit int) (pagination.Page[Identity], error)
 	// Replace overwrites all caller-set fields of the identity with the given ID.
 	Replace(ctx context.Context, actor, id uuid.UUID, in IdentityInput) (Identity, error)
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -61,10 +63,11 @@ func (s *identityService) Get(ctx context.Context, id uuid.UUID) (Identity, erro
 	return toIdentity(rec), nil
 }
 
-func (s *identityService) List(ctx context.Context, offset, limit int) ([]Identity, error) {
-	recs, err := s.repo.List(ctx, offset, limit)
+func (s *identityService) List(ctx context.Context, offset, limit int) (pagination.Page[Identity], error) {
+	// One record more than requested reveals whether further identities follow.
+	recs, err := s.repo.List(ctx, offset, limit+1)
 	if err != nil {
-		return nil, fmt.Errorf("list identities: %w", err)
+		return pagination.Page[Identity]{}, fmt.Errorf("list identities: %w", err)
 	}
 
 	identities := make([]Identity, len(recs))
@@ -72,7 +75,7 @@ func (s *identityService) List(ctx context.Context, offset, limit int) ([]Identi
 		identities[i] = toIdentity(rec)
 	}
 
-	return identities, nil
+	return pagination.FromLookahead(identities, limit), nil
 }
 
 func (s *identityService) Replace(ctx context.Context, actor, id uuid.UUID, in IdentityInput) (Identity, error) {

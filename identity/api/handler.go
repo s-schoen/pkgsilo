@@ -42,24 +42,18 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// One identity more than requested reveals whether a next page exists.
-	identities, err := h.service.List(r.Context(), page.Offset, page.Limit+1)
+	identities, err := h.service.List(r.Context(), page.Offset, page.Limit)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
 	}
 
-	data := make([]IdentityResponse, len(identities))
-	for i, identity := range identities {
+	data := make([]IdentityResponse, len(identities.Items))
+	for i, identity := range identities.Items {
 		data[i] = toIdentityResponse(identity)
 	}
-	c, err := envelope.NewCollectionFromLookahead(data, envelope.LookaheadOptions{Offset: page.Offset, Limit: page.Limit})
-	if err != nil {
-		h.writeError(w, r, err)
-		return
-	}
 
-	envelope.WriteCollection(w, c)
+	envelope.WriteCollection(w, envelope.NewPagedCollection(data, page.Offset, page.Limit, identities.HasMore))
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {

@@ -18,6 +18,7 @@ import (
 
 	"pkgsilo/core/config"
 	"pkgsilo/core/envelope"
+	"pkgsilo/core/pagination"
 	"pkgsilo/core/router"
 	"pkgsilo/identity/service"
 	"pkgsilo/identity/service/mocks"
@@ -46,13 +47,6 @@ var (
 		"updatedAt": "2026-10-24T11:30:00.123456Z"
 	}`
 	adaPath = "/identities/0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"
-
-	grace = service.Identity{
-		ID:        uuid.MustParse("2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e"),
-		Username:  "grace",
-		CreatedAt: time.Date(2026, 10, 24, 14, 0, 0, 0, time.UTC),
-		UpdatedAt: time.Date(2026, 10, 24, 14, 0, 0, 0, time.UTC),
-	}
 
 	adaInput = service.IdentityInput{Username: "ada", DisplayName: "Ada Lovelace"}
 	adaBody  = `{"username":"ada","displayName":"Ada Lovelace"}`
@@ -90,7 +84,7 @@ func serve(h http.Handler, method, target, body string) *httptest.ResponseRecord
 
 func TestHandler_List(t *testing.T) {
 	r, svc := newTestRouter(t, discardLogger())
-	svc.EXPECT().List(mock.Anything, 0, 51).Return([]service.Identity{ada}, nil)
+	svc.EXPECT().List(mock.Anything, 0, 50).Return(pagination.Page[service.Identity]{Items: []service.Identity{ada}}, nil)
 
 	rec := serve(r, http.MethodGet, "/identities", "")
 
@@ -101,8 +95,7 @@ func TestHandler_List(t *testing.T) {
 
 func TestHandler_List_NextPage(t *testing.T) {
 	r, svc := newTestRouter(t, discardLogger())
-	// The service is asked for one more identity than the page holds.
-	svc.EXPECT().List(mock.Anything, 2, 2).Return([]service.Identity{ada, grace}, nil)
+	svc.EXPECT().List(mock.Anything, 2, 1).Return(pagination.Page[service.Identity]{Items: []service.Identity{ada}, HasMore: true}, nil)
 
 	rec := serve(r, http.MethodGet, "/identities?offset=2&limit=1", "")
 
@@ -112,7 +105,7 @@ func TestHandler_List_NextPage(t *testing.T) {
 
 func TestHandler_List_Empty(t *testing.T) {
 	r, svc := newTestRouter(t, discardLogger())
-	svc.EXPECT().List(mock.Anything, 0, 51).Return(nil, nil)
+	svc.EXPECT().List(mock.Anything, 0, 50).Return(pagination.Page[service.Identity]{}, nil)
 
 	rec := serve(r, http.MethodGet, "/identities", "")
 
@@ -218,7 +211,7 @@ func TestHandler_ServiceErrors(t *testing.T) {
 	}
 	var (
 		list = endpoint{method: http.MethodGet, target: "/identities", expect: func(svc *mocks.MockIdentityService, err error) {
-			svc.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).Return(nil, err)
+			svc.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).Return(pagination.Page[service.Identity]{}, err)
 		}}
 		create = endpoint{method: http.MethodPost, target: "/identities", body: adaBody, expect: func(svc *mocks.MockIdentityService, err error) {
 			svc.EXPECT().Create(mock.Anything, mock.Anything, mock.Anything).Return(service.Identity{}, err)

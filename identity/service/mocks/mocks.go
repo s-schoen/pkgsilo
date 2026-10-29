@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"pkgsilo/core/pagination"
 	"pkgsilo/identity/service"
 	"uuid"
 
@@ -244,24 +245,22 @@ func (_c *MockIdentityService_Get_Call) RunAndReturn(run func(ctx context.Contex
 }
 
 // List provides a mock function for the type MockIdentityService
-func (_mock *MockIdentityService) List(ctx context.Context, offset int, limit int) ([]service.Identity, error) {
+func (_mock *MockIdentityService) List(ctx context.Context, offset int, limit int) (pagination.Page[service.Identity], error) {
 	ret := _mock.Called(ctx, offset, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
 	}
 
-	var r0 []service.Identity
+	var r0 pagination.Page[service.Identity]
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) ([]service.Identity, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) (pagination.Page[service.Identity], error)); ok {
 		return returnFunc(ctx, offset, limit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) []service.Identity); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) pagination.Page[service.Identity]); ok {
 		r0 = returnFunc(ctx, offset, limit)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]service.Identity)
-		}
+		r0 = ret.Get(0).(pagination.Page[service.Identity])
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
 		r1 = returnFunc(ctx, offset, limit)
@@ -307,12 +306,12 @@ func (_c *MockIdentityService_List_Call) Run(run func(ctx context.Context, offse
 	return _c
 }
 
-func (_c *MockIdentityService_List_Call) Return(identitys []service.Identity, err error) *MockIdentityService_List_Call {
-	_c.Call.Return(identitys, err)
+func (_c *MockIdentityService_List_Call) Return(page pagination.Page[service.Identity], err error) *MockIdentityService_List_Call {
+	_c.Call.Return(page, err)
 	return _c
 }
 
-func (_c *MockIdentityService_List_Call) RunAndReturn(run func(ctx context.Context, offset int, limit int) ([]service.Identity, error)) *MockIdentityService_List_Call {
+func (_c *MockIdentityService_List_Call) RunAndReturn(run func(ctx context.Context, offset int, limit int) (pagination.Page[service.Identity], error)) *MockIdentityService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

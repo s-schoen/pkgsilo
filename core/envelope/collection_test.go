@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNewCollection(t *testing.T) {
@@ -54,48 +53,33 @@ func TestNewUnpaginatedCollection(t *testing.T) {
 	}
 }
 
-func TestNewCollectionFromLookahead(t *testing.T) {
-	rows := []int{1, 2, 3, 4}
-	total := 10
-	intPtr := func(v int) *int { return &v }
+func TestNewPagedCollection(t *testing.T) {
+	next := 7
 
 	tests := []struct {
-		name     string
-		rows     []int
-		opts     LookaheadOptions
-		wantData []int
-		wantNext *int
+		name    string
+		data    []int
+		hasMore bool
+		want    Collection[int]
 	}{
-		{name: "fewer than limit", rows: rows[:2], opts: LookaheadOptions{Offset: 4, Limit: 3}, wantData: []int{1, 2}},
-		{name: "exactly limit is final", rows: rows[:3], opts: LookaheadOptions{Offset: 4, Limit: 3}, wantData: []int{1, 2, 3}},
 		{
-			name: "lookahead row trimmed", rows: rows, opts: LookaheadOptions{Offset: 4, Limit: 3},
-			wantData: []int{1, 2, 3}, wantNext: intPtr(7),
+			name: "final page", data: []int{1, 2},
+			want: Collection[int]{Data: []int{1, 2}, Pagination: Pagination{Offset: 4, Limit: 3}},
 		},
-		{name: "empty", rows: nil, opts: LookaheadOptions{Offset: 20, Limit: 3}, wantData: []int{}},
+		{
+			name: "more pages", data: []int{1, 2, 3}, hasMore: true,
+			want: Collection[int]{Data: []int{1, 2, 3}, Pagination: Pagination{Offset: 4, Limit: 3, NextOffset: &next}},
+		},
+		{
+			name: "empty", data: nil,
+			want: Collection[int]{Data: []int{}, Pagination: Pagination{Offset: 4, Limit: 3}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := NewCollectionFromLookahead(tt.rows, tt.opts)
-			require.NoError(t, err)
-
-			assert.Equal(t, tt.wantData, c.Data)
-			assert.Equal(t, Pagination{Offset: tt.opts.Offset, Limit: tt.opts.Limit, NextOffset: tt.wantNext}, c.Pagination)
+			assert.Equal(t, tt.want, NewPagedCollection(tt.data, 4, 3, tt.hasMore))
 		})
 	}
-
-	t.Run("total is passed through", func(t *testing.T) {
-		c, err := NewCollectionFromLookahead(rows, LookaheadOptions{Limit: 3, Total: &total})
-		require.NoError(t, err)
-
-		assert.JSONEq(t, `{"data":[1,2,3],"pagination":{"offset":0,"limit":3,"nextOffset":3,"total":10}}`, encode(t, c))
-	})
-
-	t.Run("more than limit+1 rows", func(t *testing.T) {
-		_, err := NewCollectionFromLookahead(rows, LookaheadOptions{Limit: 2})
-
-		assert.Error(t, err)
-	})
 }
 
 func TestWriteCollection(t *testing.T) {

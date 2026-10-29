@@ -1,9 +1,6 @@
 package envelope
 
-import (
-	"fmt"
-	"net/http"
-)
+import "net/http"
 
 // Pagination describes a page of a collection and how to continue through it.
 type Pagination struct {
@@ -45,37 +42,16 @@ func NewUnpaginatedCollection[T any](data []T) Collection[T] {
 	})
 }
 
-// LookaheadOptions describes the page a lookahead query was made for.
-type LookaheadOptions struct {
-	Offset int
-	Limit  int
-	// Total is the optional exact number of matching resources before pagination.
-	Total *int
-}
-
-// NewCollectionFromLookahead creates a collection from a query result that fetched up to Limit+1 rows.
-// The extra row is dropped and only signals that a next page exists.
-//
-// It returns an error when rows contains more than Limit+1 resources.
-func NewCollectionFromLookahead[T any](rows []T, o LookaheadOptions) (Collection[T], error) {
-	if len(rows) > o.Limit+1 {
-		return Collection[T]{}, fmt.Errorf("lookahead result has %d rows, more than limit+1 (%d)", len(rows), o.Limit+1)
-	}
-
-	data := rows[:min(len(rows), o.Limit)]
-
+// NewPagedCollection wraps the page of resource representations that starts at offset and holds
+// at most limit resources. When hasMore is set, the next page starts right after data.
+func NewPagedCollection[T any](data []T, offset, limit int, hasMore bool) Collection[T] {
 	var nextOffset *int
-	if len(rows) == o.Limit+1 {
-		next := o.Offset + len(data)
+	if hasMore {
+		next := offset + len(data)
 		nextOffset = &next
 	}
 
-	return NewCollection(data, Pagination{
-		Offset:     o.Offset,
-		Limit:      o.Limit,
-		NextOffset: nextOffset,
-		Total:      o.Total,
-	}), nil
+	return NewCollection(data, Pagination{Offset: offset, Limit: limit, NextOffset: nextOffset})
 }
 
 // WriteCollection writes c as a collection response with status 200.

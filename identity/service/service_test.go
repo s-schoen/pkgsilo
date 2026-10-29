@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/pagination"
 	"pkgsilo/identity/repository"
 	"pkgsilo/identity/repository/mocks"
 )
@@ -108,22 +109,34 @@ func TestIdentityService_Get(t *testing.T) {
 
 func TestIdentityService_List(t *testing.T) {
 	svc, repo := newTestService(t)
-	repo.EXPECT().List(mock.Anything, 10, 5).Return([]repository.IdentityRecord{stored, stored}, nil)
+	// The repository is asked for one more record than the page holds.
+	repo.EXPECT().List(mock.Anything, 10, 3).Return([]repository.IdentityRecord{stored, stored}, nil)
 
-	got, err := svc.List(t.Context(), 10, 5)
+	got, err := svc.List(t.Context(), 10, 2)
 	require.NoError(t, err)
 
-	assert.Equal(t, []Identity{storedIdentity, storedIdentity}, got)
+	assert.Equal(t, pagination.Page[Identity]{Items: []Identity{storedIdentity, storedIdentity}}, got)
+}
+
+func TestIdentityService_List_HasMore(t *testing.T) {
+	svc, repo := newTestService(t)
+	repo.EXPECT().List(mock.Anything, 10, 3).Return([]repository.IdentityRecord{stored, stored, stored}, nil)
+
+	got, err := svc.List(t.Context(), 10, 2)
+	require.NoError(t, err)
+
+	assert.Equal(t, pagination.Page[Identity]{Items: []Identity{storedIdentity, storedIdentity}, HasMore: true}, got)
 }
 
 func TestIdentityService_List_Empty(t *testing.T) {
 	svc, repo := newTestService(t)
-	repo.EXPECT().List(mock.Anything, 0, 5).Return(nil, nil)
+	repo.EXPECT().List(mock.Anything, 0, 6).Return(nil, nil)
 
 	got, err := svc.List(t.Context(), 0, 5)
 	require.NoError(t, err)
 
-	assert.Empty(t, got)
+	assert.Empty(t, got.Items)
+	assert.False(t, got.HasMore)
 }
 
 func TestIdentityService_Replace(t *testing.T) {
@@ -163,7 +176,7 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 		return err
 	}
 	list := func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error {
-		repo.EXPECT().List(mock.Anything, 0, 5).Return(nil, repoErr)
+		repo.EXPECT().List(mock.Anything, 0, 6).Return(nil, repoErr)
 		_, err := svc.List(ctx, 0, 5)
 		return err
 	}
