@@ -1,86 +1,21 @@
 package repository
 
 import (
-	"context"
-	"flag"
-	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 	"uuid"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"pkgsilo/core/config"
-	"pkgsilo/core/database"
+	"pkgsilo/core/database/databasetest"
 )
 
-// testDB is shared by all tests of the package. It is nil in short mode.
-var testDB *sqlx.DB
-
-func TestMain(m *testing.M) {
-	flag.Parse()
-	if testing.Short() {
-		os.Exit(m.Run())
-	}
-
-	code, err := runWithDatabase(m)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	os.Exit(code)
-}
-
-// runWithDatabase runs the tests against a PostgreSQL container with all up migrations applied.
-func runWithDatabase(m *testing.M) (int, error) {
-	ctx := context.Background()
-
-	migrations, err := filepath.Glob("../../migrations/*.up.sql")
-	if err != nil {
-		return 0, fmt.Errorf("find migrations: %w", err)
-	}
-
-	ctr, err := postgres.Run(ctx, "postgres:18-alpine",
-		postgres.WithOrderedInitScripts(migrations...),
-		postgres.BasicWaitStrategies(),
-	)
-	defer func() { _ = testcontainers.TerminateContainer(ctr) }()
-	if err != nil {
-		return 0, fmt.Errorf("start postgres: %w", err)
-	}
-
-	url, err := ctr.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		return 0, fmt.Errorf("connection string: %w", err)
-	}
-
-	testDB, err = database.Open(ctx, config.Config{DatabaseURL: url, DatabaseMaxConns: 2})
-	if err != nil {
-		return 0, fmt.Errorf("open database: %w", err)
-	}
-	defer func() { _ = testDB.Close() }()
-
-	return m.Run(), nil
-}
-
-// newTestRepo returns a repository on an empty identities table.
+// newTestRepo returns a repository on a new, empty database.
 func newTestRepo(t *testing.T) *PostgresIdentityRepository {
 	t.Helper()
 
-	if testing.Short() {
-		t.Skip("needs a PostgreSQL container")
-	}
-
-	_, err := testDB.ExecContext(t.Context(), "TRUNCATE identities")
-	require.NoError(t, err)
-
-	return NewPostgresIdentityRepository(testDB)
+	return NewPostgresIdentityRepository(databasetest.New(t))
 }
 
 // newRecord returns a record created at the given time. Times have microsecond precision,
@@ -118,6 +53,7 @@ func inUTCAll(recs []IdentityRecord) []IdentityRecord {
 }
 
 func TestPostgresIdentityRepository_InsertAndGet(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 	rec := newRecord("ada", baseTime)
 
@@ -131,6 +67,7 @@ func TestPostgresIdentityRepository_InsertAndGet(t *testing.T) {
 }
 
 func TestPostgresIdentityRepository_Insert_DuplicateUsername(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 	_, err := repo.Insert(t.Context(), newRecord("ada", baseTime))
 	require.NoError(t, err)
@@ -141,6 +78,7 @@ func TestPostgresIdentityRepository_Insert_DuplicateUsername(t *testing.T) {
 }
 
 func TestPostgresIdentityRepository_Get_NotFound(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 
 	_, err := repo.Get(t.Context(), uuid.NewV4())
@@ -149,6 +87,7 @@ func TestPostgresIdentityRepository_Get_NotFound(t *testing.T) {
 }
 
 func TestPostgresIdentityRepository_List(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 	first := newRecord("first", baseTime)
 	second := newRecord("second", baseTime.Add(time.Minute))
@@ -172,6 +111,7 @@ func TestPostgresIdentityRepository_List(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := repo.List(t.Context(), tt.offset, tt.limit)
 			require.NoError(t, err)
 
@@ -181,6 +121,7 @@ func TestPostgresIdentityRepository_List(t *testing.T) {
 }
 
 func TestPostgresIdentityRepository_List_Empty(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 
 	got, err := repo.List(t.Context(), 0, 10)
@@ -190,6 +131,7 @@ func TestPostgresIdentityRepository_List_Empty(t *testing.T) {
 }
 
 func TestPostgresIdentityRepository_Update(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 	rec := newRecord("ada", baseTime)
 	_, err := repo.Insert(t.Context(), rec)
@@ -218,6 +160,7 @@ func TestPostgresIdentityRepository_Update(t *testing.T) {
 }
 
 func TestPostgresIdentityRepository_Update_NotFound(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 
 	_, err := repo.Update(t.Context(), newRecord("ada", baseTime))
@@ -226,6 +169,7 @@ func TestPostgresIdentityRepository_Update_NotFound(t *testing.T) {
 }
 
 func TestPostgresIdentityRepository_Update_DuplicateUsername(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 	_, err := repo.Insert(t.Context(), newRecord("ada", baseTime))
 	require.NoError(t, err)
@@ -240,6 +184,7 @@ func TestPostgresIdentityRepository_Update_DuplicateUsername(t *testing.T) {
 }
 
 func TestPostgresIdentityRepository_Delete(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 	rec := newRecord("ada", baseTime)
 	_, err := repo.Insert(t.Context(), rec)
@@ -252,6 +197,7 @@ func TestPostgresIdentityRepository_Delete(t *testing.T) {
 }
 
 func TestPostgresIdentityRepository_Delete_NotFound(t *testing.T) {
+	t.Parallel()
 	repo := newTestRepo(t)
 
 	err := repo.Delete(t.Context(), uuid.NewV4())
