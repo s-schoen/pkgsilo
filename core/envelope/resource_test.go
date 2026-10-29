@@ -49,3 +49,18 @@ func TestWriteCreated(t *testing.T) {
 	assert.Equal(t, "/users/user-42", rec.Header().Get("Location"))
 	assert.JSONEq(t, `{"data":{"id":"user-42","name":"Ada"}}`, rec.Body.String())
 }
+
+func TestWriteResource_PanicsBeforeWritingUnencodableData(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	assert.Panics(t, func() { WriteResource(rec, make(chan int)) })
+	assert.Empty(t, rec.Header())
+	assert.Empty(t, rec.Body.String())
+}
+
+func TestWriteCreated_PanicsBeforeSettingLocation(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	assert.Panics(t, func() { WriteCreated(rec, "/users/user-42", make(chan int)) })
+	assert.Empty(t, rec.Header())
+}

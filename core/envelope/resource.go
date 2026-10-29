@@ -20,6 +20,8 @@ func WriteResource[T any](w http.ResponseWriter, data T) {
 // WriteCreated writes data as a resource response with status 201 and sets the Location
 // header to location, the URI of the created resource.
 func WriteCreated[T any](w http.ResponseWriter, location string, data T) {
+	// Encoded first, so a 500 from an encoding panic doesn't carry the Location header.
+	body := marshalJSON(NewResource(data))
 	w.Header().Set("Location", location)
-	writeJSON(w, http.StatusCreated, jsonMediaType, NewResource(data))
+	writeBody(w, http.StatusCreated, jsonMediaType, body)
 }

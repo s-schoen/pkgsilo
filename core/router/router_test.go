@@ -128,3 +128,27 @@ func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
 	assert.Equal(t, "ERROR", requestEntry["level"])
 	assert.Equal(t, requestEntry["request_id"], panicEntry["request_id"])
 }
+
+func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
+	logger, buf := loggertest.NewJSON()
+	r := New(config.Config{}, logger)
+	r.Get("/unencodable", func(w http.ResponseWriter, _ *http.Request) {
+		envelope.WriteResource(w, make(chan int))
+	})
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/unencodable", nil))
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Equal(t, envelope.ProblemJSONMediaType, rec.Header().Get("Content-Type"))
+	assert.JSONEq(t, `{"type":"about:blank","title":"Internal Server Error","status":500}`, rec.Body.String())
+
+	entries := loggertest.Entries(t, buf)
+	require.Len(t, entries, 2)
+	panicEntry, requestEntry := entries[0], entries[1]
+
+	assert.Equal(t, "panic recovered", panicEntry["msg"])
+	assert.Contains(t, panicEntry["panic"], "envelope: encode response")
+	assert.NotEmpty(t, panicEntry["request_id"])
+	assert.Equal(t, requestEntry["request_id"], panicEntry["request_id"])
+}
