@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/go-chi/chi/v5"
+
 	"pkgsilo/core/config"
 	"pkgsilo/core/database"
 	"pkgsilo/core/logger"
@@ -52,12 +54,14 @@ func run() error {
 
 	logger.Info("database connected")
 
-	r := router.New(cfg, logger)
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
-	r.Mount("/health", healthapi.NewHandler(health, logger).Routes())
-
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db))
-	r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
+
+	r := router.New(cfg, logger)
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Mount("/health", healthapi.NewHandler(health, logger).Routes())
+		r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
+	})
 
 	return server.Run(ctx, cfg, logger, r)
 }

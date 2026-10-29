@@ -43,6 +43,7 @@ func TestNew_MethodNotAllowed(t *testing.T) {
 	sub.Get("/item", noop)
 	r.Mount("/sub", sub)
 	r.Mount("/param/{id}", sub)
+	r.Route("/nested", func(n chi.Router) { n.Mount("/sub", sub) })
 
 	tests := []struct {
 		path      string
@@ -53,6 +54,9 @@ func TestNew_MethodNotAllowed(t *testing.T) {
 		{path: "/sub/", wantAllow: []string{http.MethodPut}},
 		{path: "/sub/item", wantAllow: []string{http.MethodGet}},
 		{path: "/param/42", wantAllow: []string{http.MethodPut}},
+		{path: "/nested/sub", wantAllow: []string{http.MethodPut}},
+		{path: "/nested/sub/", wantAllow: []string{http.MethodPut}},
+		{path: "/nested/sub/item", wantAllow: []string{http.MethodGet}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
@@ -72,12 +76,17 @@ func TestNew_MountedSubrouterNotFound(t *testing.T) {
 	sub := chi.NewRouter()
 	sub.Get("/", func(http.ResponseWriter, *http.Request) {})
 	r.Mount("/sub", sub)
+	r.Route("/nested", func(n chi.Router) { n.Mount("/sub", sub) })
 
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/sub/missing", nil))
+	for _, path := range []string{"/sub/missing", "/nested/sub/missing"} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 
-	assert.Equal(t, http.StatusNotFound, rec.Code)
-	assert.JSONEq(t, `{"type":"about:blank","title":"Not Found","status":404}`, rec.Body.String())
+			assert.Equal(t, http.StatusNotFound, rec.Code)
+			assert.JSONEq(t, `{"type":"about:blank","title":"Not Found","status":404}`, rec.Body.String())
+		})
+	}
 }
 
 func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {

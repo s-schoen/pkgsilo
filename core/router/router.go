@@ -85,8 +85,20 @@ func routedMethods(routes chi.Routes, path string) []string {
 func mountedAt(routes chi.Routes, pattern string) chi.Routes {
 	mount := strings.TrimSuffix(pattern, "/") + "/*"
 	for _, rt := range routes.Routes() {
-		if rt.SubRoutes != nil && rt.Pattern == mount {
+		if rt.SubRoutes == nil {
+			continue
+		}
+		if rt.Pattern == mount {
 			return rt.SubRoutes
+		}
+		// Find joins the patterns of nested mounts, so a mount inside a subrouter is looked up
+		// there by the rest of the pattern.
+		rest, ok := strings.CutPrefix(pattern, strings.TrimSuffix(rt.Pattern, "/*"))
+		if !ok || !strings.HasPrefix(rest, "/") {
+			continue
+		}
+		if sub := mountedAt(rt.SubRoutes, rest); sub != nil {
+			return sub
 		}
 	}
 
