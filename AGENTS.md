@@ -14,7 +14,7 @@ Each layer package has the same files:
 
 ### Layer rules
 
-- **Repository**: one interface, implemented for PostgreSQL with sqlx. Tests run against a real PostgreSQL testcontainer with `migrations/` applied. Never mock the database.
+- **Repository**: one interface, implemented for PostgreSQL with sqlx. Each test gets its own fresh database with `migrations/` applied from `databasetest.New(t)` (`core/database/databasetest`) and calls `t.Parallel()`. Never mock the database.
 - **Service**: all logic lives here: IDs, timestamps, audit fields, domain rules. List methods query the repository for `limit+1` rows and return a `pagination.Page` built with `pagination.FromLookahead` (`core/pagination`). Tests mock the repository.
 - **API**: a chi handler with `Routes()`, mounted under `/api/v1` in `cmd/main.go`. Validate all input with ozzo-validation through the shared `core/request` package (`DecodeJSON`, `ParsePagination`). Respond through the `core/envelope` writers (`WriteResource`, `WriteCreated`, `WriteCollection`, `WriteProblem`); a service page becomes a collection with `NewPagedCollection`. Tests mock the service and mount the handler on `router.New` (`core/router`).
 
