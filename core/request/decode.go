@@ -119,11 +119,16 @@ func jsonType(t reflect.Type) string {
 	}
 }
 
-// invalidBodyProblem lists the invalid members of a request body in the
-// envelope.ValidationErrorsExtension member, each located by a pointer.
-var invalidBodyProblem = envelope.DefineProblemType(
-	"invalid-body", "Invalid request body", http.StatusUnprocessableEntity,
-)
+var invalidBodyType = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
+
+// InvalidBodyProblem returns the problem that DecodeJSON answers a body with invalid members with.
+// It lists errs, each located by a pointer, in the envelope.ValidationErrorsExtension member.
+func InvalidBodyProblem(errs ...envelope.ValidationError) envelope.Problem {
+	return invalidBodyType.New(envelope.Occurrence{
+		Detail:     "The request body contains invalid members.",
+		Extensions: map[string]any{envelope.ValidationErrorsExtension: errs},
+	})
+}
 
 func writeValidationProblem(w http.ResponseWriter, err error) {
 	errs, ok := validationErrors(err, func(path []string) envelope.ValidationError {
@@ -133,10 +138,7 @@ func writeValidationProblem(w http.ResponseWriter, err error) {
 		panic(fmt.Errorf("request: validate body: %w", err))
 	}
 
-	envelope.WriteProblem(w, invalidBodyProblem.New(envelope.Occurrence{
-		Detail:     "The request body contains invalid members.",
-		Extensions: map[string]any{envelope.ValidationErrorsExtension: errs},
-	}))
+	envelope.WriteProblem(w, InvalidBodyProblem(errs...))
 }
 
 // validationErrors flattens nested ozzo validation errors into one ValidationError per invalid
