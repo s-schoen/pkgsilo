@@ -1,26 +1,24 @@
 package api
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/pagination"
-	"pkgsilo/core/router"
 	"pkgsilo/identity/service"
 	"pkgsilo/identity/service/mocks"
+	"pkgsilo/test/apitest"
+	"pkgsilo/test/loggertest"
 )
 
 var (
@@ -48,153 +46,98 @@ var (
 	adaBody  = `{"username":"ada","displayName":"Ada Lovelace"}`
 )
 
-func discardLogger() *slog.Logger {
-	return slog.New(slog.DiscardHandler)
-}
-
-// newTestRouter mounts a handler backed by a mock service on the application router.
-func newTestRouter(t *testing.T, logger *slog.Logger) (http.Handler, *mocks.MockIdentityService) {
+// newTestClient returns a client for a handler that is backed by a mock service and mounted on the
+// application router.
+func newTestClient(t *testing.T, logger *slog.Logger) (*apitest.Client, *mocks.MockIdentityService) {
 	t.Helper()
 
 	svc := mocks.NewMockIdentityService(t)
-	r := router.New(router.Options{}, discardLogger())
-	r.Mount("/identities", NewHandler(svc, logger).Routes())
 
-	return r, svc
-}
-
-// serve sends a request with an optional JSON body to h.
-func serve(h http.Handler, method, target, body string) *httptest.ResponseRecorder {
-	var reader io.Reader
-	if body != "" {
-		reader = strings.NewReader(body)
-	}
-	req := httptest.NewRequest(method, target, reader)
-	if body != "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	return rec
+	return apitest.NewClient(t, apitest.Mount("/identities", NewHandler(svc, logger).Routes())), svc
 }
 
 func TestHandler_List(t *testing.T) {
 	t.Parallel()
-	r, svc := newTestRouter(t, discardLogger())
+	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().List(mock.Anything, 0, 50).Return(pagination.Page[service.Identity]{Items: []service.Identity{ada}}, nil)
 
-	rec := serve(r, http.MethodGet, "/identities", "")
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-	assert.JSONEq(t, `{"data":[`+adaJSON+`],"pagination":{"offset":0,"limit":50,"nextOffset":null}}`, rec.Body.String())
+	api.Get("/identities").AssertCollection(`[`+adaJSON+`]`, envelope.Pagination{Offset: 0, Limit: 50})
 }
 
 func TestHandler_List_NextPage(t *testing.T) {
 	t.Parallel()
-	r, svc := newTestRouter(t, discardLogger())
+	api, svc := newTestClient(t, loggertest.Discard())
 	page := pagination.Page[service.Identity]{Items: []service.Identity{ada}, HasMore: true}
 	svc.EXPECT().List(mock.Anything, 2, 1).Return(page, nil)
 
-	rec := serve(r, http.MethodGet, "/identities?offset=2&limit=1", "")
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.JSONEq(t, `{"data":[`+adaJSON+`],"pagination":{"offset":2,"limit":1,"nextOffset":3}}`, rec.Body.String())
+	api.Get("/identities?offset=2&limit=1").
+		AssertCollection(`[`+adaJSON+`]`, envelope.Pagination{Offset: 2, Limit: 1, NextOffset: new(3)})
 }
 
 func TestHandler_List_Empty(t *testing.T) {
 	t.Parallel()
-	r, svc := newTestRouter(t, discardLogger())
+	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().List(mock.Anything, 0, 50).Return(pagination.Page[service.Identity]{}, nil)
 
-	rec := serve(r, http.MethodGet, "/identities", "")
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.JSONEq(t, `{"data":[],"pagination":{"offset":0,"limit":50,"nextOffset":null}}`, rec.Body.String())
+	api.Get("/identities").AssertCollection(`[]`, envelope.Pagination{Offset: 0, Limit: 50})
 }
 
 func TestHandler_List_InvalidPagination(t *testing.T) {
 	t.Parallel()
-	r, _ := newTestRouter(t, discardLogger())
+	api, _ := newTestClient(t, loggertest.Discard())
 
-	rec := serve(r, http.MethodGet, "/identities?limit=0", "")
-
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.JSONEq(t, `{"type":"https://pkgsilo/problems/invalid-query","title":"Invalid query parameters","status":400,
-		"detail":"The request contains invalid query parameters.",
-		"errors":[{"detail":"must be no less than 1","parameter":"limit"}]}`, rec.Body.String())
+	api.Get("/identities?limit=0").
+		AssertInvalidQuery(envelope.ValidationError{Parameter: "limit", Detail: "must be no less than 1"})
 }
 
 func TestHandler_Create(t *testing.T) {
 	t.Parallel()
-	r, svc := newTestRouter(t, discardLogger())
+	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().Create(mock.Anything, service.SystemActor, adaInput).Return(ada, nil)
 
-	rec := serve(r, http.MethodPost, "/identities", adaBody)
-
-	assert.Equal(t, http.StatusCreated, rec.Code)
-	assert.Equal(t, adaPath, rec.Header().Get("Location"))
-	assert.JSONEq(t, `{"data":`+adaJSON+`}`, rec.Body.String())
+	api.Post("/identities", adaBody).AssertCreated(adaPath, adaJSON)
 }
 
 func TestHandler_Get(t *testing.T) {
 	t.Parallel()
-	r, svc := newTestRouter(t, discardLogger())
+	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().Get(mock.Anything, ada.ID).Return(ada, nil)
 
-	rec := serve(r, http.MethodGet, adaPath, "")
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.JSONEq(t, `{"data":`+adaJSON+`}`, rec.Body.String())
+	api.Get(adaPath).AssertResource(adaJSON)
 }
 
 func TestHandler_Replace(t *testing.T) {
 	t.Parallel()
-	r, svc := newTestRouter(t, discardLogger())
+	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().Replace(mock.Anything, service.SystemActor, ada.ID, adaInput).Return(ada, nil)
 
-	rec := serve(r, http.MethodPut, adaPath, adaBody)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.JSONEq(t, `{"data":`+adaJSON+`}`, rec.Body.String())
+	api.Put(adaPath, adaBody).AssertResource(adaJSON)
 }
 
 func TestHandler_Delete(t *testing.T) {
 	t.Parallel()
-	r, svc := newTestRouter(t, discardLogger())
+	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().Delete(mock.Anything, ada.ID).Return(nil)
 
-	rec := serve(r, http.MethodDelete, adaPath, "")
-
-	assert.Equal(t, http.StatusNoContent, rec.Code)
-	assert.Empty(t, rec.Body.String())
+	api.Delete(adaPath).AssertNoContent()
 }
 
 func TestHandler_InvalidBody(t *testing.T) {
 	t.Parallel()
-	const want = `{"type":"https://pkgsilo/problems/invalid-body","title":"Invalid request body","status":422,
-		"detail":"The request body contains invalid members.",
-		"errors":[
-			{"detail":"cannot be blank","pointer":"#/displayName"},
-			{"detail":"the length must be between 3 and 64","pointer":"#/username"}
-		]}`
-
 	for _, method := range []string{http.MethodPost, http.MethodPut} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
 			// The mock fails the test if the service is called.
-			r, _ := newTestRouter(t, discardLogger())
+			api, _ := newTestClient(t, loggertest.Discard())
 			target := "/identities"
 			if method == http.MethodPut {
 				target = adaPath
 			}
 
-			rec := serve(r, method, target, `{"username":"ab"}`)
-
-			assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
-			assert.JSONEq(t, want, rec.Body.String())
+			api.Send(method, target, `{"username":"ab"}`).AssertInvalidBody(
+				envelope.ValidationError{Pointer: "#/displayName", Detail: "cannot be blank"},
+				envelope.ValidationError{Pointer: "#/username", Detail: "the length must be between 3 and 64"},
+			)
 		})
 	}
 }
@@ -204,13 +147,9 @@ func TestHandler_InvalidID(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
-			r, _ := newTestRouter(t, discardLogger())
+			api, _ := newTestClient(t, loggertest.Discard())
 
-			rec := serve(r, method, "/identities/not-a-uuid", adaBody)
-
-			assert.Equal(t, http.StatusNotFound, rec.Code)
-			assert.JSONEq(t, `{"type":"https://pkgsilo/problems/identity-not-found","title":"Identity not found","status":404,
-				"detail":"The identity does not exist."}`, rec.Body.String())
+			api.Send(method, "/identities/not-a-uuid", adaBody).AssertProblem(identityNotFoundProblem)
 		})
 	}
 }
@@ -254,20 +193,7 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		}
 	)
 
-	type response struct {
-		status int
-		body   string
-	}
-	var (
-		notFound = response{status: http.StatusNotFound, body: `{"type":"https://pkgsilo/problems/identity-not-found",
-			"title":"Identity not found","status":404,"detail":"The identity does not exist."}`}
-		conflict = response{status: http.StatusConflict, body: `{"type":"https://pkgsilo/problems/username-taken",
-			"title":"Username taken","status":409,"detail":"The username is already taken."}`}
-		internal = response{
-			status: http.StatusInternalServerError,
-			body:   `{"type":"about:blank","title":"Internal Server Error","status":500}`,
-		}
-	)
+	internal := envelope.InternalServerErrorProblem.New(envelope.Occurrence{})
 	// Wrapped like the service wraps its errors.
 	notFoundErr := fmt.Errorf("get identity: %w", service.ErrIdentityNotFound)
 	takenErr := fmt.Errorf("create identity: %w", service.ErrUsernameTaken)
@@ -277,42 +203,40 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		name     string
 		endpoint endpoint
 		err      error
-		want     response
+		want     envelope.Problem
 	}{
 		{name: "list unexpected", endpoint: list, err: unexpectedErr, want: internal},
-		{name: "create username taken", endpoint: create, err: takenErr, want: conflict},
+		{name: "create username taken", endpoint: create, err: takenErr, want: usernameTakenProblem},
 		{name: "create unexpected", endpoint: create, err: unexpectedErr, want: internal},
-		{name: "get not found", endpoint: get, err: notFoundErr, want: notFound},
+		{name: "get not found", endpoint: get, err: notFoundErr, want: identityNotFoundProblem},
 		{name: "get unexpected", endpoint: get, err: unexpectedErr, want: internal},
-		{name: "replace not found", endpoint: replace, err: notFoundErr, want: notFound},
-		{name: "replace username taken", endpoint: replace, err: takenErr, want: conflict},
+		{name: "replace not found", endpoint: replace, err: notFoundErr, want: identityNotFoundProblem},
+		{name: "replace username taken", endpoint: replace, err: takenErr, want: usernameTakenProblem},
 		{name: "replace unexpected", endpoint: replace, err: unexpectedErr, want: internal},
-		{name: "delete not found", endpoint: del, err: notFoundErr, want: notFound},
+		{name: "delete not found", endpoint: del, err: notFoundErr, want: identityNotFoundProblem},
 		{name: "delete unexpected", endpoint: del, err: unexpectedErr, want: internal},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			r, svc := newTestRouter(t, discardLogger())
+			api, svc := newTestClient(t, loggertest.Discard())
 			tt.endpoint.expect(svc, tt.err)
 
-			rec := serve(r, tt.endpoint.method, tt.endpoint.target, tt.endpoint.body)
-
-			assert.Equal(t, tt.want.status, rec.Code)
-			assert.Equal(t, envelope.ProblemJSONMediaType, rec.Header().Get("Content-Type"))
-			assert.JSONEq(t, tt.want.body, rec.Body.String())
+			api.Send(tt.endpoint.method, tt.endpoint.target, tt.endpoint.body).AssertProblem(tt.want)
 		})
 	}
 }
 
 func TestHandler_UnexpectedErrorIsLogged(t *testing.T) {
 	t.Parallel()
-	var buf bytes.Buffer
-	r, svc := newTestRouter(t, slog.New(slog.NewTextHandler(&buf, nil)))
+	logger, buf := loggertest.NewJSON()
+	api, svc := newTestClient(t, logger)
 	svc.EXPECT().Get(mock.Anything, ada.ID).Return(service.Identity{}, errors.New("connection refused"))
 
-	serve(r, http.MethodGet, adaPath, "")
+	api.Get(adaPath).AssertInternalError()
 
-	assert.Contains(t, buf.String(), "identity request failed")
-	assert.Contains(t, buf.String(), "connection refused")
+	entries := loggertest.Entries(t, buf)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "identity request failed", entries[0]["msg"])
+	assert.Equal(t, "connection refused", entries[0]["error"])
 }

@@ -4,64 +4,47 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/logger/loggertest"
-	"pkgsilo/core/router"
 	"pkgsilo/health/service"
 	"pkgsilo/health/service/mocks"
+	"pkgsilo/test/apitest"
+	"pkgsilo/test/loggertest"
 )
 
-func discardLogger() *slog.Logger {
-	return slog.New(slog.DiscardHandler)
-}
-
-// newTestRouter mounts a handler backed by a mock service on the application router.
-func newTestRouter(t *testing.T, logger *slog.Logger) (http.Handler, *mocks.MockHealthService) {
+// newTestClient returns a client for a handler that is backed by a mock service and mounted on the
+// application router.
+func newTestClient(t *testing.T, logger *slog.Logger) (*apitest.Client, *mocks.MockHealthService) {
 	t.Helper()
 
 	svc := mocks.NewMockHealthService(t)
-	r := router.New(router.Options{}, discardLogger())
-	r.Mount("/health", NewHandler(svc, logger).Routes())
 
-	return r, svc
-}
-
-func serve(h http.Handler) *httptest.ResponseRecorder {
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
-
-	return rec
+	return apitest.NewClient(t, apitest.Mount("/health", NewHandler(svc, logger).Routes())), svc
 }
 
 func TestHandler_Check_Healthy(t *testing.T) {
 	t.Parallel()
-	r, svc := newTestRouter(t, discardLogger())
+	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().Check(mock.Anything).Return(service.Health{
 		Status:     service.StatusHealthy,
 		Components: []service.Component{{Name: "database", Status: service.StatusHealthy}},
 	})
 
-	rec := serve(r)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-	assert.JSONEq(t, `{
+	api.Get("/health").AssertJSON(http.StatusOK, `{
 		"status": "healthy",
 		"service": "pkgsilo",
 		"components": [{"name":"database","status":"healthy"}]
-	}`, rec.Body.String())
+	}`)
 }
 
 func TestHandler_Check_Unhealthy(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
-	r, svc := newTestRouter(t, logger)
+	api, svc := newTestClient(t, logger)
 	svc.EXPECT().Check(mock.Anything).Return(service.Health{
 		Status: service.StatusUnhealthy,
 		Components: []service.Component{{
@@ -71,14 +54,11 @@ func TestHandler_Check_Unhealthy(t *testing.T) {
 		}},
 	})
 
-	rec := serve(r)
-
-	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
-	assert.JSONEq(t, `{
+	api.Get("/health").AssertJSON(http.StatusServiceUnavailable, `{
 		"status": "unhealthy",
 		"service": "pkgsilo",
 		"components": [{"name":"database","status":"unhealthy"}]
-	}`, rec.Body.String())
+	}`)
 
 	entries := loggertest.Entries(t, buf)
 	require.Len(t, entries, 1)
