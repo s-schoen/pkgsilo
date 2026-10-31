@@ -57,6 +57,7 @@ tasks:
 
   test:
     cmds:
+      - mkdir -p build
       - go test -coverprofile build/coverage ./...
 
   "test:short":
