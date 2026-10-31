@@ -152,7 +152,7 @@ func TestDecodeJSON_Problems(t *testing.T) {
 			name:        "invalid members",
 			contentType: "application/json",
 			body:        `{"age":17,"address":{}}`,
-			want: `{"type":"about:blank","title":"Unprocessable Entity","status":422,
+			want: `{"type":"https://pkgsilo/problems/invalid-body","title":"Invalid request body","status":422,
 				"detail":"The request body contains invalid members.",
 				"errors":[
 					{"detail":"cannot be blank","pointer":"#/address/city"},

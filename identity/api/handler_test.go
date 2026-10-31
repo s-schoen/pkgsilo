@@ -115,7 +115,7 @@ func TestHandler_List_InvalidPagination(t *testing.T) {
 	rec := serve(r, http.MethodGet, "/identities?limit=0", "")
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.JSONEq(t, `{"type":"about:blank","title":"Bad Request","status":400,
+	assert.JSONEq(t, `{"type":"https://pkgsilo/problems/invalid-query","title":"Invalid query parameters","status":400,
 		"detail":"The request contains invalid query parameters.",
 		"errors":[{"detail":"must be no less than 1","parameter":"limit"}]}`, rec.Body.String())
 }
@@ -162,7 +162,7 @@ func TestHandler_Delete(t *testing.T) {
 }
 
 func TestHandler_InvalidBody(t *testing.T) {
-	const want = `{"type":"about:blank","title":"Unprocessable Entity","status":422,
+	const want = `{"type":"https://pkgsilo/problems/invalid-body","title":"Invalid request body","status":422,
 		"detail":"The request body contains invalid members.",
 		"errors":[
 			{"detail":"cannot be blank","pointer":"#/displayName"},
@@ -194,7 +194,7 @@ func TestHandler_InvalidID(t *testing.T) {
 			rec := serve(r, method, "/identities/not-a-uuid", adaBody)
 
 			assert.Equal(t, http.StatusNotFound, rec.Code)
-			assert.JSONEq(t, `{"type":"about:blank","title":"Not Found","status":404,
+			assert.JSONEq(t, `{"type":"https://pkgsilo/problems/identity-not-found","title":"Identity not found","status":404,
 				"detail":"The identity does not exist."}`, rec.Body.String())
 		})
 	}
@@ -224,8 +224,10 @@ func TestHandler_ServiceErrors(t *testing.T) {
 	)
 
 	const (
-		notFound = `{"type":"about:blank","title":"Not Found","status":404,"detail":"The identity does not exist."}`
-		conflict = `{"type":"about:blank","title":"Conflict","status":409,"detail":"The username is already taken."}`
+		notFound = `{"type":"https://pkgsilo/problems/identity-not-found","title":"Identity not found","status":404,
+			"detail":"The identity does not exist."}`
+		conflict = `{"type":"https://pkgsilo/problems/username-taken","title":"Username taken","status":409,
+			"detail":"The username is already taken."}`
 		internal = `{"type":"about:blank","title":"Internal Server Error","status":500}`
 	)
 	// Wrapped like the service wraps its errors.

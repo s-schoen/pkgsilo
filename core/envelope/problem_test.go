@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var validationProblem = DefineProblemType("https://api.example.com/problems/validation", "Request validation failed", 422)
+var validationProblem = DefineProblemType("validation", "Request validation failed", 422)
 
 func TestProblem_MarshalJSON(t *testing.T) {
 	tests := []struct {
@@ -29,7 +29,7 @@ func TestProblem_MarshalJSON(t *testing.T) {
 				Extensions: map[string]any{"errors": []map[string]string{{"detail": "Must be at least 18", "pointer": "#/age"}}},
 			}),
 			want: `{
-				"type": "https://api.example.com/problems/validation",
+				"type": "https://pkgsilo/problems/validation",
 				"title": "Request validation failed",
 				"status": 422,
 				"detail": "The profile contains invalid fields.",
@@ -42,7 +42,7 @@ func TestProblem_MarshalJSON(t *testing.T) {
 			problem: validationProblem.New(Occurrence{
 				Extensions: map[string]any{"type": "x", "title": "x", "status": 200, "detail": "x", "instance": "x"},
 			}),
-			want: `{"type":"https://api.example.com/problems/validation","title":"Request validation failed","status":422}`,
+			want: `{"type":"https://pkgsilo/problems/validation","title":"Request validation failed","status":422}`,
 		},
 	}
 	for _, tt := range tests {
@@ -58,10 +58,24 @@ func TestProblem_MarshalJSON_OrdersStandardMembersFirst(t *testing.T) {
 	assert.Equal(t, `{"type":"about:blank","title":"Bad Request","status":400,"detail":"d","a":1,"b":2}`, encode(t, p))
 }
 
+func TestDefineProblemType(t *testing.T) {
+	assert.Equal(t, ProblemType{
+		Type:   "https://pkgsilo/problems/username-taken",
+		Title:  "Username taken",
+		Status: http.StatusConflict,
+	}, DefineProblemType("username-taken", "Username taken", http.StatusConflict))
+}
+
 func TestDefineProblemType_Panics(t *testing.T) {
-	assert.Panics(t, func() { DefineProblemType("about:blank", "Too low", 99) })
-	assert.Panics(t, func() { DefineProblemType("about:blank", "Too high", 600) })
-	assert.Panics(t, func() { DefineProblemType("about:blank", "", 400) })
+	assert.Panics(t, func() { DefineProblemType("too-low", "Too low", 99) })
+	assert.Panics(t, func() { DefineProblemType("too-high", "Too high", 600) })
+	assert.Panics(t, func() { DefineProblemType("no-title", "", 400) })
+
+	for _, slug := range []string{"", "about:blank", "https://x.test/y", "Username", "username_taken", "-x", "x-", "a--b"} {
+		t.Run(slug, func(t *testing.T) {
+			assert.Panics(t, func() { DefineProblemType(slug, "Invalid slug", 400) })
+		})
+	}
 }
 
 func TestWriteProblem(t *testing.T) {
@@ -74,7 +88,7 @@ func TestWriteProblem(t *testing.T) {
 }
 
 func TestValidationError_MarshalJSON(t *testing.T) {
-	p := UnprocessableEntityProblem.New(Occurrence{Extensions: map[string]any{
+	p := validationProblem.New(Occurrence{Extensions: map[string]any{
 		ValidationErrorsExtension: []ValidationError{
 			{Detail: "cannot be blank", Pointer: "#/name"},
 			{Detail: "must be an integer", Parameter: "limit"},
@@ -82,8 +96,8 @@ func TestValidationError_MarshalJSON(t *testing.T) {
 	}})
 
 	assert.JSONEq(t, `{
-		"type": "about:blank",
-		"title": "Unprocessable Entity",
+		"type": "https://pkgsilo/problems/validation",
+		"title": "Request validation failed",
 		"status": 422,
 		"errors": [
 			{"detail":"cannot be blank","pointer":"#/name"},

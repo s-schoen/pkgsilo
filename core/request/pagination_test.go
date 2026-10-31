@@ -58,7 +58,7 @@ func TestParsePagination_Problems(t *testing.T) {
 
 			assert.False(t, ok)
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
-			assert.JSONEq(t, `{"type":"about:blank","title":"Bad Request","status":400,
+			assert.JSONEq(t, `{"type":"https://pkgsilo/problems/invalid-query","title":"Invalid query parameters","status":400,
 				"detail":"The request contains invalid query parameters.",
 				"errors":`+tt.wantErrors+`}`, rec.Body.String())
 		})

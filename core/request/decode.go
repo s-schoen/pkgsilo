@@ -118,6 +118,10 @@ func jsonType(t reflect.Type) string {
 	}
 }
 
+// invalidBodyProblem lists the invalid members of a request body in the
+// envelope.ValidationErrorsExtension member, each located by a pointer.
+var invalidBodyProblem = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
+
 func writeValidationProblem(w http.ResponseWriter, err error) {
 	errs, ok := validationErrors(err, func(path []string) envelope.ValidationError {
 		return envelope.ValidationError{Pointer: jsonPointer(path)}
@@ -126,7 +130,7 @@ func writeValidationProblem(w http.ResponseWriter, err error) {
 		panic(fmt.Errorf("request: validate body: %w", err))
 	}
 
-	envelope.WriteProblem(w, envelope.UnprocessableEntityProblem.New(envelope.Occurrence{
+	envelope.WriteProblem(w, invalidBodyProblem.New(envelope.Occurrence{
 		Detail:     "The request body contains invalid members.",
 		Extensions: map[string]any{envelope.ValidationErrorsExtension: errs},
 	}))

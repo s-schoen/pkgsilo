@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 )
 
 // ProblemJSONMediaType is the media type of an RFC 9457 Problem Details JSON response.
@@ -11,6 +12,12 @@ const ProblemJSONMediaType = "application/problem+json"
 
 // AboutBlankProblemType is the problem type of errors with no semantics beyond their HTTP status.
 const AboutBlankProblemType = "about:blank"
+
+// problemTypeBaseURI prefixes the slug of every defined problem type. Clients compare type URIs
+// as identifiers, so it must stay the same across deployments.
+const problemTypeBaseURI = "https://pkgsilo/problems/"
+
+var problemTypeSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 // ProblemType holds the metadata shared by every occurrence of a problem.
 type ProblemType struct {
@@ -22,10 +29,16 @@ type ProblemType struct {
 	Status int
 }
 
-// DefineProblemType returns a problem type, meant to be declared once as a package-level variable.
+// DefineProblemType returns the problem type identified by slug, meant to be declared once as a
+// package-level variable. Define one for every problem a client must tell apart from others with
+// the same status; the generic problems below cover the rest.
 //
-// It panics if status is not between 100 and 599 or title is empty.
-func DefineProblemType(typ, title string, status int) ProblemType {
+// Its URI is the slug under https://pkgsilo/problems/. It panics if slug isn't lowercase
+// kebab-case, status is not between 100 and 599 or title is empty.
+func DefineProblemType(slug, title string, status int) ProblemType {
+	if !problemTypeSlugPattern.MatchString(slug) {
+		panic(fmt.Sprintf("envelope: problem type slug %q is not lowercase kebab-case", slug))
+	}
 	if status < 100 || status > 599 {
 		panic(fmt.Sprintf("envelope: problem type status %d is not between 100 and 599", status))
 	}
@@ -33,7 +46,7 @@ func DefineProblemType(typ, title string, status int) ProblemType {
 		panic("envelope: problem type title must not be empty")
 	}
 
-	return ProblemType{Type: typ, Title: title, Status: status}
+	return ProblemType{Type: problemTypeBaseURI + slug, Title: title, Status: status}
 }
 
 // Occurrence holds the values specific to one occurrence of a problem.
@@ -117,10 +130,11 @@ func WriteProblem(w http.ResponseWriter, p Problem) {
 }
 
 func defineAboutBlankProblem(status int) ProblemType {
-	return DefineProblemType(AboutBlankProblemType, http.StatusText(status), status)
+	return ProblemType{Type: AboutBlankProblemType, Title: http.StatusText(status), Status: status}
 }
 
-// Generic HTTP errors, using the about:blank problem type.
+// Generic HTTP errors, using the about:blank problem type. They're meant for problems that mean
+// nothing beyond their status; DefineProblemType defines the others.
 var (
 	BadRequestProblem            = defineAboutBlankProblem(http.StatusBadRequest)
 	UnauthorizedProblem          = defineAboutBlankProblem(http.StatusUnauthorized)

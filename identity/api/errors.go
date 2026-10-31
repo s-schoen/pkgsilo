@@ -8,9 +8,15 @@ import (
 	"pkgsilo/identity/service"
 )
 
+// Problem types of the identity endpoints.
 var (
-	identityNotFoundProblem = envelope.NotFoundProblem.New(envelope.Occurrence{Detail: "The identity does not exist."})
-	usernameTakenProblem    = envelope.ConflictProblem.New(envelope.Occurrence{Detail: "The username is already taken."})
+	identityNotFoundType = envelope.DefineProblemType("identity-not-found", "Identity not found", http.StatusNotFound)
+	usernameTakenType    = envelope.DefineProblemType("username-taken", "Username taken", http.StatusConflict)
+)
+
+var (
+	identityNotFoundProblem = identityNotFoundType.New(envelope.Occurrence{Detail: "The identity does not exist."})
+	usernameTakenProblem    = usernameTakenType.New(envelope.Occurrence{Detail: "The username is already taken."})
 )
 
 // writeError answers a service error with its problem. Unexpected errors are logged and
