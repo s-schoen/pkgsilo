@@ -161,6 +161,9 @@ linters:
         - {name: max-public-structs, disabled: true}
         - {name: flag-parameter, disabled: true}
         - {name: confusing-naming, disabled: true}
+        # strings.Builder writes always return a nil error. Patterns must match the whole function name.
+        - name: unhandled-error
+          arguments: ['strings\.Builder\.Write.*']
     rowserrcheck:
       packages: [github.com/jmoiron/sqlx]
     sloglint:
