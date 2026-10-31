@@ -15,6 +15,7 @@ import (
 	"pkgsilo/core/pagination"
 	"pkgsilo/identity/repository"
 	"pkgsilo/identity/repository/mocks"
+	"pkgsilo/test/servicetest"
 )
 
 var (
@@ -58,12 +59,7 @@ func TestIdentityService_Create(t *testing.T) {
 	t.Parallel()
 	svc, repo := newTestService(t)
 	var inserted repository.IdentityRecord
-	repo.EXPECT().Insert(mock.Anything, mock.Anything).RunAndReturn(
-		func(_ context.Context, rec repository.IdentityRecord) (repository.IdentityRecord, error) {
-			inserted = rec
-			return stored, nil
-		},
-	)
+	repo.EXPECT().Insert(mock.Anything, servicetest.Capture(&inserted)).Return(stored, nil)
 
 	got, err := svc.Create(t.Context(), actor, input)
 	require.NoError(t, err)
@@ -225,10 +221,7 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 			// The repository wraps its errors with context.
 			err := tt.call(t.Context(), svc, repo, fmt.Errorf("query: %w", tt.repoErr))
 
-			require.ErrorIs(t, err, tt.wantErr)
-			if !errors.Is(tt.wantErr, tt.repoErr) {
-				assert.NotErrorIs(t, err, tt.repoErr, "repository errors must not leak into the domain")
-			}
+			servicetest.AssertTranslated(t, err, tt.wantErr, tt.repoErr)
 		})
 	}
 }
