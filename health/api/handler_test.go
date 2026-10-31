@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/envelope"
 	"pkgsilo/core/logger/loggertest"
 	"pkgsilo/core/router"
 	"pkgsilo/health/service"
@@ -86,5 +85,24 @@ func TestHandler_Check_Unhealthy(t *testing.T) {
 }
 
 func TestToHealthStatus_UnknownIsUnhealthy(t *testing.T) {
-	assert.Equal(t, envelope.HealthUnhealthy, toHealthStatus(service.Status("unknown")))
+	assert.Equal(t, HealthUnhealthy, toHealthStatus(service.Status("unknown")))
+}
+
+func TestHealthResponse_HTTPStatus(t *testing.T) {
+	tests := []struct {
+		status HealthStatus
+		want   int
+	}{
+		{HealthHealthy, http.StatusOK},
+		{HealthDegraded, http.StatusOK},
+		{HealthUnhealthy, http.StatusServiceUnavailable},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.status), func(t *testing.T) {
+			// Component statuses don't affect the aggregate.
+			h := HealthResponse{Status: tt.status, Components: []ComponentHealthResponse{{Name: "db", Status: HealthUnhealthy}}}
+
+			assert.Equal(t, tt.want, h.httpStatus())
+		})
+	}
 }

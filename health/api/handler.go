@@ -39,5 +39,6 @@ func (h *Handler) check(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	envelope.WriteHealth(w, toHealthResponse(health))
+	resp := toHealthResponse(health)
+	envelope.WriteJSON(w, resp.httpStatus(), resp)
 }
