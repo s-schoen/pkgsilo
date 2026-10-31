@@ -24,6 +24,9 @@ import (
 	identityservice "pkgsilo/identity/service"
 )
 
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -45,6 +48,8 @@ func run() error {
 	log := logger.New(os.Stderr, logger.Options{Dev: cfg.IsDev(), Level: cfg.LogLevel})
 	// Only for third-party code logging through slog: our own code uses the injected logger.
 	slog.SetDefault(log)
+
+	log.Info("starting pkgsilo", "version", version)
 
 	db, err := database.Open(ctx, database.Options{URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns})
 	if err != nil {
