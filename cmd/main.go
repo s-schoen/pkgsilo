@@ -9,19 +9,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/go-chi/chi/v5"
-
+	"pkgsilo/app"
 	"pkgsilo/core/config"
 	"pkgsilo/core/database"
 	"pkgsilo/core/logger"
 	"pkgsilo/core/router"
 	"pkgsilo/core/server"
-	healthapi "pkgsilo/health/api"
-	healthrepo "pkgsilo/health/repository"
-	healthservice "pkgsilo/health/service"
-	identityapi "pkgsilo/identity/api"
-	identityrepo "pkgsilo/identity/repository"
-	identityservice "pkgsilo/identity/service"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -29,7 +22,8 @@ var version = "dev"
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		// The process exits either way, so a failed write has nowhere left to be reported.
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -63,16 +57,9 @@ func run() error {
 
 	log.Info("database connected")
 
-	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
-	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db))
+	h := app.NewHandler(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, db, log)
 
-	r := router.New(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, log)
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Mount("/health", healthapi.NewHandler(health, log).Routes())
-		r.Mount("/identities", identityapi.NewHandler(identities, log).Routes())
-	})
-
-	if err := server.Run(ctx, server.Options{Addr: cfg.HTTPAddr}, log, r); err != nil {
+	if err := server.Run(ctx, server.Options{Addr: cfg.HTTPAddr}, log, h); err != nil {
 		return fmt.Errorf("run server: %w", err)
 	}
 
