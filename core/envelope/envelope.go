@@ -1,5 +1,5 @@
 // Package envelope defines the uniform response formats of the API: resource and collection
-// envelopes, RFC 9457 Problem Details and health responses.
+// envelopes and RFC 9457 Problem Details, plus a writer for bodies with a format of their own.
 package envelope
 
 import (
@@ -10,6 +10,12 @@ import (
 
 // jsonMediaType is the media type of every successful JSON response.
 const jsonMediaType = "application/json"
+
+// WriteJSON writes v as a JSON response with the given status, without an envelope.
+// It is for bodies with a format of their own, such as health checks.
+func WriteJSON(w http.ResponseWriter, status int, v any) {
+	writeJSON(w, status, jsonMediaType, v)
+}
 
 func writeJSON(w http.ResponseWriter, status int, contentType string, v any) {
 	writeBody(w, status, contentType, marshalJSON(v))
