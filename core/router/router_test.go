@@ -1,7 +1,6 @@
 package router
 
 import (
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -12,13 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/envelope"
-	"pkgsilo/core/logger/loggertest"
 	"pkgsilo/core/middleware"
+	"pkgsilo/test/loggertest"
 )
 
 func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
 	t.Parallel()
-	r := New(Options{}, slog.New(slog.DiscardHandler))
+	r := New(Options{}, loggertest.Discard())
 	// chi only builds the middleware chain once at least one route exists.
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
@@ -34,7 +33,7 @@ func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
 
 func TestNew_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
-	r := New(Options{}, slog.New(slog.DiscardHandler))
+	r := New(Options{}, loggertest.Discard())
 	noop := func(http.ResponseWriter, *http.Request) {}
 	r.Get("/root", noop)
 	r.Delete("/root", noop)
@@ -75,7 +74,7 @@ func TestNew_MethodNotAllowed(t *testing.T) {
 
 func TestNew_MountedSubrouterNotFound(t *testing.T) {
 	t.Parallel()
-	r := New(Options{}, slog.New(slog.DiscardHandler))
+	r := New(Options{}, loggertest.Discard())
 	sub := chi.NewRouter()
 	sub.Get("/", func(http.ResponseWriter, *http.Request) {})
 	r.Mount("/sub", sub)

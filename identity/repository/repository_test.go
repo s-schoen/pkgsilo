@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/database/databasetest"
+	"pkgsilo/test/databasetest"
 )
 
 // newTestRepo returns a repository on a new, empty database.

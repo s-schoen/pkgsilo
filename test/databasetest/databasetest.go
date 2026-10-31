@@ -1,4 +1,6 @@
-// Package databasetest provides migrated PostgreSQL databases for repository tests.
+// Package databasetest provides migrated PostgreSQL databases for repository and end-to-end tests.
+// It must import nothing from pkgsilo but core/database, so that internal tests of the features'
+// packages can use it without an import cycle.
 package databasetest
 
 import (
@@ -219,7 +221,7 @@ func databaseURL(name string) string {
 // file, since tests run in the directory of the package under test.
 func migrationsDir() string {
 	_, file, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations")
+	return filepath.Join(filepath.Dir(file), "..", "..", "migrations")
 }
 
 func randomBytes() []byte {

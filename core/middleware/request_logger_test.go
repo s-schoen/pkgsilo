@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/logger/loggertest"
 	"pkgsilo/core/middleware"
+	"pkgsilo/test/loggertest"
 )
 
 func TestRequestLogger(t *testing.T) {
