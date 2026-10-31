@@ -32,6 +32,7 @@ type CreateIdentityRequest struct {
 	DisplayName string `json:"displayName"`
 }
 
+// Validate reports the invalid members of r as validation.Errors.
 func (r CreateIdentityRequest) Validate() error {
 	return validation.ValidateStruct(&r,
 		validation.Field(&r.Username, usernameRules...),
@@ -49,6 +50,7 @@ type ReplaceIdentityRequest struct {
 	DisplayName string `json:"displayName"`
 }
 
+// Validate reports the invalid members of r as validation.Errors.
 func (r ReplaceIdentityRequest) Validate() error {
 	return validation.ValidateStruct(&r,
 		validation.Field(&r.Username, usernameRules...),

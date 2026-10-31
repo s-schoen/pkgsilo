@@ -24,7 +24,7 @@ func Recoverer(logger *slog.Logger, prettyStack bool) func(http.Handler) http.Ha
 				if rec == nil {
 					return
 				}
-				if rec == http.ErrAbortHandler {
+				if rec == http.ErrAbortHandler { //nolint:errorlint // Panic values aren't wrapped; net/http compares alike.
 					// Deliberate abort: let net/http drop the connection silently.
 					panic(rec)
 				}

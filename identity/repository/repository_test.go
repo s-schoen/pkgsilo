@@ -34,7 +34,7 @@ func newRecord(username string, createdAt time.Time) IdentityRecord {
 	}
 }
 
-var baseTime = time.Date(2026, 10, 24, 12, 0, 0, 123456000, time.UTC)
+var baseTime = time.Date(2026, time.October, 24, 12, 0, 0, 123456000, time.UTC)
 
 func TestPostgresIdentityRepository_InsertAndGet(t *testing.T) {
 	t.Parallel()

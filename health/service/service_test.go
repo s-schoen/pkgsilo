@@ -13,6 +13,7 @@ import (
 )
 
 func TestHealthService_Check_Healthy(t *testing.T) {
+	t.Parallel()
 	repo := mocks.NewMockHealthRepository(t)
 	repo.EXPECT().Ping(mock.Anything).Return(nil)
 
@@ -25,6 +26,7 @@ func TestHealthService_Check_Healthy(t *testing.T) {
 }
 
 func TestHealthService_Check_DatabaseUnreachable(t *testing.T) {
+	t.Parallel()
 	repo := mocks.NewMockHealthRepository(t)
 	errDB := errors.New("connection refused")
 	repo.EXPECT().Ping(mock.Anything).Return(errDB)
@@ -39,6 +41,7 @@ func TestHealthService_Check_DatabaseUnreachable(t *testing.T) {
 }
 
 func TestHealthService_Check_BoundsPing(t *testing.T) {
+	t.Parallel()
 	repo := mocks.NewMockHealthRepository(t)
 	// The deadline was set before the matcher runs, so it can't be later than checkTimeout from now.
 	repo.EXPECT().Ping(mock.MatchedBy(func(ctx context.Context) bool {

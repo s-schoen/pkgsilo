@@ -1,3 +1,4 @@
+// Package config loads the application configuration from the environment.
 package config
 
 import (
@@ -67,7 +68,7 @@ func parsePrefix(s string) (netip.Prefix, error) {
 
 	addr, err := netip.ParseAddr(s)
 	if err != nil {
-		return netip.Prefix{}, err
+		return netip.Prefix{}, fmt.Errorf("parse address: %w", err)
 	}
 	addr = addr.Unmap().WithZone("")
 

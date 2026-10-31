@@ -13,9 +13,10 @@ import (
 )
 
 func TestRequestLogger(t *testing.T) {
+	t.Parallel()
 	tests := map[string]struct {
 		handler    http.HandlerFunc
-		wantStatus float64
+		wantStatus int
 		wantLevel  string
 	}{
 		"explicit status": {
@@ -37,6 +38,7 @@ func TestRequestLogger(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			logger, buf := loggertest.NewJSON()
 			h := middleware.RequestID(middleware.ClientIP(nil)(middleware.RequestLogger(logger)(tt.handler)))
 
@@ -55,7 +57,7 @@ func TestRequestLogger(t *testing.T) {
 			assert.Equal(t, tt.wantLevel, entry["level"])
 			assert.Equal(t, "POST", entry["method"])
 			assert.Equal(t, "/things", entry["path"])
-			assert.Equal(t, tt.wantStatus, entry["status"])
+			assert.EqualValues(t, tt.wantStatus, entry["status"])
 			assert.Equal(t, "10.0.0.1", entry["client_ip"])
 			assert.Equal(t, "req-1", entry["request_id"])
 			assert.Contains(t, entry, "duration")

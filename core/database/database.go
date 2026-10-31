@@ -1,3 +1,4 @@
+// Package database opens connections to PostgreSQL.
 package database
 
 import (

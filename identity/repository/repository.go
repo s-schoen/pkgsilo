@@ -33,10 +33,12 @@ type PostgresIdentityRepository struct {
 
 var _ IdentityRepository = (*PostgresIdentityRepository)(nil)
 
+// NewPostgresIdentityRepository returns a PostgresIdentityRepository that stores records in db.
 func NewPostgresIdentityRepository(db *sqlx.DB) *PostgresIdentityRepository {
 	return &PostgresIdentityRepository{db: db}
 }
 
+// Insert stores a new record and returns it as stored.
 func (r *PostgresIdentityRepository) Insert(ctx context.Context, rec IdentityRecord) (IdentityRecord, error) {
 	var stored IdentityRecord
 	err := r.db.GetContext(ctx, &stored, `
@@ -52,6 +54,7 @@ func (r *PostgresIdentityRepository) Insert(ctx context.Context, rec IdentityRec
 	return stored, nil
 }
 
+// Get returns the record with the given ID.
 func (r *PostgresIdentityRepository) Get(ctx context.Context, id uuid.UUID) (IdentityRecord, error) {
 	var rec IdentityRecord
 	err := r.db.GetContext(ctx, &rec, `SELECT `+identityColumns+` FROM identities WHERE id = $1`, id)
@@ -62,6 +65,7 @@ func (r *PostgresIdentityRepository) Get(ctx context.Context, id uuid.UUID) (Ide
 	return rec, nil
 }
 
+// List returns up to limit records, skipping the first offset, ordered by creation time.
 func (r *PostgresIdentityRepository) List(ctx context.Context, offset, limit int) ([]IdentityRecord, error) {
 	var recs []IdentityRecord
 	err := r.db.SelectContext(ctx, &recs, `
@@ -77,6 +81,8 @@ func (r *PostgresIdentityRepository) List(ctx context.Context, offset, limit int
 	return recs, nil
 }
 
+// Update overwrites the username, display name, UpdatedBy and UpdatedAt of the record with
+// rec.ID and returns it as stored. CreatedBy and CreatedAt are immutable and ignored.
 func (r *PostgresIdentityRepository) Update(ctx context.Context, rec IdentityRecord) (IdentityRecord, error) {
 	var stored IdentityRecord
 	err := r.db.GetContext(ctx, &stored, `
@@ -93,6 +99,7 @@ func (r *PostgresIdentityRepository) Update(ctx context.Context, rec IdentityRec
 	return stored, nil
 }
 
+// Delete removes the record with the given ID.
 func (r *PostgresIdentityRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	res, err := r.db.ExecContext(ctx, `DELETE FROM identities WHERE id = $1`, id)
 	if err != nil {

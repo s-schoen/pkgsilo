@@ -100,7 +100,7 @@ func (p Problem) MarshalJSON() ([]byte, error) {
 		Instance: p.Instance,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal problem members: %w", err)
 	}
 
 	ext := make(map[string]any, len(p.Extensions))
@@ -117,7 +117,7 @@ func (p Problem) MarshalJSON() ([]byte, error) {
 
 	e, err := json.Marshal(ext)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal problem extensions: %w", err)
 	}
 
 	// Merge both objects: drop the closing brace of the first and the opening brace of the second.

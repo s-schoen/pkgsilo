@@ -29,6 +29,7 @@ func serveRequestID(t *testing.T, req *http.Request) (string, *httptest.Response
 }
 
 func TestRequestID_ReusesValidIncomingID(t *testing.T) {
+	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set(middleware.RequestIDHeader, "client-id_1.0")
 
@@ -39,6 +40,7 @@ func TestRequestID_ReusesValidIncomingID(t *testing.T) {
 }
 
 func TestRequestID_GeneratesUUIDv7WhenMissing(t *testing.T) {
+	t.Parallel()
 	ctxID, rec := serveRequestID(t, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	id, err := uuid.Parse(ctxID)
@@ -51,6 +53,7 @@ func TestRequestID_GeneratesUUIDv7WhenMissing(t *testing.T) {
 }
 
 func TestRequestID_ReplacesInvalidIncomingID(t *testing.T) {
+	t.Parallel()
 	tests := map[string]string{
 		"too long":          strings.Repeat("a", 129),
 		"whitespace":        "abc def",
@@ -59,6 +62,7 @@ func TestRequestID_ReplacesInvalidIncomingID(t *testing.T) {
 
 	for name, incoming := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set(middleware.RequestIDHeader, incoming)
 
@@ -73,5 +77,6 @@ func TestRequestID_ReplacesInvalidIncomingID(t *testing.T) {
 }
 
 func TestRequestIDFromContext_Empty(t *testing.T) {
+	t.Parallel()
 	assert.Empty(t, middleware.RequestIDFromContext(t.Context()))
 }

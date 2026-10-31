@@ -1,3 +1,4 @@
+// Package logger creates the application's structured logger.
 package logger
 
 import (
@@ -41,10 +42,10 @@ type contextHandler struct {
 
 func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	if id := middleware.RequestIDFromContext(ctx); id != "" {
-		r.AddAttrs(slog.String("request_id", id))
+		r.AddAttrs(slog.String("request_id", id)) //nolint:sloglint // The one place that adds the request ID.
 	}
 
-	return h.Handler.Handle(ctx, r)
+	return h.Handler.Handle(ctx, r) //nolint:wrapcheck // A decorating handler passes errors through unchanged.
 }
 
 // WithAttrs and WithGroup must re-wrap the derived handler, otherwise loggers created via

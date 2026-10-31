@@ -1,3 +1,4 @@
+// Package server runs the HTTP server.
 package server
 
 import (
@@ -17,7 +18,7 @@ type Options struct {
 	Addr string
 }
 
-// Run serves handler on opts.Addr until ctx is cancelled, then shuts down gracefully.
+// Run serves handler on opts.Addr until ctx is canceled, then shuts down gracefully.
 func Run(ctx context.Context, opts Options, logger *slog.Logger, handler http.Handler) error {
 	srv := &http.Server{
 		Addr:              opts.Addr,
@@ -31,7 +32,7 @@ func Run(ctx context.Context, opts Options, logger *slog.Logger, handler http.Ha
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("server started", "addr", opts.Addr)
+		logger.InfoContext(ctx, "server started", "addr", opts.Addr)
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -41,7 +42,7 @@ func Run(ctx context.Context, opts Options, logger *slog.Logger, handler http.Ha
 	case <-ctx.Done():
 	}
 
-	logger.Info("shutting down server")
+	logger.InfoContext(ctx, "shutting down server")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
@@ -54,7 +55,7 @@ func Run(ctx context.Context, opts Options, logger *slog.Logger, handler http.Ha
 		return fmt.Errorf("listen: %w", err)
 	}
 
-	logger.Info("server stopped")
+	logger.InfoContext(ctx, "server stopped")
 
 	return nil
 }

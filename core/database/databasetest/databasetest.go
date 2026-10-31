@@ -34,7 +34,7 @@ const (
 
 var (
 	setupOnce sync.Once
-	setupErr  error
+	errSetup  error
 	adminDB   *sqlx.DB
 	serverURL *url.URL
 )
@@ -48,9 +48,9 @@ func New(t *testing.T) *sqlx.DB {
 		t.Skip("needs a PostgreSQL container")
 	}
 
-	setupOnce.Do(func() { setupErr = setup() })
-	if setupErr != nil {
-		t.Fatalf("set up test database server: %v", setupErr)
+	setupOnce.Do(func() { errSetup = setup() })
+	if errSetup != nil {
+		t.Fatalf("set up test database server: %v", errSetup)
 	}
 
 	name := fmt.Sprintf("test_%x", randomBytes())
@@ -60,8 +60,9 @@ func New(t *testing.T) *sqlx.DB {
 		t.Fatalf("create test database: %v", err)
 	}
 	t.Cleanup(func() {
-		// t.Context() is already canceled when cleanups run.
-		_, err := adminDB.ExecContext(context.Background(), fmt.Sprintf("DROP DATABASE %s WITH (FORCE)", name))
+		// t.Context() is already canceled when cleanups run, so keep only its values.
+		ctx := context.WithoutCancel(t.Context())
+		_, err := adminDB.ExecContext(ctx, fmt.Sprintf("DROP DATABASE %s WITH (FORCE)", name))
 		if err != nil {
 			t.Errorf("drop test database: %v", err)
 		}
@@ -143,7 +144,7 @@ func createTemplate(ctx context.Context) error {
 	// that dies halfway never leaves a partial template behind.
 	for _, stmt := range []string{
 		fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", buildDatabase),
-		fmt.Sprintf("CREATE DATABASE %s", buildDatabase),
+		"CREATE DATABASE " + buildDatabase,
 	} {
 		if _, err := conn.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("create template: %w", err)
@@ -177,7 +178,7 @@ func migrate(ctx context.Context, dbURL string) error {
 	defer func() { _ = db.Close() }()
 
 	for _, path := range migrations {
-		stmts, err := os.ReadFile(path)
+		stmts, err := os.ReadFile(path) //nolint:gosec // path comes from globbing the migrations directory.
 		if err != nil {
 			return fmt.Errorf("read migration: %w", err)
 		}
@@ -196,8 +197,11 @@ func openWhenReady(ctx context.Context, dbURL string) (*sqlx.DB, error) {
 	deadline := time.Now().Add(readyTimeout)
 	for {
 		db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 4})
-		if err == nil || time.Now().After(deadline) {
-			return db, err
+		if err == nil {
+			return db, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("not ready after %s: %w", readyTimeout, err)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

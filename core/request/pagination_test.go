@@ -10,6 +10,7 @@ import (
 )
 
 func TestParsePagination(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		query string
 		want  Pagination
@@ -22,6 +23,7 @@ func TestParsePagination(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
+			t.Parallel()
 			rec := httptest.NewRecorder()
 
 			got, ok := ParsePagination(rec, httptest.NewRequest(http.MethodGet, "/?"+tt.query, nil))
@@ -34,6 +36,7 @@ func TestParsePagination(t *testing.T) {
 }
 
 func TestParsePagination_Problems(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		query      string
 		wantErrors string
@@ -52,6 +55,7 @@ func TestParsePagination_Problems(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
+			t.Parallel()
 			rec := httptest.NewRecorder()
 
 			_, ok := ParsePagination(rec, httptest.NewRequest(http.MethodGet, "/?"+tt.query, nil))

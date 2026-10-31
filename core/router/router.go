@@ -1,3 +1,4 @@
+// Package router builds the HTTP router with the middleware shared by all features.
 package router
 
 import (

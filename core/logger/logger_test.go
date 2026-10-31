@@ -17,19 +17,20 @@ import (
 func requestContext(t *testing.T, id string) context.Context {
 	t.Helper()
 
-	var ctx context.Context
+	var handled *http.Request
 	h := middleware.RequestID(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		ctx = r.Context()
+		handled = r
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set(middleware.RequestIDHeader, id)
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
-	return ctx
+	return handled.Context()
 }
 
 func TestLogger_AddsRequestIDFromContext(t *testing.T) {
+	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	ctx := requestContext(t, "req-1")
 

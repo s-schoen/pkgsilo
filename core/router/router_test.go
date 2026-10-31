@@ -1,7 +1,6 @@
 package router
 
 import (
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +17,8 @@ import (
 )
 
 func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
-	r := New(Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	t.Parallel()
+	r := New(Options{}, slog.New(slog.DiscardHandler))
 	// chi only builds the middleware chain once at least one route exists.
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
@@ -33,7 +33,8 @@ func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
 }
 
 func TestNew_MethodNotAllowed(t *testing.T) {
-	r := New(Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	t.Parallel()
+	r := New(Options{}, slog.New(slog.DiscardHandler))
 	noop := func(http.ResponseWriter, *http.Request) {}
 	r.Get("/root", noop)
 	r.Delete("/root", noop)
@@ -60,6 +61,7 @@ func TestNew_MethodNotAllowed(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, tt.path, nil))
 
@@ -72,7 +74,8 @@ func TestNew_MethodNotAllowed(t *testing.T) {
 }
 
 func TestNew_MountedSubrouterNotFound(t *testing.T) {
-	r := New(Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	t.Parallel()
+	r := New(Options{}, slog.New(slog.DiscardHandler))
 	sub := chi.NewRouter()
 	sub.Get("/", func(http.ResponseWriter, *http.Request) {})
 	r.Mount("/sub", sub)
@@ -80,6 +83,7 @@ func TestNew_MountedSubrouterNotFound(t *testing.T) {
 
 	for _, path := range []string{"/sub/missing", "/nested/sub/missing"} {
 		t.Run(path, func(t *testing.T) {
+			t.Parallel()
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 
@@ -90,6 +94,7 @@ func TestNew_MountedSubrouterNotFound(t *testing.T) {
 }
 
 func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {
+	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	r := New(Options{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}}, logger)
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
@@ -105,6 +110,7 @@ func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {
 }
 
 func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
+	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	r := New(Options{}, logger)
 	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
@@ -121,12 +127,13 @@ func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
 
 	assert.Equal(t, "panic recovered", panicEntry["msg"])
 	assert.Equal(t, "request", requestEntry["msg"])
-	assert.Equal(t, float64(http.StatusInternalServerError), requestEntry["status"])
+	assert.EqualValues(t, http.StatusInternalServerError, requestEntry["status"])
 	assert.Equal(t, "ERROR", requestEntry["level"])
 	assert.Equal(t, requestEntry["request_id"], panicEntry["request_id"])
 }
 
 func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
+	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	r := New(Options{}, logger)
 	r.Get("/unencodable", func(w http.ResponseWriter, _ *http.Request) {

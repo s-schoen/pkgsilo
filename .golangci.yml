@@ -1,0 +1,230 @@
+version: "2"
+
+linters:
+  default: none
+  # Deliberately not enabled: depguard (layering can't be expressed without listing every feature), dupl (features
+  # repeat the identity slice's shape by design), err113, exhaustruct, gochecknoglobals, ireturn (constructors return
+  # the service interface by design), mnd, noinlineerr, nlreturn, testpackage (internal tests are used deliberately),
+  # varnamelen, wsl_v5, contextcheck (false positives), and linters for libraries we don't use.
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - copyloopvar
+    - cyclop
+    - dupword
+    - durationcheck
+    - embeddedstructfieldcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - exptostd
+    - fatcontext
+    - forbidigo
+    - forcetypeassert
+    - funcorder
+    - funlen
+    - gocheckcompilerdirectives
+    - gochecknoinits
+    - gochecksumtype
+    - gocognit
+    - goconst
+    - gocritic
+    - godoclint
+    - godot
+    - gomoddirectives
+    - goprintffuncname
+    - gosec
+    - govet
+    - iface
+    - inamedparam
+    - ineffassign
+    - intrange
+    - iotamixing
+    - lll
+    - loggercheck
+    - makezero
+    - mirror
+    - misspell
+    - modernize
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - predeclared
+    - reassign
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sloglint
+    - sqlclosecheck
+    - staticcheck
+    - tagliatelle
+    - testableexamples
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unqueryvet
+    - unused
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+    - wrapcheck
+  settings:
+    copyloopvar:
+      check-alias: true
+    cyclop:
+      max-complexity: 10
+    embeddedstructfieldcheck:
+      forbid-mutex: true
+    errchkjson:
+      report-no-exported: true
+    exhaustive:
+      check: [switch, mapliteral]
+      default-signifies-exhaustive: true
+    forbidigo:
+      forbid:
+        - pattern: ^(fmt\.Print(|f|ln)|print|println)$
+        - pattern: ^log\.(Fatal|Panic|Print)(f|ln)?$
+          msg: Log through the injected *slog.Logger.
+    gocognit:
+      min-complexity: 20
+    gocritic:
+      enabled-tags: [diagnostic, style, performance, experimental, opinionated]
+      # Records and models are passed by value on purpose; httptest.NewRequest already turns a nil body into NoBody.
+      disabled-checks: [hugeParam, rangeValCopy, httpNoBody]
+    godoclint:
+      options:
+        start-with-name:
+          include-unexported: true
+    godot:
+      scope: all
+    gomoddirectives:
+      replace-local: false
+    govet:
+      enable-all: true
+      disable: [fieldalignment, shadow]
+    loggercheck:
+      require-string-key: true
+      no-printf-like: true
+    misspell:
+      locale: US
+    musttag:
+      # The envelope writers marshal their argument to JSON.
+      functions:
+        - {name: pkgsilo/core/envelope.WriteResource, tag: json, arg-pos: 1}
+        - {name: pkgsilo/core/envelope.WriteCreated, tag: json, arg-pos: 2}
+        - {name: pkgsilo/core/envelope.WriteJSON, tag: json, arg-pos: 2}
+        - {name: pkgsilo/core/envelope.NewResource, tag: json, arg-pos: 0}
+        - {name: pkgsilo/core/envelope.NewCollection, tag: json, arg-pos: 0}
+        - {name: pkgsilo/core/envelope.NewUnpaginatedCollection, tag: json, arg-pos: 0}
+        - {name: pkgsilo/core/envelope.NewPagedCollection, tag: json, arg-pos: 0}
+    nilnil:
+      detect-opposite: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    paralleltest:
+      check-cleanup: true
+    reassign:
+      patterns: [".*"]
+    revive:
+      enable-all-rules: true
+      rules:
+        - name: exported
+          arguments: [checkPublicInterface]
+        # Covered by gocognit, cyclop, funlen, lll and forcetypeassert.
+        - {name: cognitive-complexity, disabled: true}
+        - {name: cyclomatic, disabled: true}
+        - {name: function-length, disabled: true}
+        - {name: line-length-limit, disabled: true}
+        - {name: unchecked-type-assertion, disabled: true}
+        # Against the design: inline numbers are fine (mnd is off too), exhaustive relies on switches without default,
+        # types.go holds all of a layer's types, and bool options and newX/NewX test seams are deliberate.
+        - {name: add-constant, disabled: true}
+        - {name: enforce-switch-style, disabled: true}
+        - {name: max-public-structs, disabled: true}
+        - {name: flag-parameter, disabled: true}
+        - {name: confusing-naming, disabled: true}
+    rowserrcheck:
+      packages: [github.com/jmoiron/sqlx]
+    sloglint:
+      no-global: all
+      # The logger adds the request ID from the context.
+      context: scope
+      # slog's built-in keys, and the request ID that the logger adds.
+      forbidden-keys: [time, level, msg, source, request_id]
+      key-naming-case: snake
+      static-msg: true
+      msg-style: lowercased
+    staticcheck:
+      checks: [all]
+    tagliatelle:
+      case:
+        use-field-name: true
+        rules:
+          json: camel
+          db: snake
+          env: upperSnake
+    testifylint:
+      enable-all: true
+    unparam:
+      check-exported: true
+    unused:
+      exported-fields-are-used: false
+    usestdlibvars:
+      time-date-month: true
+      time-layout: true
+      time-month: true
+      time-weekday: true
+      sql-isolation-level: true
+    usetesting:
+      context-background: true
+      context-todo: true
+      os-temp-dir: true
+    wrapcheck:
+      # ozzo-validation errors must reach core/request unwrapped.
+      extra-ignore-sigs:
+        - ozzo-validation/v4.Validate(
+        - ozzo-validation/v4.ValidateStruct(
+        - ozzo-validation/v4.NewError(
+  exclusions:
+    warn-unused: true
+    rules:
+      - path: _test\.go
+        linters: [funlen, goconst, gosec, noctx, wrapcheck]
+
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gci:
+      sections: [standard, default, localmodule]
+    gofumpt:
+      # Without it, gofumpt treats the dotless module path as the standard library.
+      module-path: pkgsilo
+      extra:
+        group-params: true
+        clothe-returns: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  # Several linters report on a function's first line; show all of them at once.
+  uniq-by-line: false

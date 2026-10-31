@@ -12,6 +12,7 @@ import (
 )
 
 func TestClientIP(t *testing.T) {
+	t.Parallel()
 	trusted := []netip.Prefix{
 		netip.MustParsePrefix("10.0.0.0/8"),
 		netip.MustParsePrefix("2001:db8:ffff::1/128"),
@@ -91,6 +92,7 @@ func TestClientIP(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			var got netip.Addr
 			h := middleware.ClientIP(tt.trusted)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				got = middleware.ClientIPFromContext(r.Context())
@@ -109,5 +111,6 @@ func TestClientIP(t *testing.T) {
 }
 
 func TestClientIPFromContext_Empty(t *testing.T) {
+	t.Parallel()
 	assert.False(t, middleware.ClientIPFromContext(t.Context()).IsValid())
 }

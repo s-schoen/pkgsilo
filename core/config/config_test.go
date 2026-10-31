@@ -73,6 +73,7 @@ func TestLoad_Invalid(t *testing.T) {
 }
 
 func TestPrefixes_UnmarshalText(t *testing.T) {
+	t.Parallel()
 	var p Prefixes
 	require.NoError(t, p.UnmarshalText([]byte(" 10.0.0.1, 172.16.5.4/12 ,::1,,::ffff:192.0.2.1")))
 
@@ -85,8 +86,10 @@ func TestPrefixes_UnmarshalText(t *testing.T) {
 }
 
 func TestPrefixes_UnmarshalTextInvalid(t *testing.T) {
+	t.Parallel()
 	for _, input := range []string{"proxy.local", "10.0.0.0/33", "10.0.0.1:80"} {
 		t.Run(input, func(t *testing.T) {
+			t.Parallel()
 			var p Prefixes
 			assert.ErrorContains(t, p.UnmarshalText([]byte(input)), input)
 		})

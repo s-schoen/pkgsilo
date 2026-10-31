@@ -11,6 +11,7 @@ import (
 var validationProblem = DefineProblemType("validation", "Request validation failed", 422)
 
 func TestProblem_MarshalJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		problem Problem
@@ -47,18 +48,22 @@ func TestProblem_MarshalJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.JSONEq(t, tt.want, encode(t, tt.problem))
 		})
 	}
 }
 
 func TestProblem_MarshalJSON_OrdersStandardMembersFirst(t *testing.T) {
+	t.Parallel()
 	p := BadRequestProblem.New(Occurrence{Detail: "d", Extensions: map[string]any{"b": 2, "a": 1}})
 
+	//nolint:testifylint // JSONEq would ignore the member order under test.
 	assert.Equal(t, `{"type":"about:blank","title":"Bad Request","status":400,"detail":"d","a":1,"b":2}`, encode(t, p))
 }
 
 func TestDefineProblemType(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, ProblemType{
 		Type:   "https://pkgsilo/problems/username-taken",
 		Title:  "Username taken",
@@ -67,27 +72,33 @@ func TestDefineProblemType(t *testing.T) {
 }
 
 func TestDefineProblemType_Panics(t *testing.T) {
+	t.Parallel()
 	assert.Panics(t, func() { DefineProblemType("too-low", "Too low", 99) })
 	assert.Panics(t, func() { DefineProblemType("too-high", "Too high", 600) })
 	assert.Panics(t, func() { DefineProblemType("no-title", "", 400) })
 
-	for _, slug := range []string{"", "about:blank", "https://x.test/y", "Username", "username_taken", "-x", "x-", "a--b"} {
+	invalidSlugs := []string{"", "about:blank", "https://x.test/y", "Username", "username_taken", "-x", "x-", "a--b"}
+	for _, slug := range invalidSlugs {
 		t.Run(slug, func(t *testing.T) {
+			t.Parallel()
 			assert.Panics(t, func() { DefineProblemType(slug, "Invalid slug", 400) })
 		})
 	}
 }
 
 func TestWriteProblem(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 	WriteProblem(rec, ConflictProblem.New(Occurrence{Detail: "Already exists."}))
 
 	assert.Equal(t, http.StatusConflict, rec.Code)
-	assert.Equal(t, ProblemJSONMediaType, rec.Header().Get("Content-Type"))
-	assert.JSONEq(t, `{"type":"about:blank","title":"Conflict","status":409,"detail":"Already exists."}`, rec.Body.String())
+	assert.Equal(t, ProblemJSONMediaType, rec.Header().Get("Content-Type")) //nolint:testifylint // A media type, not JSON.
+	assert.JSONEq(t, `{"type":"about:blank","title":"Conflict","status":409,"detail":"Already exists."}`,
+		rec.Body.String())
 }
 
 func TestValidationError_MarshalJSON(t *testing.T) {
+	t.Parallel()
 	p := validationProblem.New(Occurrence{Extensions: map[string]any{
 		ValidationErrorsExtension: []ValidationError{
 			{Detail: "cannot be blank", Pointer: "#/name"},

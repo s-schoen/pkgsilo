@@ -12,13 +12,16 @@ import (
 
 // IdentityService manages identities. Changes are attributed to the given actor.
 type IdentityService interface {
+	// Create stores a new identity with the given input.
 	Create(ctx context.Context, actor uuid.UUID, in IdentityInput) (Identity, error)
+	// Get returns the identity with the given ID.
 	Get(ctx context.Context, id uuid.UUID) (Identity, error)
 	// List returns the page of up to limit identities that skips the first offset, ordered by
 	// creation time.
 	List(ctx context.Context, offset, limit int) (pagination.Page[Identity], error)
 	// Replace overwrites all caller-set fields of the identity with the given ID.
 	Replace(ctx context.Context, actor, id uuid.UUID, in IdentityInput) (Identity, error)
+	// Delete removes the identity with the given ID.
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 

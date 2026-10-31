@@ -1,3 +1,4 @@
+// Command pkgsilo serves the HTTP API.
 package main
 
 import (
@@ -41,9 +42,9 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	logger := logger.New(os.Stderr, logger.Options{Dev: cfg.IsDev(), Level: cfg.LogLevel})
+	log := logger.New(os.Stderr, logger.Options{Dev: cfg.IsDev(), Level: cfg.LogLevel})
 	// Only for third-party code logging through slog: our own code uses the injected logger.
-	slog.SetDefault(logger)
+	slog.SetDefault(log)
 
 	db, err := database.Open(ctx, database.Options{URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns})
 	if err != nil {
@@ -51,20 +52,24 @@ func run() error {
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			logger.Error("close database", "error", err)
+			log.Error("close database", "error", err)
 		}
 	}()
 
-	logger.Info("database connected")
+	log.Info("database connected")
 
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db))
 
-	r := router.New(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, logger)
+	r := router.New(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, log)
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Mount("/health", healthapi.NewHandler(health, logger).Routes())
-		r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
+		r.Mount("/health", healthapi.NewHandler(health, log).Routes())
+		r.Mount("/identities", identityapi.NewHandler(identities, log).Routes())
 	})
 
-	return server.Run(ctx, server.Options{Addr: cfg.HTTPAddr}, logger, r)
+	if err := server.Run(ctx, server.Options{Addr: cfg.HTTPAddr}, log, r); err != nil {
+		return fmt.Errorf("run server: %w", err)
+	}
+
+	return nil
 }

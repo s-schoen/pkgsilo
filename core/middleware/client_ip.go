@@ -1,9 +1,11 @@
+// Package middleware provides the HTTP middleware shared by all features.
 package middleware
 
 import (
 	"context"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 )
 
@@ -54,8 +56,8 @@ func (tp trustedProxies) clientIP(r *http.Request) netip.Addr {
 
 	// Multiple X-Forwarded-For headers form a single list, in order.
 	hops := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
-	for i := len(hops) - 1; i >= 0; i-- {
-		hop, ok := parseIP(hops[i])
+	for _, entry := range slices.Backward(hops) {
+		hop, ok := parseIP(entry)
 		if !ok {
 			// Trusted proxies only append valid IPs, so this came from the client side:
 			// settle for the last trusted hop instead of guessing further.

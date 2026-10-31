@@ -9,6 +9,7 @@ import (
 )
 
 func TestWriteJSON(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 	WriteJSON(rec, http.StatusServiceUnavailable, user{ID: "user-42", Name: "Ada"})
 
@@ -18,6 +19,7 @@ func TestWriteJSON(t *testing.T) {
 }
 
 func TestWriteJSON_PanicsBeforeWritingUnencodableData(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 
 	assert.Panics(t, func() { WriteJSON(rec, http.StatusOK, make(chan int)) })

@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	now   = time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	now   = time.Date(2026, time.October, 24, 12, 0, 0, 0, time.UTC)
 	actor = uuid.MustParse("6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b")
 	input = IdentityInput{Username: "ada", DisplayName: "Ada Lovelace"}
 
@@ -47,12 +47,15 @@ var (
 )
 
 func newTestService(t *testing.T) (*identityService, *mocks.MockIdentityRepository) {
+	t.Helper()
+
 	repo := mocks.NewMockIdentityRepository(t)
 
 	return newIdentityService(repo, func() time.Time { return now }), repo
 }
 
 func TestIdentityService_Create(t *testing.T) {
+	t.Parallel()
 	svc, repo := newTestService(t)
 	var inserted repository.IdentityRecord
 	repo.EXPECT().Insert(mock.Anything, mock.Anything).RunAndReturn(
@@ -80,6 +83,7 @@ func TestIdentityService_Create(t *testing.T) {
 }
 
 func TestIdentityService_Create_GeneratesUniqueIDs(t *testing.T) {
+	t.Parallel()
 	svc, repo := newTestService(t)
 	ids := map[uuid.UUID]bool{}
 	repo.EXPECT().Insert(mock.Anything, mock.Anything).RunAndReturn(
@@ -98,6 +102,7 @@ func TestIdentityService_Create_GeneratesUniqueIDs(t *testing.T) {
 }
 
 func TestIdentityService_Get(t *testing.T) {
+	t.Parallel()
 	svc, repo := newTestService(t)
 	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 
@@ -108,6 +113,7 @@ func TestIdentityService_Get(t *testing.T) {
 }
 
 func TestIdentityService_List(t *testing.T) {
+	t.Parallel()
 	svc, repo := newTestService(t)
 	// The repository is asked for one more record than the page holds.
 	repo.EXPECT().List(mock.Anything, 10, 3).Return([]repository.IdentityRecord{stored, stored}, nil)
@@ -119,6 +125,7 @@ func TestIdentityService_List(t *testing.T) {
 }
 
 func TestIdentityService_List_HasMore(t *testing.T) {
+	t.Parallel()
 	svc, repo := newTestService(t)
 	repo.EXPECT().List(mock.Anything, 10, 3).Return([]repository.IdentityRecord{stored, stored, stored}, nil)
 
@@ -129,6 +136,7 @@ func TestIdentityService_List_HasMore(t *testing.T) {
 }
 
 func TestIdentityService_List_Empty(t *testing.T) {
+	t.Parallel()
 	svc, repo := newTestService(t)
 	repo.EXPECT().List(mock.Anything, 0, 6).Return(nil, nil)
 
@@ -140,6 +148,7 @@ func TestIdentityService_List_Empty(t *testing.T) {
 }
 
 func TestIdentityService_Replace(t *testing.T) {
+	t.Parallel()
 	svc, repo := newTestService(t)
 	repo.EXPECT().Update(mock.Anything, repository.IdentityRecord{
 		ID:          stored.ID,
@@ -156,6 +165,7 @@ func TestIdentityService_Replace(t *testing.T) {
 }
 
 func TestIdentityService_Delete(t *testing.T) {
+	t.Parallel()
 	svc, repo := newTestService(t)
 	repo.EXPECT().Delete(mock.Anything, stored.ID).Return(nil)
 
@@ -163,6 +173,7 @@ func TestIdentityService_Delete(t *testing.T) {
 }
 
 func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
+	t.Parallel()
 	type call func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error
 
 	create := func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error {
@@ -196,25 +207,26 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 		repoErr error
 		wantErr error
 	}{
-		{name: "create duplicate username", call: create, repoErr: repository.ErrDuplicateUsername, wantErr: ErrUsernameTaken},
+		{name: "create username taken", call: create, repoErr: repository.ErrDuplicateUsername, wantErr: ErrUsernameTaken},
 		{name: "create unexpected", call: create, repoErr: errDB, wantErr: errDB},
 		{name: "get not found", call: get, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
 		{name: "get unexpected", call: get, repoErr: errDB, wantErr: errDB},
 		{name: "list unexpected", call: list, repoErr: errDB, wantErr: errDB},
 		{name: "replace not found", call: replace, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
-		{name: "replace duplicate username", call: replace, repoErr: repository.ErrDuplicateUsername, wantErr: ErrUsernameTaken},
+		{name: "replace username taken", call: replace, repoErr: repository.ErrDuplicateUsername, wantErr: ErrUsernameTaken},
 		{name: "replace unexpected", call: replace, repoErr: errDB, wantErr: errDB},
 		{name: "delete not found", call: del, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
 		{name: "delete unexpected", call: del, repoErr: errDB, wantErr: errDB},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			svc, repo := newTestService(t)
 			// The repository wraps its errors with context.
 			err := tt.call(t.Context(), svc, repo, fmt.Errorf("query: %w", tt.repoErr))
 
-			assert.ErrorIs(t, err, tt.wantErr)
-			if tt.wantErr != tt.repoErr {
+			require.ErrorIs(t, err, tt.wantErr)
+			if !errors.Is(tt.wantErr, tt.repoErr) {
 				assert.NotErrorIs(t, err, tt.repoErr, "repository errors must not leak into the domain")
 			}
 		})

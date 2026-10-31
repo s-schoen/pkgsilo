@@ -9,6 +9,7 @@ import (
 )
 
 func TestNewCollection(t *testing.T) {
+	t.Parallel()
 	next, total := 2, 3
 	c := NewCollection([]user{{ID: "user-42", Name: "Ada"}, {ID: "user-43", Name: "Grace"}}, Pagination{
 		Offset: 0, Limit: 2, NextOffset: &next, Total: &total,
@@ -21,12 +22,14 @@ func TestNewCollection(t *testing.T) {
 }
 
 func TestNewCollection_NilDataAndFinalPage(t *testing.T) {
+	t.Parallel()
 	c := NewCollection[user](nil, Pagination{Offset: 10, Limit: 5})
 
 	assert.JSONEq(t, `{"data":[],"pagination":{"offset":10,"limit":5,"nextOffset":null}}`, encode(t, c))
 }
 
 func TestNewUnpaginatedCollection(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		data []user
@@ -48,12 +51,14 @@ func TestNewUnpaginatedCollection(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.JSONEq(t, tt.want, encode(t, NewUnpaginatedCollection(tt.data)))
 		})
 	}
 }
 
 func TestNewPagedCollection(t *testing.T) {
+	t.Parallel()
 	next := 7
 
 	tests := []struct {
@@ -77,12 +82,14 @@ func TestNewPagedCollection(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, NewPagedCollection(tt.data, 4, 3, tt.hasMore))
 		})
 	}
 }
 
 func TestWriteCollection(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 	WriteCollection(rec, NewCollection[user](nil, Pagination{Offset: 10, Limit: 5}))
 

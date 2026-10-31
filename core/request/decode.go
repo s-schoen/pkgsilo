@@ -29,7 +29,8 @@ const MaxBodyBytes = 1 << 20
 // matching dst and 422 with the invalid members when dst fails validation. It panics when dst
 // isn't a pointer or a validation rule is misconfigured: bugs in the caller, not in the request.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst validation.Validatable) bool {
-	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
+	contentType := r.Header.Get("Content-Type")
+	if mediaType, _, err := mime.ParseMediaType(contentType); err != nil || mediaType != "application/json" {
 		envelope.WriteProblem(w, envelope.UnsupportedMediaTypeProblem.New(envelope.Occurrence{
 			Detail: "The request body must be application/json.",
 		}))
@@ -120,7 +121,9 @@ func jsonType(t reflect.Type) string {
 
 // invalidBodyProblem lists the invalid members of a request body in the
 // envelope.ValidationErrorsExtension member, each located by a pointer.
-var invalidBodyProblem = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
+var invalidBodyProblem = envelope.DefineProblemType(
+	"invalid-body", "Invalid request body", http.StatusUnprocessableEntity,
+)
 
 func writeValidationProblem(w http.ResponseWriter, err error) {
 	errs, ok := validationErrors(err, func(path []string) envelope.ValidationError {
@@ -139,7 +142,9 @@ func writeValidationProblem(w http.ResponseWriter, err error) {
 // validationErrors flattens nested ozzo validation errors into one ValidationError per invalid
 // value, located by locate from the keys leading to it. It reports false when err isn't a
 // validation error but an internal one, such as a misconfigured rule.
-func validationErrors(err error, locate func(path []string) envelope.ValidationError) ([]envelope.ValidationError, bool) {
+func validationErrors(
+	err error, locate func(path []string) envelope.ValidationError,
+) ([]envelope.ValidationError, bool) {
 	var out []envelope.ValidationError
 
 	var flatten func(err error, path []string) bool

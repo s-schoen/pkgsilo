@@ -26,12 +26,14 @@ func encode(t *testing.T, v any) string {
 }
 
 func TestNewResource(t *testing.T) {
+	t.Parallel()
 	r := NewResource(user{ID: "user-42", Name: "Ada"})
 
 	assert.JSONEq(t, `{"data":{"id":"user-42","name":"Ada"}}`, encode(t, r))
 }
 
 func TestWriteResource(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 	WriteResource(rec, user{ID: "user-42", Name: "Ada"})
 
@@ -41,6 +43,7 @@ func TestWriteResource(t *testing.T) {
 }
 
 func TestWriteCreated(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 	WriteCreated(rec, "/users/user-42", user{ID: "user-42", Name: "Ada"})
 
@@ -51,6 +54,7 @@ func TestWriteCreated(t *testing.T) {
 }
 
 func TestWriteResource_PanicsBeforeWritingUnencodableData(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 
 	assert.Panics(t, func() { WriteResource(rec, make(chan int)) })
@@ -59,6 +63,7 @@ func TestWriteResource_PanicsBeforeWritingUnencodableData(t *testing.T) {
 }
 
 func TestWriteCreated_PanicsBeforeSettingLocation(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 
 	assert.Panics(t, func() { WriteCreated(rec, "/users/user-42", make(chan int)) })

@@ -54,10 +54,12 @@ func newJSONRequest(contentType, body string) *http.Request {
 }
 
 func TestDecodeJSON(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 	var p profile
 
-	ok := DecodeJSON(rec, newJSONRequest("application/json; charset=utf-8", `{"name":"Ada","age":36,"address":{"city":"London"}}`), &p)
+	req := newJSONRequest("application/json; charset=utf-8", `{"name":"Ada","age":36,"address":{"city":"London"}}`)
+	ok := DecodeJSON(rec, req, &p)
 
 	require.True(t, ok)
 	assert.Equal(t, profile{Name: "Ada", Age: 36, Address: address{City: "London"}}, p)
@@ -65,6 +67,7 @@ func TestDecodeJSON(t *testing.T) {
 }
 
 func TestDecodeJSON_Problems(t *testing.T) {
+	t.Parallel()
 	const valid = `{"name":"Ada","age":36,"address":{"city":"London"}}`
 
 	tests := []struct {
@@ -163,6 +166,7 @@ func TestDecodeJSON_Problems(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			rec := httptest.NewRecorder()
 
 			ok := DecodeJSON(rec, newJSONRequest(tt.contentType, tt.body), &profile{})
@@ -175,6 +179,7 @@ func TestDecodeJSON_Problems(t *testing.T) {
 }
 
 func TestDecodeJSON_InternalErrors(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		dst  validation.Validatable
@@ -184,6 +189,7 @@ func TestDecodeJSON_InternalErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			rec := httptest.NewRecorder()
 
 			assert.Panics(t, func() { DecodeJSON(rec, newJSONRequest("application/json", `{}`), tt.dst) })
@@ -193,6 +199,7 @@ func TestDecodeJSON_InternalErrors(t *testing.T) {
 }
 
 func TestJSONPointer(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "#", jsonPointer(nil))
 	assert.Equal(t, "#/address/city", jsonPointer([]string{"address", "city"}))
 	assert.Equal(t, "#/a~1b/c~0d", jsonPointer([]string{"a/b", "c~d"}))

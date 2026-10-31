@@ -20,6 +20,7 @@ type Handler struct {
 	logger  *slog.Logger
 }
 
+// NewHandler returns a Handler that manages identities through svc and logs to logger.
 func NewHandler(svc service.IdentityService, logger *slog.Logger) *Handler {
 	return &Handler{service: svc, logger: logger}
 }

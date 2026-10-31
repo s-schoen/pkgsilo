@@ -11,15 +11,17 @@ import (
 )
 
 func TestSecurityHeaders(t *testing.T) {
+	t.Parallel()
 	h := middleware.SecurityHeaders(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	want := map[string]string{
-		"X-Content-Type-Options":            "nosniff",
-		"X-Frame-Options":                   "DENY",
-		"Content-Security-Policy":           "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options":        "DENY",
+		"Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; " +
+			"base-uri 'none'; form-action 'none'",
 		"Referrer-Policy":                   "no-referrer",
 		"X-Permitted-Cross-Domain-Policies": "none",
 	}

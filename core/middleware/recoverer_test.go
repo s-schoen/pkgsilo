@@ -14,6 +14,7 @@ import (
 )
 
 func TestRecoverer(t *testing.T) {
+	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	h := middleware.Recoverer(logger, false)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
@@ -37,6 +38,7 @@ func TestRecoverer(t *testing.T) {
 // writeHeaderCounter counts WriteHeader calls that reach the underlying writer.
 type writeHeaderCounter struct {
 	*httptest.ResponseRecorder
+
 	calls int
 }
 
@@ -46,6 +48,7 @@ func (w *writeHeaderCounter) WriteHeader(code int) {
 }
 
 func TestRecoverer_KeepsStatusOfStartedResponse(t *testing.T) {
+	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	h := middleware.Recoverer(logger, false)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
@@ -61,6 +64,7 @@ func TestRecoverer_KeepsStatusOfStartedResponse(t *testing.T) {
 }
 
 func TestRecoverer_RepanicsErrAbortHandler(t *testing.T) {
+	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	h := middleware.Recoverer(logger, false)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic(http.ErrAbortHandler)

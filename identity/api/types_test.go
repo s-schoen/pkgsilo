@@ -1,14 +1,17 @@
 package api
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIdentityRequests_Validate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		username    string
@@ -28,10 +31,14 @@ func TestIdentityRequests_Validate(t *testing.T) {
 		{name: "username leading separator", username: "-ada", displayName: "Ada", wantInvalid: []string{"username"}},
 		{name: "username trailing separator", username: "ada.", displayName: "Ada", wantInvalid: []string{"username"}},
 		{name: "username double separator", username: "ada..lovelace", displayName: "Ada", wantInvalid: []string{"username"}},
-		{name: "display name too long", username: "ada", displayName: strings.Repeat("é", 129), wantInvalid: []string{"displayName"}},
+		{
+			name: "display name too long", username: "ada", displayName: strings.Repeat("é", 129),
+			wantInvalid: []string{"displayName"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			requests := map[string]validation.Validatable{
 				"create":  CreateIdentityRequest{Username: tt.username, DisplayName: tt.displayName},
 				"replace": ReplaceIdentityRequest{Username: tt.username, DisplayName: tt.displayName},
@@ -39,7 +46,7 @@ func TestIdentityRequests_Validate(t *testing.T) {
 			for kind, req := range requests {
 				err := req.Validate()
 				if len(tt.wantInvalid) == 0 {
-					assert.NoError(t, err, kind)
+					require.NoError(t, err, kind)
 					continue
 				}
 				assert.ElementsMatch(t, tt.wantInvalid, invalidMembers(err), kind)
@@ -51,7 +58,7 @@ func TestIdentityRequests_Validate(t *testing.T) {
 // invalidMembers returns the members that err reports as invalid.
 func invalidMembers(err error) []string {
 	var members []string
-	if errs, ok := err.(validation.Errors); ok {
+	if errs, ok := errors.AsType[validation.Errors](err); ok {
 		for member := range errs {
 			members = append(members, member)
 		}

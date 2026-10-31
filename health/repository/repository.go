@@ -21,10 +21,12 @@ type PostgresHealthRepository struct {
 
 var _ HealthRepository = (*PostgresHealthRepository)(nil)
 
+// NewPostgresHealthRepository returns a PostgresHealthRepository that reaches db.
 func NewPostgresHealthRepository(db *sqlx.DB) *PostgresHealthRepository {
 	return &PostgresHealthRepository{db: db}
 }
 
+// Ping verifies that the database accepts queries.
 func (r *PostgresHealthRepository) Ping(ctx context.Context) error {
 	if err := r.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)

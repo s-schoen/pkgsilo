@@ -2,7 +2,6 @@ package api
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -19,11 +18,13 @@ import (
 )
 
 func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 // newTestRouter mounts a handler backed by a mock service on the application router.
 func newTestRouter(t *testing.T, logger *slog.Logger) (http.Handler, *mocks.MockHealthService) {
+	t.Helper()
+
 	svc := mocks.NewMockHealthService(t)
 	r := router.New(router.Options{}, discardLogger())
 	r.Mount("/health", NewHandler(svc, logger).Routes())
@@ -39,6 +40,7 @@ func serve(h http.Handler) *httptest.ResponseRecorder {
 }
 
 func TestHandler_Check_Healthy(t *testing.T) {
+	t.Parallel()
 	r, svc := newTestRouter(t, discardLogger())
 	svc.EXPECT().Check(mock.Anything).Return(service.Health{
 		Status:     service.StatusHealthy,
@@ -57,6 +59,7 @@ func TestHandler_Check_Healthy(t *testing.T) {
 }
 
 func TestHandler_Check_Unhealthy(t *testing.T) {
+	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	r, svc := newTestRouter(t, logger)
 	svc.EXPECT().Check(mock.Anything).Return(service.Health{
@@ -85,10 +88,12 @@ func TestHandler_Check_Unhealthy(t *testing.T) {
 }
 
 func TestToHealthStatus_UnknownIsUnhealthy(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, HealthUnhealthy, toHealthStatus(service.Status("unknown")))
 }
 
 func TestHealthResponse_HTTPStatus(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		status HealthStatus
 		want   int
@@ -99,6 +104,7 @@ func TestHealthResponse_HTTPStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.status), func(t *testing.T) {
+			t.Parallel()
 			// Component statuses don't affect the aggregate.
 			h := HealthResponse{Status: tt.status, Components: []ComponentHealthResponse{{Name: "db", Status: HealthUnhealthy}}}
 
