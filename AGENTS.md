@@ -14,13 +14,21 @@ Each layer package has the same files:
 
 ### Layer rules
 
-- **Repository**: one interface, implemented for PostgreSQL with sqlx. Each test gets its own fresh database with `migrations/` applied from `databasetest.New(t)` (`core/database/databasetest`) and calls `t.Parallel()`. Never mock the database.
-- **Service**: all logic lives here: IDs, timestamps, audit fields, domain rules. List methods query the repository for `limit+1` rows and return a `pagination.Page` built with `pagination.FromLookahead` (`core/pagination`). Tests mock the repository.
-- **API**: a chi handler with `Routes()`, mounted under `/api/v1` in `cmd/main.go`. Validate all input with ozzo-validation through the shared `core/request` package (`DecodeJSON`, `ParsePagination`). Respond through the `core/envelope` writers (`WriteResource`, `WriteCreated`, `WriteCollection`, `WriteProblem`, and `WriteJSON` only for bodies with a format of their own that is not wrapped in an envelope, such as health checks); a service page becomes a collection with `NewPagedCollection`. Every domain error a client must tell apart gets its own problem type, defined with `envelope.DefineProblemType` in `errors.go`. The generic `about:blank` problems (`envelope.NotFoundProblem`, …) are for problems that mean nothing beyond their status. Tests mock the service and mount the handler on `router.New` (`core/router`).
+- **Repository**: one interface, implemented for PostgreSQL with sqlx. Each test gets its own fresh database with `migrations/` applied from `databasetest.New(t)` (`test/databasetest`) and calls `t.Parallel()`. Never mock the database.
+- **Service**: all logic lives here: IDs, timestamps, audit fields, domain rules. List methods query the repository for `limit+1` rows and return a `pagination.Page` built with `pagination.FromLookahead` (`core/pagination`). Tests mock the repository, check error translation with `servicetest.AssertTranslated` and capture a mock argument whole with `servicetest.Capture` (`test/servicetest`).
+- **API**: a chi handler with `Routes()`, mounted under `/api/v1` in `app/app.go`. Validate all input with ozzo-validation through the shared `core/request` package (`DecodeJSON`, `ParsePagination`). Respond through the `core/envelope` writers (`WriteResource`, `WriteCreated`, `WriteCollection`, `WriteProblem`, and `WriteJSON` only for bodies with a format of their own that is not wrapped in an envelope, such as health checks); a service page becomes a collection with `NewPagedCollection`. Every domain error a client must tell apart gets its own problem type, defined with `envelope.DefineProblemType` in `errors.go`. The generic `about:blank` problems (`envelope.NotFoundProblem`, …) are for problems that mean nothing beyond their status. Tests mock the service, mount the handler with `apitest.Mount` and send requests through an `apitest.Client` (`test/apitest`), whose `Assert*` methods check responses against the problem values in `errors.go`.
 
 Shared `core` packages never log. Bugs such as an unencodable response or a misconfigured validation rule panic, and the router's recoverer logs them with the request ID. Everything else is logged by the handler through its injected logger.
 
 Translate only errors that have a meaning in the layer above. Wrap every other error with `%w`, so it reaches the API's log intact and is answered with a 500 without details.
+
+### End-to-end tests
+
+Every feature has `<feature>/e2e_test.go` (package `<feature>_test`), which drives the assembled app through `/api/v1` on a real database from `apptest.New(t)` (`test/apptest`). It covers what only the whole app shows: flows across requests, database constraints, Location headers. Each test's doc comment lists its steps in order, each with the result it expects, and numbered comments (`// 1. Create.`) mark where each step starts in the code. Write each expected problem type out as a literal `envelope.DefineProblemType(…)`, so the test pins the public contract (slug, title, status) independently of `errors.go`.
+
+### Test helpers
+
+Shared test helpers live in `test/<name>test`, one package each, so the internal tests of any layer can import them without an import cycle; only `test/apptest` imports `app`. A client reports to the test it was made for: inside a subtest, use `api.For(t)`.
 
 ### Mocks
 
