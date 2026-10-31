@@ -18,7 +18,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"pkgsilo/core/config"
 	"pkgsilo/core/database"
 )
 
@@ -68,7 +67,7 @@ func New(t *testing.T) *sqlx.DB {
 		}
 	})
 
-	db, err := database.Open(t.Context(), config.Config{DatabaseURL: databaseURL(name), DatabaseMaxConns: 2})
+	db, err := database.Open(t.Context(), database.Options{URL: databaseURL(name), MaxConns: 2})
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
@@ -171,7 +170,7 @@ func migrate(ctx context.Context, dbURL string) error {
 		return errors.New("find migrations: no up migrations")
 	}
 
-	db, err := database.Open(ctx, config.Config{DatabaseURL: dbURL, DatabaseMaxConns: 1})
+	db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 1})
 	if err != nil {
 		return fmt.Errorf("open template: %w", err)
 	}
@@ -196,7 +195,7 @@ func migrate(ctx context.Context, dbURL string) error {
 func openWhenReady(ctx context.Context, dbURL string) (*sqlx.DB, error) {
 	deadline := time.Now().Add(readyTimeout)
 	for {
-		db, err := database.Open(ctx, config.Config{DatabaseURL: dbURL, DatabaseMaxConns: 4})
+		db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 4})
 		if err == nil || time.Now().After(deadline) {
 			return db, err
 		}

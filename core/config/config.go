@@ -1,11 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
+	"net/netip"
+	"strings"
 
 	"github.com/caarlos0/env/v11"
-
-	"pkgsilo/core/middleware"
 )
 
 // Config holds the application configuration, loaded from environment variables.
@@ -16,7 +17,7 @@ type Config struct {
 	LogLevel slog.Level `env:"LOG_LEVEL" envDefault:"info"`
 	// TrustedProxies are the reverse proxies (IPs or CIDRs, comma-separated) whose
 	// X-Forwarded-For header is used to determine the client IP. Empty: the header is ignored.
-	TrustedProxies middleware.TrustedProxies `env:"TRUSTED_PROXIES"`
+	TrustedProxies Prefixes `env:"TRUSTED_PROXIES"`
 	// DatabaseURL is the PostgreSQL connection string, e.g. postgres://user:pass@host:5432/db.
 	DatabaseURL string `env:"DATABASE_URL,notEmpty"`
 	// DatabaseMaxConns caps the open connections in the pool.
@@ -31,4 +32,44 @@ func Load() (Config, error) {
 // IsDev reports whether the application runs in the development environment.
 func (c Config) IsDev() bool {
 	return c.Env == "dev"
+}
+
+// Prefixes is a list of IP prefixes, parsed from a comma-separated list of IPs and CIDRs.
+type Prefixes []netip.Prefix
+
+// UnmarshalText parses a comma-separated list of IPs and CIDRs, e.g. "10.0.0.1, 172.16.0.0/12".
+// A bare IP becomes a single-address prefix, and IPv4-mapped IPv6 addresses are unmapped.
+func (p *Prefixes) UnmarshalText(text []byte) error {
+	var prefixes Prefixes
+	for entry := range strings.SplitSeq(string(text), ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+
+		prefix, err := parsePrefix(entry)
+		if err != nil {
+			return fmt.Errorf("invalid prefix %q: %w", entry, err)
+		}
+		prefixes = append(prefixes, prefix)
+	}
+
+	*p = prefixes
+
+	return nil
+}
+
+func parsePrefix(s string) (netip.Prefix, error) {
+	if strings.Contains(s, "/") {
+		prefix, err := netip.ParsePrefix(s)
+		return prefix.Masked(), err
+	}
+
+	addr, err := netip.ParseAddr(s)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	addr = addr.Unmap().WithZone("")
+
+	return netip.PrefixFrom(addr, addr.BitLen()), nil
 }

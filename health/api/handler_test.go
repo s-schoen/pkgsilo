@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/config"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/logger/loggertest"
 	"pkgsilo/core/router"
@@ -27,7 +26,7 @@ func discardLogger() *slog.Logger {
 // newTestRouter mounts a handler backed by a mock service on the application router.
 func newTestRouter(t *testing.T, logger *slog.Logger) (http.Handler, *mocks.MockHealthService) {
 	svc := mocks.NewMockHealthService(t)
-	r := router.New(config.Config{}, discardLogger())
+	r := router.New(router.Options{}, discardLogger())
 	r.Mount("/health", NewHandler(svc, logger).Routes())
 
 	return r, svc

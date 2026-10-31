@@ -10,14 +10,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/config"
 	"pkgsilo/core/logger"
 )
 
 // NewJSON returns a production (JSON) logger writing into the returned buffer.
 func NewJSON() (*slog.Logger, *bytes.Buffer) {
 	var buf bytes.Buffer
-	return logger.New(&buf, config.Config{Env: "prod", LogLevel: slog.LevelInfo}), &buf
+	return logger.New(&buf, logger.Options{Level: slog.LevelInfo}), &buf
 }
 
 // Entries decodes one JSON object per logged line.

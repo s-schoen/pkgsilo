@@ -9,8 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
-
-	"pkgsilo/core/config"
 )
 
 const (
@@ -18,18 +16,26 @@ const (
 	databaseConnMaxIdleTime = 5 * time.Minute
 )
 
-// Open connects to PostgreSQL at cfg.DatabaseURL and verifies the connection. Scanned
+// Options configures the database connection.
+type Options struct {
+	// URL is the PostgreSQL connection string, e.g. postgres://user:pass@host:5432/db.
+	URL string
+	// MaxConns caps the open connections in the pool.
+	MaxConns int
+}
+
+// Open connects to PostgreSQL at opts.URL and verifies the connection. Scanned
 // timestamptz values are in UTC. The caller must close the returned database.
-func Open(ctx context.Context, cfg config.Config) (*sqlx.DB, error) {
+func Open(ctx context.Context, opts Options) (*sqlx.DB, error) {
 	// pgx redacts the password in parse errors, so the error is safe to log.
-	connCfg, err := pgx.ParseConfig(cfg.DatabaseURL)
+	connCfg, err := pgx.ParseConfig(opts.URL)
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 
 	db := sqlx.NewDb(stdlib.OpenDB(*connCfg, stdlib.OptionAfterConnect(scanTimestamptzInUTC)), "pgx")
-	db.SetMaxOpenConns(cfg.DatabaseMaxConns)
-	db.SetMaxIdleConns(cfg.DatabaseMaxConns)
+	db.SetMaxOpenConns(opts.MaxConns)
+	db.SetMaxIdleConns(opts.MaxConns)
 	db.SetConnMaxIdleTime(databaseConnMaxIdleTime)
 
 	pingCtx, cancel := context.WithTimeout(ctx, databasePingTimeout)

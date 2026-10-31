@@ -2,53 +2,16 @@ package middleware
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/netip"
 	"strings"
 )
 
-// TrustedProxies lists the reverse proxies whose X-Forwarded-For entries are trusted.
-type TrustedProxies []netip.Prefix
+// trustedProxies lists the reverse proxies whose X-Forwarded-For entries are trusted.
+type trustedProxies []netip.Prefix
 
-// UnmarshalText parses a comma-separated list of IPs and CIDR ranges, e.g. "10.0.0.1, 172.16.0.0/12".
-func (tp *TrustedProxies) UnmarshalText(text []byte) error {
-	var prefixes TrustedProxies
-	for entry := range strings.SplitSeq(string(text), ",") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-
-		prefix, err := parseTrustedProxy(entry)
-		if err != nil {
-			return fmt.Errorf("invalid trusted proxy %q: %w", entry, err)
-		}
-		prefixes = append(prefixes, prefix)
-	}
-
-	*tp = prefixes
-
-	return nil
-}
-
-func parseTrustedProxy(s string) (netip.Prefix, error) {
-	if strings.Contains(s, "/") {
-		prefix, err := netip.ParsePrefix(s)
-		return prefix.Masked(), err
-	}
-
-	addr, err := netip.ParseAddr(s)
-	if err != nil {
-		return netip.Prefix{}, err
-	}
-	addr = addr.Unmap().WithZone("")
-
-	return netip.PrefixFrom(addr, addr.BitLen()), nil
-}
-
-// Contains reports whether addr belongs to a trusted proxy.
-func (tp TrustedProxies) Contains(addr netip.Addr) bool {
+// contains reports whether addr belongs to a trusted proxy.
+func (tp trustedProxies) contains(addr netip.Addr) bool {
 	for _, prefix := range tp {
 		if prefix.Contains(addr) {
 			return true
@@ -65,10 +28,13 @@ type clientIPKey struct{}
 // X-Forwarded-For is only honored when the direct peer is a trusted proxy. Its entries are then
 // walked from right to left, skipping trusted proxies; the first untrusted entry is the client.
 // Everything further left is client-controlled and ignored. r.RemoteAddr is left untouched.
-func ClientIP(trusted TrustedProxies) func(http.Handler) http.Handler {
+// Peers are matched as unmapped IPs, so trusted must not hold IPv4-mapped IPv6 prefixes.
+func ClientIP(trusted []netip.Prefix) func(http.Handler) http.Handler {
+	tp := trustedProxies(trusted)
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), clientIPKey{}, trusted.clientIP(r))
+			ctx := context.WithValue(r.Context(), clientIPKey{}, tp.clientIP(r))
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -80,9 +46,9 @@ func ClientIPFromContext(ctx context.Context) netip.Addr {
 	return ip
 }
 
-func (tp TrustedProxies) clientIP(r *http.Request) netip.Addr {
+func (tp trustedProxies) clientIP(r *http.Request) netip.Addr {
 	client, ok := parseIP(r.RemoteAddr)
-	if !ok || !tp.Contains(client) {
+	if !ok || !tp.contains(client) {
 		return client
 	}
 
@@ -97,7 +63,7 @@ func (tp TrustedProxies) clientIP(r *http.Request) netip.Addr {
 		}
 
 		client = hop
-		if !tp.Contains(hop) {
+		if !tp.contains(hop) {
 			break
 		}
 	}

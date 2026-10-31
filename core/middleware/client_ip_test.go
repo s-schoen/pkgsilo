@@ -7,38 +7,18 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/middleware"
 )
 
-func TestTrustedProxies_UnmarshalText(t *testing.T) {
-	var tp middleware.TrustedProxies
-	require.NoError(t, tp.UnmarshalText([]byte(" 10.0.0.1, 172.16.5.4/12 ,::1,,::ffff:192.0.2.1")))
-
-	assert.Equal(t, middleware.TrustedProxies{
-		netip.MustParsePrefix("10.0.0.1/32"),
-		netip.MustParsePrefix("172.16.0.0/12"),
-		netip.MustParsePrefix("::1/128"),
-		netip.MustParsePrefix("192.0.2.1/32"),
-	}, tp)
-}
-
-func TestTrustedProxies_UnmarshalTextInvalid(t *testing.T) {
-	for _, input := range []string{"proxy.local", "10.0.0.0/33", "10.0.0.1:80"} {
-		t.Run(input, func(t *testing.T) {
-			var tp middleware.TrustedProxies
-			assert.ErrorContains(t, tp.UnmarshalText([]byte(input)), input)
-		})
-	}
-}
-
 func TestClientIP(t *testing.T) {
-	var trusted middleware.TrustedProxies
-	require.NoError(t, trusted.UnmarshalText([]byte("10.0.0.0/8, 2001:db8:ffff::1")))
+	trusted := []netip.Prefix{
+		netip.MustParsePrefix("10.0.0.0/8"),
+		netip.MustParsePrefix("2001:db8:ffff::1/128"),
+	}
 
 	tests := map[string]struct {
-		trusted      middleware.TrustedProxies
+		trusted      []netip.Prefix
 		remoteAddr   string
 		forwardedFor []string
 		wantClientIP string

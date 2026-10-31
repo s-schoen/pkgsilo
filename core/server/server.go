@@ -7,16 +7,20 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	"pkgsilo/core/config"
 )
 
 const shutdownTimeout = 10 * time.Second
 
-// Run serves handler on cfg.HTTPAddr until ctx is cancelled, then shuts down gracefully.
-func Run(ctx context.Context, cfg config.Config, logger *slog.Logger, handler http.Handler) error {
+// Options configures the HTTP server.
+type Options struct {
+	// Addr is the TCP address to listen on, e.g. ":8080".
+	Addr string
+}
+
+// Run serves handler on opts.Addr until ctx is cancelled, then shuts down gracefully.
+func Run(ctx context.Context, opts Options, logger *slog.Logger, handler http.Handler) error {
 	srv := &http.Server{
-		Addr:              cfg.HTTPAddr,
+		Addr:              opts.Addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -27,7 +31,7 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger, handler ht
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("server started", "addr", cfg.HTTPAddr, "env", cfg.Env)
+		logger.Info("server started", "addr", opts.Addr)
 		errCh <- srv.ListenAndServe()
 	}()
 

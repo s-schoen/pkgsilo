@@ -5,20 +5,20 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/config"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/logger/loggertest"
 	"pkgsilo/core/middleware"
 )
 
 func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
-	r := New(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r := New(Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	// chi only builds the middleware chain once at least one route exists.
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
@@ -33,7 +33,7 @@ func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
 }
 
 func TestNew_MethodNotAllowed(t *testing.T) {
-	r := New(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r := New(Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	noop := func(http.ResponseWriter, *http.Request) {}
 	r.Get("/root", noop)
 	r.Delete("/root", noop)
@@ -72,7 +72,7 @@ func TestNew_MethodNotAllowed(t *testing.T) {
 }
 
 func TestNew_MountedSubrouterNotFound(t *testing.T) {
-	r := New(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r := New(Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	sub := chi.NewRouter()
 	sub.Get("/", func(http.ResponseWriter, *http.Request) {})
 	r.Mount("/sub", sub)
@@ -91,10 +91,7 @@ func TestNew_MountedSubrouterNotFound(t *testing.T) {
 
 func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {
 	logger, buf := loggertest.NewJSON()
-	var trusted middleware.TrustedProxies
-	require.NoError(t, trusted.UnmarshalText([]byte("10.0.0.0/8")))
-
-	r := New(config.Config{TrustedProxies: trusted}, logger)
+	r := New(Options{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}}, logger)
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -109,7 +106,7 @@ func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {
 
 func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
 	logger, buf := loggertest.NewJSON()
-	r := New(config.Config{}, logger)
+	r := New(Options{}, logger)
 	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
 
 	rec := httptest.NewRecorder()
@@ -131,7 +128,7 @@ func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
 
 func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
 	logger, buf := loggertest.NewJSON()
-	r := New(config.Config{}, logger)
+	r := New(Options{}, logger)
 	r.Get("/unencodable", func(w http.ResponseWriter, _ *http.Request) {
 		envelope.WriteResource(w, make(chan int))
 	})

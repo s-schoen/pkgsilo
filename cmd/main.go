@@ -41,11 +41,11 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	logger := logger.New(os.Stderr, cfg)
+	logger := logger.New(os.Stderr, logger.Options{Dev: cfg.IsDev(), Level: cfg.LogLevel})
 	// Only for third-party code logging through slog: our own code uses the injected logger.
 	slog.SetDefault(logger)
 
-	db, err := database.Open(ctx, cfg)
+	db, err := database.Open(ctx, database.Options{URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns})
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
@@ -60,11 +60,11 @@ func run() error {
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db))
 
-	r := router.New(cfg, logger)
+	r := router.New(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, logger)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Mount("/health", healthapi.NewHandler(health, logger).Routes())
 		r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
 	})
 
-	return server.Run(ctx, cfg, logger, r)
+	return server.Run(ctx, server.Options{Addr: cfg.HTTPAddr}, logger, r)
 }

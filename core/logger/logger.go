@@ -8,21 +8,27 @@ import (
 
 	"github.com/lmittmann/tint"
 
-	"pkgsilo/core/config"
 	"pkgsilo/core/middleware"
 )
 
+// Options configures the logger.
+type Options struct {
+	// Dev selects colored, human-readable output instead of JSON.
+	Dev   bool
+	Level slog.Level
+}
+
 // New returns a colored, human-readable logger in development and a JSON logger otherwise.
 // Records logged with a request context automatically include its request ID.
-func New(w io.Writer, cfg config.Config) *slog.Logger {
+func New(w io.Writer, opts Options) *slog.Logger {
 	var h slog.Handler
-	if cfg.IsDev() {
+	if opts.Dev {
 		h = tint.NewTextHandler(w, &tint.Options{
-			Level:      cfg.LogLevel,
+			Level:      opts.Level,
 			TimeFormat: time.Kitchen,
 		})
 	} else {
-		h = slog.NewJSONHandler(w, &slog.HandlerOptions{Level: cfg.LogLevel})
+		h = slog.NewJSONHandler(w, &slog.HandlerOptions{Level: opts.Level})
 	}
 
 	return slog.New(contextHandler{h})

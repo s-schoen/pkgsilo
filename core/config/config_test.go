@@ -7,8 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"pkgsilo/core/middleware"
 )
 
 func TestLoad_Defaults(t *testing.T) {
@@ -46,7 +44,7 @@ func TestLoad_FromEnv(t *testing.T) {
 	assert.True(t, cfg.IsDev())
 	assert.Equal(t, "127.0.0.1:9000", cfg.HTTPAddr)
 	assert.Equal(t, slog.LevelDebug, cfg.LogLevel)
-	assert.Equal(t, middleware.TrustedProxies{
+	assert.Equal(t, Prefixes{
 		netip.MustParsePrefix("10.0.0.1/32"),
 		netip.MustParsePrefix("192.168.0.0/16"),
 	}, cfg.TrustedProxies)
@@ -70,6 +68,27 @@ func TestLoad_Invalid(t *testing.T) {
 
 			_, err := Load()
 			assert.Error(t, err)
+		})
+	}
+}
+
+func TestPrefixes_UnmarshalText(t *testing.T) {
+	var p Prefixes
+	require.NoError(t, p.UnmarshalText([]byte(" 10.0.0.1, 172.16.5.4/12 ,::1,,::ffff:192.0.2.1")))
+
+	assert.Equal(t, Prefixes{
+		netip.MustParsePrefix("10.0.0.1/32"),
+		netip.MustParsePrefix("172.16.0.0/12"),
+		netip.MustParsePrefix("::1/128"),
+		netip.MustParsePrefix("192.0.2.1/32"),
+	}, p)
+}
+
+func TestPrefixes_UnmarshalTextInvalid(t *testing.T) {
+	for _, input := range []string{"proxy.local", "10.0.0.0/33", "10.0.0.1:80"} {
+		t.Run(input, func(t *testing.T) {
+			var p Prefixes
+			assert.ErrorContains(t, p.UnmarshalText([]byte(input)), input)
 		})
 	}
 }

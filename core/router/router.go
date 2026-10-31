@@ -3,28 +3,37 @@ package router
 import (
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
-	"pkgsilo/core/config"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/middleware"
 )
+
+// Options configures the router.
+type Options struct {
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For header determines the
+	// client IP. Empty: the header is ignored.
+	TrustedProxies []netip.Prefix
+	// Dev prints the stack traces of recovered panics in a readable form instead of logging them.
+	Dev bool
+}
 
 // New returns a chi router with the middleware shared by all features.
 //
 // Unmatched routes and methods are answered with Problem Details. Subrouters inherit these
 // handlers only when mounted after New returns.
-func New(cfg config.Config, logger *slog.Logger) *chi.Mux {
+func New(opts Options, logger *slog.Logger) *chi.Mux {
 	r := chi.NewRouter()
 	// Order matters: RequestLogger reads the request ID and client IP from the context it
 	// receives, so both must be set before it. Recoverer must sit inside RequestLogger so
 	// that recovered panics are logged with their 500 status.
 	r.Use(middleware.RequestID)
-	r.Use(middleware.ClientIP(cfg.TrustedProxies))
+	r.Use(middleware.ClientIP(opts.TrustedProxies))
 	r.Use(middleware.RequestLogger(logger))
-	r.Use(middleware.Recoverer(logger, cfg.IsDev()))
+	r.Use(middleware.Recoverer(logger, opts.Dev))
 	r.Use(middleware.SecurityHeaders)
 
 	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
