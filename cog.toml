@@ -1,0 +1,4 @@
+# cocogitto settings for the commit-msg hook in prek.toml.
+# Messages that git writes itself (Merge …, fixup!/squash!/amend! …) pass unchecked.
+ignore_merge_commits = true
+ignore_fixup_commits = true

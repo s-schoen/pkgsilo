@@ -48,6 +48,14 @@ tasks:
     cmds:
       - mockery
 
+  "hooks:install":
+    cmds:
+      - prek install
+
+  "hooks:run":
+    cmds:
+      - prek run --all-files
+
   lint:
     cmds:
       - golangci-lint run

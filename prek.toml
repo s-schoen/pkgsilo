@@ -1,0 +1,82 @@
+# Git hooks, run by prek (https://prek.j178.dev). Install them with `task hooks:install`.
+# Local hooks use language "system", so they run the tool versions pinned in mise.toml.
+# Hooks run in the order listed: mockery first, so that lint and tests see fresh mocks.
+
+default_install_hook_types = ["pre-commit", "commit-msg"]
+# Without it, hooks that set no stages also run on the commit message file.
+default_stages = ["pre-commit"]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace" },
+  { id = "end-of-file-fixer" },
+  { id = "mixed-line-ending", args = ["--fix=lf"] },
+  { id = "check-yaml" },
+  { id = "check-toml" },
+  { id = "check-merge-conflict" },
+  { id = "check-case-conflict" },
+  { id = "check-added-large-files" },
+  { id = "detect-private-key" },
+]
+
+[[repos]]
+repo = "local"
+
+# Regenerates the committed mocks, so the commit fails if they are stale or were edited by hand.
+[[repos.hooks]]
+id = "mockery"
+name = "mockery"
+language = "system"
+entry = "mockery --log-level=warn"
+files = '(^\.mockery\.yml|\.go)$'
+pass_filenames = false
+
+[[repos.hooks]]
+id = "go-mod-tidy"
+name = "go mod tidy"
+language = "system"
+entry = "go mod tidy -diff"
+files = '(^go\.(mod|sum)|\.go)$'
+pass_filenames = false
+
+[[repos.hooks]]
+id = "golangci-lint-fmt"
+name = "golangci-lint fmt"
+language = "system"
+entry = "golangci-lint fmt"
+types = ["go"]
+
+[[repos.hooks]]
+id = "golangci-lint-config"
+name = "golangci-lint config verify"
+language = "system"
+entry = "golangci-lint config verify"
+files = '^\.golangci\.yml$'
+pass_filenames = false
+
+# Without --fix: lint fixes are a deliberate `task lint:fix`.
+[[repos.hooks]]
+id = "golangci-lint"
+name = "golangci-lint"
+language = "system"
+entry = "golangci-lint run"
+files = '(^go\.(mod|sum)|^\.golangci\.yml|\.go)$'
+pass_filenames = false
+require_serial = true
+
+# Short mode skips the tests that need a PostgreSQL container.
+[[repos.hooks]]
+id = "go-test-short"
+name = "go test -short"
+language = "system"
+entry = "go test -short ./..."
+files = '(^go\.(mod|sum)|\.go)$'
+pass_filenames = false
+
+[[repos.hooks]]
+id = "cog-verify"
+name = "conventional commit message"
+language = "system"
+entry = "cog verify --file"
+stages = ["commit-msg"]
