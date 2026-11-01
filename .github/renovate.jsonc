@@ -1,5 +1,7 @@
 // Keeps the Go modules, the mise.toml tools and the GitHub Actions up to date. Pull requests
-// for vulnerable dependencies are opened at once; everything else waits for the weekly schedule.
+// for vulnerable dependencies are opened at once; everything else waits for the weekly schedule
+// and for its release to be 3 days old. Minor and patch updates of 1.0+ dependencies are merged
+// by Renovate once CI is green.
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
@@ -20,6 +22,18 @@
   // The commit-msg hook and the Commits workflow accept only Conventional Commits.
   "semanticCommits": "enabled",
   "osvVulnerabilityAlerts": true,
+  // Supply-chain protection: a release must be public for 3 days before Renovate proposes it, so
+  // that a hijacked release is usually yanked first. Vulnerability fixes skip the wait (the
+  // vulnerabilityAlerts default). A release without a timestamp is held too, and listed on the
+  // Dependency Dashboard (minimumReleaseAgeBehaviour's default since Renovate 42).
+  "minimumReleaseAge": "3 days",
+  // Proposes only versions past the age, never a newer pending one.
+  "internalChecksFilter": "strict",
+  // master has no required checks, so GitHub's auto-merge wouldn't wait for CI: Renovate merges
+  // itself once every check is green.
+  "platformAutomerge": false,
+  // Pull requests, not branches: test (PostgreSQL) and code scanning run only on pull requests.
+  "automergeType": "pr",
   // The go-mod-tidy hook fails on an untidy go.mod.
   "postUpdateOptions": [
     "gomodTidy",
@@ -93,10 +107,34 @@
       ],
       "matchUpdateTypes": [
         "minor",
-        "patch",
-        "digest"
+        "patch"
       ],
       "groupName": "GitHub Actions (non-major)"
+    },
+    {
+      // The actions are pinned to the digest of an exact version tag, so a digest update means
+      // the tag was moved, as in a hijacked action. github-tags ages it by the commit date, so it
+      // passes minimumReleaseAge at once: it gets its own pull request and is never automerged.
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "automerge": false,
+      "prBodyNotes": [
+        "⚠️ The pinned tag now points to a different commit. Check that the move was intended before merging."
+      ]
+    },
+    {
+      // Pre-1.0 minors may break (SemVer), so they wait for review like majors. A group is
+      // merged only when all of its updates are. Go versions start with a v.
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "matchCurrentVersion": "!/^v?0\\./",
+      "automerge": true
     }
   ]
 }
