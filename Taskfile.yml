@@ -79,6 +79,48 @@ tasks:
     cmds:
       - go tool cover -html=build/coverage
 
+  vuln:
+    cmds:
+      - govulncheck ./...
+
+  "ci:push":
+    desc: Run the push workflows locally with act
+    cmds:
+      - task: act
+        vars:
+          ARGS: push {{.CLI_ARGS}}
+
+  "ci:pr":
+    desc: Run the pull request workflows locally with act, for the commits since master
+    cmds:
+      - mkdir -p build
+      # The pull request workflows read the base and head commits, the title and the fork flag from the event.
+      - >-
+        jq -n
+        --arg base "$(git merge-base master HEAD)"
+        --arg head "$(git rev-parse HEAD)"
+        --arg title "$(git log -1 --format=%s)"
+        '{pull_request: {base: {sha: $base}, head: {sha: $head, repo: {fork: false}}, title: $title}}'
+        > build/act-pull_request.json
+      - task: act
+        vars:
+          ARGS: pull_request --eventpath build/act-pull_request.json {{.CLI_ARGS}}
+
+  # act runs the workflows on the working tree, uncommitted changes included (see .actrc). The token keeps
+  # mise-action below GitHub's rate limit for anonymous requests.
+  act:
+    internal: true
+    vars:
+      DOCKER_SOCKET:
+        sh: socket="${DOCKER_HOST:-unix:///var/run/docker.sock}"; echo "${socket#unix://}"
+    cmds:
+      - >-
+        GITHUB_TOKEN="${GITHUB_TOKEN:-$(gh auth token)}" act {{.ARGS}}
+        --container-daemon-socket -
+        --container-options "--volume {{.DOCKER_SOCKET}}:{{.DOCKER_SOCKET}}"
+        --env DOCKER_HOST=unix://{{.DOCKER_SOCKET}}
+        --env TESTCONTAINERS_HOST_OVERRIDE=localhost
+
   clean:
     cmds:
       - rm -r build/

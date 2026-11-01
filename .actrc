@@ -1,0 +1,4 @@
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+--rm
+--use-new-action-cache
+-s GITHUB_TOKEN
