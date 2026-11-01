@@ -1,0 +1,46 @@
+name: govulncheck
+
+# Reports known vulnerabilities in the code paths that pkgsilo calls to GitHub code scanning, where they
+# show up in the Security tab. A pull request's "Code scanning results" check fails when the pull request
+# introduces a new finding. The weekly run catches vulnerabilities published after the code last changed.
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  govulncheck:
+    # The token of a pull request from a fork can't upload to code scanning; the push to master after
+    # the merge reports its findings.
+    if: ${{ !github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      # Checks out the repository itself. In SARIF format, govulncheck exits with 0 even when it finds
+      # vulnerabilities: code scanning decides what fails.
+      - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        with:
+          go-version-file: go.mod
+          # Empty, since its default of `stable` would win over go-version-file (golang/go#70036).
+          go-version-input: ""
+          output-format: sarif
+          output-file: govulncheck.sarif
+      # Under act, the upload would send a local run to GitHub.
+      - if: ${{ !env.ACT }}
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: govulncheck.sarif
+          category: govulncheck

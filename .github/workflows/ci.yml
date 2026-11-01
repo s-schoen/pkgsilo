@@ -1,0 +1,81 @@
+name: CI
+
+# Every pushed commit gets the prek hooks and the short tests. Pull requests add the tests that need a
+# PostgreSQL container. Go comes from the toolchain line in go.mod, every other tool from mise.toml.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    # A branch of this repository already gets a push run; a pull request from a fork gets none.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          install_args: golangci-lint mockery prek
+      # Verifies the config, then lints with mise's golangci-lint and writes the findings for code scanning.
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          install-mode: none
+          args: --output.text.path=stdout --output.sarif.path=build/golangci-lint.sarif
+      # The rest of the hooks of a local commit. Runs even after lint findings, so that one run reports all
+      # problems. The short tests run in their own job.
+      - if: ${{ !cancelled() }}
+        run: prek run --all-files --show-diff-on-failure --skip golangci-lint --skip golangci-lint-config --skip go-test-short
+      # Shows the findings, gosec's among them, in the Security tab and on the lines of a pull request.
+      # Under act, the upload would send a local run to GitHub. A pull request from a fork has a token
+      # that can't upload.
+      - if: ${{ !cancelled() && hashFiles('build/golangci-lint.sarif') != '' && !env.ACT && !github.event.pull_request.head.repo.fork }}
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: build/golangci-lint.sarif
+          category: golangci-lint
+
+  test-short:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          install_args: task
+      - run: task test:short
+
+  test:
+    name: test (PostgreSQL)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          install_args: task
+      - run: task test
+      - name: Report coverage
+        run: |
+          echo "Coverage: $(go tool cover -func=build/coverage | tail -n 1 | awk '{print $NF}')" >> "$GITHUB_STEP_SUMMARY"
