@@ -1,9 +1,16 @@
+# Go's version is the toolchain line in go.mod, which actions/setup-go reads in CI as well.
+[settings]
+idiomatic_version_file_enable_tools = ["go"]
+
+# Exact versions, so that Renovate can update them (.github/renovate.jsonc).
 [tools]
-go = "1.27"
-golangci-lint = "2.15"
-gomigrate = "4.20"
-mockery = "3.8"
-task = "3"
-"go:golang.org/x/tools/gopls" = "0.24"
-prek = "0.5"
-cocogitto = "7.0"
+golangci-lint = "2.15.0"
+gomigrate = "4.20.1"
+mockery = "3.8.1"
+task = "3.54.0"
+"go:golang.org/x/tools/gopls" = "0.24.0"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
+prek = "0.5.9"
+cocogitto = "7.0.0"
+# Runs the GitHub Actions workflows locally (`task ci:push`, `task ci:pr`).
+act = "0.2.94"

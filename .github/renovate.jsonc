@@ -1,0 +1,102 @@
+// Keeps the Go modules, the mise.toml tools and the GitHub Actions up to date. Pull requests
+// for vulnerable dependencies are opened at once; everything else waits for the weekly schedule.
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigestsToSemver"
+  ],
+  // Not docker-compose: postgres:18-alpine is also pinned in test/databasetest, and a major upgrade
+  // breaks existing dev volumes, so it's raised by hand.
+  "enabledManagers": [
+    "gomod",
+    "mise",
+    "github-actions"
+  ],
+  "timezone": "Europe/Berlin",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  // The commit-msg hook and the Commits workflow accept only Conventional Commits.
+  "semanticCommits": "enabled",
+  "osvVulnerabilityAlerts": true,
+  // The go-mod-tidy hook fails on an untidy go.mod.
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths"
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Go modules (non-major)"
+    },
+    {
+      // The modules are released together and must move together.
+      "matchPackageNames": [
+        "github.com/testcontainers/testcontainers-go",
+        "github.com/testcontainers/testcontainers-go/**"
+      ],
+      "groupName": "testcontainers-go"
+    },
+    {
+      // The go directive is the minimum Go version for the module: raise it deliberately.
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "golang"
+      ],
+      "enabled": false
+    },
+    {
+      // The toolchain line is the Go version that mise and actions/setup-go install.
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "toolchain"
+      ],
+      "groupName": "Go toolchain"
+    },
+    {
+      // One pull request per tool, since a new mockery or golangci-lint may need regenerated
+      // mocks or lint fixes before it can be merged.
+      "matchManagers": [
+        "mise"
+      ],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "semanticCommitType": "ci",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "GitHub Actions (non-major)"
+    }
+  ]
+}
