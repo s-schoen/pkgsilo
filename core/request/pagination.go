@@ -34,7 +34,7 @@ func ParsePagination(w http.ResponseWriter, r *http.Request) (Pagination, bool) 
 
 	errs := validation.Errors{
 		"offset": intParam(query, "offset", &p.Offset, validation.Min(0)),
-		"limit":  intParam(query, "limit", &p.Limit, validation.Min(1), validation.Max(MaxLimit)),
+		"limit":  intParam(query, "limit", &p.Limit, validation.Min(1).ValidateEmpty(), validation.Max(MaxLimit)),
 	}
 	if err := errs.Filter(); err != nil {
 		writeQueryProblem(w, err)
