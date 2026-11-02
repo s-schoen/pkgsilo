@@ -6,12 +6,15 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
+	"pkgsilo/core/request"
 	"pkgsilo/group/service"
 )
 
 // nameRules are the rules of the group name, shared by the request bodies that set it.
 var nameRules = []validation.Rule{
 	validation.Required,
+	request.NotBlank,
+	request.NoControlCharacters,
 	validation.RuneLength(1, 128),
 }
 

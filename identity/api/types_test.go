@@ -35,6 +35,9 @@ func TestIdentityRequests_Validate(t *testing.T) {
 			name: "display name too long", username: "ada", displayName: strings.Repeat("é", 129),
 			wantInvalid: []string{"displayName"},
 		},
+		{name: "display name whitespace", username: "ada", displayName: " \t ", wantInvalid: []string{"displayName"}},
+		{name: "display name NUL", username: "ada", displayName: "Ada\x00", wantInvalid: []string{"displayName"}},
+		{name: "display name line break", username: "ada", displayName: "Ada\nL", wantInvalid: []string{"displayName"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

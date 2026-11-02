@@ -24,6 +24,9 @@ func TestGroupRequests_Validate(t *testing.T) {
 		{name: "longest", groupName: strings.Repeat("é", 128)},
 		{name: "blank", wantInvalid: []string{"name"}},
 		{name: "too long", groupName: strings.Repeat("é", 129), wantInvalid: []string{"name"}},
+		{name: "whitespace", groupName: " \t ", wantInvalid: []string{"name"}},
+		{name: "NUL", groupName: "Main\x00tainers", wantInvalid: []string{"name"}},
+		{name: "line break", groupName: "Main\ntainers", wantInvalid: []string{"name"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
