@@ -2,9 +2,9 @@
 
 ## Feature structure
 
-Every feature is a vertical slice shaped like `identity/`, the reference slice: read it before building a new feature, and register the new feature as a component in `.github/codecov.yml`.
+Every feature is a vertical slice in `feature/<feature>/`, shaped like `feature/identity/`, the reference slice: read it before building a new feature, and register the new feature as a component in `.github/codecov.yml`. Only features go in `feature/`; shared infrastructure stays in `core/`.
 
-A feature is a directory with three layer packages: `<feature>/api` → `<feature>/service` → `<feature>/repository`. Each layer calls only the layer below and owns its types and errors. The layer above always translates, even when the types are identical today: record → domain model → API response, repository error → domain error → HTTP problem.
+A feature is a directory with three layer packages: `feature/<feature>/api` → `feature/<feature>/service` → `feature/<feature>/repository`. Each layer calls only the layer below and owns its types and errors. The layer above always translates, even when the types are identical today: record → domain model → API response, repository error → domain error → HTTP problem.
 
 Each layer package has the same files:
 
@@ -24,7 +24,7 @@ Translate only errors that have a meaning in the layer above. Wrap every other e
 
 ### End-to-end tests
 
-Every feature has `<feature>/e2e_test.go` (package `<feature>_test`), which drives the assembled app through `/api/v1` on a real database from `apptest.New(t)` (`test/apptest`). It covers what only the whole app shows: flows across requests, database constraints, Location headers. Each test's doc comment lists its steps in order, each with the result it expects, and numbered comments (`// 1. Create.`) mark where each step starts in the code. Write each expected problem type out as a literal `envelope.DefineProblemType(…)`, so the test pins the public contract (slug, title, status) independently of `errors.go`.
+Every feature has `feature/<feature>/e2e_test.go` (package `<feature>_test`), which drives the assembled app through `/api/v1` on a real database from `apptest.New(t)` (`test/apptest`). It covers what only the whole app shows: flows across requests, database constraints, Location headers. Each test's doc comment lists its steps in order, each with the result it expects, and numbered comments (`// 1. Create.`) mark where each step starts in the code. Write each expected problem type out as a literal `envelope.DefineProblemType(…)`, so the test pins the public contract (slug, title, status) independently of `errors.go`.
 
 ### Test helpers
 

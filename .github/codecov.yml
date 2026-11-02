@@ -29,13 +29,13 @@ component_management:
         - "core/**"
     - component_id: identity
       paths:
-        - "identity/**"
+        - "feature/identity/**"
     - component_id: group
       paths:
-        - "group/**"
+        - "feature/group/**"
     - component_id: health
       paths:
-        - "health/**"
+        - "feature/health/**"
     - component_id: app
       name: app and cmd
       paths:

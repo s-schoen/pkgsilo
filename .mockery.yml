@@ -4,21 +4,21 @@ pkgname: mocks
 filename: mocks.go
 structname: "Mock{{.InterfaceName}}"
 packages:
-  pkgsilo/identity/repository:
+  pkgsilo/feature/identity/repository:
     interfaces:
       IdentityRepository: {}
-  pkgsilo/identity/service:
+  pkgsilo/feature/identity/service:
     interfaces:
       IdentityService: {}
-  pkgsilo/group/repository:
+  pkgsilo/feature/group/repository:
     interfaces:
       GroupRepository: {}
-  pkgsilo/group/service:
+  pkgsilo/feature/group/service:
     interfaces:
       GroupService: {}
-  pkgsilo/health/repository:
+  pkgsilo/feature/health/repository:
     interfaces:
       HealthRepository: {}
-  pkgsilo/health/service:
+  pkgsilo/feature/health/service:
     interfaces:
       HealthService: {}
