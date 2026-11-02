@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/audit"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/pagination"
 	"pkgsilo/identity/service"
@@ -26,7 +27,7 @@ var (
 		ID:          uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
 		Username:    "ada",
 		DisplayName: "Ada Lovelace",
-		CreatedBy:   service.SystemActor,
+		CreatedBy:   audit.SystemActor(),
 		UpdatedBy:   uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
 		CreatedAt:   time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC),
 		UpdatedAt:   time.Date(2026, time.October, 24, 11, 30, 0, 123456000, time.UTC),
@@ -93,7 +94,7 @@ func TestHandler_List_InvalidPagination(t *testing.T) {
 func TestHandler_Create(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Create(mock.Anything, service.SystemActor, adaInput).Return(ada, nil)
+	svc.EXPECT().Create(mock.Anything, audit.SystemActor(), adaInput).Return(ada, nil)
 
 	api.Post("/identities", adaBody).AssertCreated(adaPath, adaJSON)
 }
@@ -109,7 +110,7 @@ func TestHandler_Get(t *testing.T) {
 func TestHandler_Replace(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Replace(mock.Anything, service.SystemActor, ada.ID, adaInput).Return(ada, nil)
+	svc.EXPECT().Replace(mock.Anything, audit.SystemActor(), ada.ID, adaInput).Return(ada, nil)
 
 	api.Put(adaPath, adaBody).AssertResource(adaJSON)
 }
@@ -149,7 +150,7 @@ func TestHandler_InvalidID(t *testing.T) {
 			t.Parallel()
 			api, _ := newTestClient(t, loggertest.Discard())
 
-			api.Send(method, "/identities/not-a-uuid", adaBody).AssertProblem(identityNotFoundProblem)
+			api.Send(method, "/identities/not-a-uuid", adaBody).AssertProblem(IdentityNotFoundProblem)
 		})
 	}
 }
@@ -208,12 +209,12 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		{name: "list unexpected", endpoint: list, err: unexpectedErr, want: internal},
 		{name: "create username taken", endpoint: create, err: takenErr, want: usernameTakenProblem},
 		{name: "create unexpected", endpoint: create, err: unexpectedErr, want: internal},
-		{name: "get not found", endpoint: get, err: notFoundErr, want: identityNotFoundProblem},
+		{name: "get not found", endpoint: get, err: notFoundErr, want: IdentityNotFoundProblem},
 		{name: "get unexpected", endpoint: get, err: unexpectedErr, want: internal},
-		{name: "replace not found", endpoint: replace, err: notFoundErr, want: identityNotFoundProblem},
+		{name: "replace not found", endpoint: replace, err: notFoundErr, want: IdentityNotFoundProblem},
 		{name: "replace username taken", endpoint: replace, err: takenErr, want: usernameTakenProblem},
 		{name: "replace unexpected", endpoint: replace, err: unexpectedErr, want: internal},
-		{name: "delete not found", endpoint: del, err: notFoundErr, want: identityNotFoundProblem},
+		{name: "delete not found", endpoint: del, err: notFoundErr, want: IdentityNotFoundProblem},
 		{name: "delete unexpected", endpoint: del, err: unexpectedErr, want: internal},
 	}
 	for _, tt := range tests {

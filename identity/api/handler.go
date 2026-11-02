@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"pkgsilo/core/audit"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/identity/service"
@@ -63,7 +64,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identity, err := h.service.Create(r.Context(), service.SystemActor, body.toInput())
+	identity, err := h.service.Create(r.Context(), audit.SystemActor(), body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -98,7 +99,7 @@ func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identity, err := h.service.Replace(r.Context(), service.SystemActor, id, body.toInput())
+	identity, err := h.service.Replace(r.Context(), audit.SystemActor(), id, body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -121,14 +122,8 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// identityID returns the identity ID from the request path. An ID that isn't a UUID can't
-// identify an identity, so it's answered with 404 like an unknown one.
+// identityID returns the identity ID from the request path, answering one that isn't a UUID like
+// an unknown one.
 func identityID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		envelope.WriteProblem(w, identityNotFoundProblem)
-		return uuid.UUID{}, false
-	}
-
-	return id, true
+	return request.UUIDParam(w, r, "id", IdentityNotFoundProblem)
 }
