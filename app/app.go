@@ -9,6 +9,9 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"pkgsilo/core/router"
+	groupapi "pkgsilo/group/api"
+	grouprepo "pkgsilo/group/repository"
+	groupservice "pkgsilo/group/service"
 	healthapi "pkgsilo/health/api"
 	healthrepo "pkgsilo/health/repository"
 	healthservice "pkgsilo/health/service"
@@ -22,11 +25,13 @@ import (
 func NewHandler(opts router.Options, db *sqlx.DB, logger *slog.Logger) http.Handler {
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db))
+	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db))
 
 	r := router.New(opts, logger)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Mount("/health", healthapi.NewHandler(health, logger).Routes())
 		r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
+		r.Mount("/groups", groupapi.NewHandler(groups, logger).Routes())
 	})
 
 	return r

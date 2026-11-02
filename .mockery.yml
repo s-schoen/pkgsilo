@@ -10,6 +10,12 @@ packages:
   pkgsilo/identity/service:
     interfaces:
       IdentityService: {}
+  pkgsilo/group/repository:
+    interfaces:
+      GroupRepository: {}
+  pkgsilo/group/service:
+    interfaces:
+      GroupService: {}
   pkgsilo/health/repository:
     interfaces:
       HealthRepository: {}
