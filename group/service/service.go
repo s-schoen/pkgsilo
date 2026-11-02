@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 	"uuid"
@@ -23,12 +24,14 @@ type GroupService interface {
 	Replace(ctx context.Context, actor, id uuid.UUID, in GroupInput) (Group, error)
 	// Delete removes the group with the given ID and its memberships.
 	Delete(ctx context.Context, id uuid.UUID) error
-	// AddMember makes the identity a member of the group. Adding a member again changes nothing.
+	// AddMember makes the identity a member of the group. Adding a member again changes nothing. A
+	// missing group is reported before a missing identity.
 	AddMember(ctx context.Context, actor, groupID, identityID uuid.UUID) error
 	// ListMembers returns the page of up to limit members of the group that skips the first
 	// offset, ordered by when they were added.
 	ListMembers(ctx context.Context, groupID uuid.UUID, offset, limit int) (pagination.Page[Member], error)
-	// RemoveMember removes the identity from the members of the group.
+	// RemoveMember removes the identity from the members of the group. A missing group is reported
+	// before a missing member.
 	RemoveMember(ctx context.Context, groupID, identityID uuid.UUID) error
 }
 
@@ -116,6 +119,13 @@ func (s *groupService) AddMember(ctx context.Context, actor, groupID, identityID
 		CreatedBy:  actor,
 		CreatedAt:  s.now(),
 	})
+	// When the group is missing too, the database reports whichever reference it checks first, so
+	// the group is looked up to report a missing group first, like the other member methods.
+	if errors.Is(err, repository.ErrIdentityNotFound) {
+		if _, getErr := s.repo.Get(ctx, groupID); getErr != nil {
+			err = getErr
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("add group member: %w", translateError(err))
 	}
@@ -126,15 +136,17 @@ func (s *groupService) AddMember(ctx context.Context, actor, groupID, identityID
 func (s *groupService) ListMembers(
 	ctx context.Context, groupID uuid.UUID, offset, limit int,
 ) (pagination.Page[Member], error) {
-	// A group without members and a missing group both have no member records.
-	if _, err := s.repo.Get(ctx, groupID); err != nil {
-		return pagination.Page[Member]{}, fmt.Errorf("list group members: %w", translateError(err))
-	}
-
 	// One record more than requested reveals whether further members follow.
 	recs, err := s.repo.ListMembers(ctx, groupID, offset, limit+1)
 	if err != nil {
 		return pagination.Page[Member]{}, fmt.Errorf("list group members: %w", err)
+	}
+	// A missing group has no member records either, so it's told apart by looking it up. Only
+	// afterwards, so that a group deleted in between is reported as missing, not as empty.
+	if len(recs) == 0 {
+		if _, err := s.repo.Get(ctx, groupID); err != nil {
+			return pagination.Page[Member]{}, fmt.Errorf("list group members: %w", translateError(err))
+		}
 	}
 
 	members := make([]Member, len(recs))
@@ -146,12 +158,15 @@ func (s *groupService) ListMembers(
 }
 
 func (s *groupService) RemoveMember(ctx context.Context, groupID, identityID uuid.UUID) error {
-	// A missing group has no member record either, so it's told apart first.
-	if _, err := s.repo.Get(ctx, groupID); err != nil {
-		return fmt.Errorf("remove group member: %w", translateError(err))
+	err := s.repo.DeleteMember(ctx, groupID, identityID)
+	// A missing group has no member record either, so it's told apart by looking it up. Only
+	// afterwards, so that a group deleted in between is reported as missing.
+	if errors.Is(err, repository.ErrMemberNotFound) {
+		if _, getErr := s.repo.Get(ctx, groupID); getErr != nil {
+			err = getErr
+		}
 	}
-
-	if err := s.repo.DeleteMember(ctx, groupID, identityID); err != nil {
+	if err != nil {
 		return fmt.Errorf("remove group member: %w", translateError(err))
 	}
 

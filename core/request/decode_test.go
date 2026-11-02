@@ -2,6 +2,7 @@ package request
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -194,6 +195,37 @@ func TestDecodeJSON_InternalErrors(t *testing.T) {
 
 			assert.Panics(t, func() { DecodeJSON(rec, newJSONRequest("application/json", `{}`), tt.dst) })
 			assert.Empty(t, rec.Body.String())
+		})
+	}
+}
+
+func TestEnsureEmptyBody(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		body   io.Reader
+		wantOK bool
+	}{
+		{name: "no body", wantOK: true},
+		{name: "empty body", body: strings.NewReader(""), wantOK: true},
+		{name: "JSON object", body: strings.NewReader(`{"role":"admin"}`)},
+		{name: "empty JSON object", body: strings.NewReader(`{}`)},
+		{name: "whitespace", body: strings.NewReader("\n")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rec := httptest.NewRecorder()
+
+			ok := EnsureEmptyBody(rec, httptest.NewRequest(http.MethodPut, "/", tt.body))
+
+			assert.Equal(t, tt.wantOK, ok)
+			if tt.wantOK {
+				assert.Zero(t, rec.Body.Len(), "nothing must be written on success")
+				return
+			}
+			assert.JSONEq(t, `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The request body must be empty."}`, rec.Body.String())
 		})
 	}
 }

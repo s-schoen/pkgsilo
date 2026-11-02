@@ -194,8 +194,8 @@ func TestGroupService_AddMember(t *testing.T) {
 
 func TestGroupService_ListMembers(t *testing.T) {
 	t.Parallel()
+	// The mock fails the test if the group is looked up: its member records prove it exists.
 	svc, repo := newTestService(t)
-	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 	// The repository is asked for one more record than the page holds.
 	repo.EXPECT().ListMembers(mock.Anything, stored.ID, 10, 3).
 		Return([]repository.MemberRecord{storedMember, storedMember}, nil)
@@ -209,7 +209,6 @@ func TestGroupService_ListMembers(t *testing.T) {
 func TestGroupService_ListMembers_HasMore(t *testing.T) {
 	t.Parallel()
 	svc, repo := newTestService(t)
-	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 	repo.EXPECT().ListMembers(mock.Anything, stored.ID, 10, 3).
 		Return([]repository.MemberRecord{storedMember, storedMember, storedMember}, nil)
 
@@ -222,8 +221,9 @@ func TestGroupService_ListMembers_HasMore(t *testing.T) {
 func TestGroupService_ListMembers_Empty(t *testing.T) {
 	t.Parallel()
 	svc, repo := newTestService(t)
-	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
-	repo.EXPECT().ListMembers(mock.Anything, stored.ID, 0, 6).Return(nil, nil)
+	list := repo.EXPECT().ListMembers(mock.Anything, stored.ID, 0, 6).Return(nil, nil)
+	// Only after the member records, so that a group deleted in between is reported as missing.
+	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).NotBefore(list.Call)
 
 	got, err := svc.ListMembers(t.Context(), stored.ID, 0, 5)
 	require.NoError(t, err)
@@ -234,8 +234,8 @@ func TestGroupService_ListMembers_Empty(t *testing.T) {
 
 func TestGroupService_RemoveMember(t *testing.T) {
 	t.Parallel()
+	// The mock fails the test if the group is looked up: the removed member record proves it exists.
 	svc, repo := newTestService(t)
-	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 	repo.EXPECT().DeleteMember(mock.Anything, stored.ID, identity).Return(nil)
 
 	assert.NoError(t, svc.RemoveMember(t.Context(), stored.ID, identity))
@@ -273,29 +273,50 @@ func TestGroupService_TranslatesRepositoryErrors(t *testing.T) {
 		repo.EXPECT().InsertMember(mock.Anything, mock.Anything).Return(repoErr)
 		return svc.AddMember(ctx, actor, stored.ID, identity)
 	}
-	// The mock fails the test if the member records are queried after the group lookup failed.
-	listMembersOfMissingGroup := func(
+	addMissingIdentity := func(
 		ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error,
 	) error {
-		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.GroupRecord{}, repoErr)
-		_, err := svc.ListMembers(ctx, stored.ID, 0, 5)
-		return err
+		insert := repo.EXPECT().InsertMember(mock.Anything, mock.Anything).Return(repoErr)
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).NotBefore(insert.Call)
+		return svc.AddMember(ctx, actor, stored.ID, identity)
+	}
+	// The database may report a missing identity although the group is missing too.
+	addMissingIdentityToMissingGroup := func(
+		ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error,
+	) error {
+		insert := repo.EXPECT().InsertMember(mock.Anything, mock.Anything).
+			Return(fmt.Errorf("query: %w", repository.ErrIdentityNotFound))
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.GroupRecord{}, repoErr).NotBefore(insert.Call)
+		return svc.AddMember(ctx, actor, stored.ID, identity)
 	}
 	listMembers := func(ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error) error {
-		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 		repo.EXPECT().ListMembers(mock.Anything, stored.ID, 0, 6).Return(nil, repoErr)
 		_, err := svc.ListMembers(ctx, stored.ID, 0, 5)
 		return err
 	}
+	listMembersOfMissingGroup := func(
+		ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error,
+	) error {
+		list := repo.EXPECT().ListMembers(mock.Anything, stored.ID, 0, 6).Return(nil, nil)
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.GroupRecord{}, repoErr).NotBefore(list.Call)
+		_, err := svc.ListMembers(ctx, stored.ID, 0, 5)
+		return err
+	}
+	removeMember := func(ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error) error {
+		repo.EXPECT().DeleteMember(mock.Anything, stored.ID, identity).Return(repoErr)
+		return svc.RemoveMember(ctx, stored.ID, identity)
+	}
+	removeNonMember := func(ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error) error {
+		del := repo.EXPECT().DeleteMember(mock.Anything, stored.ID, identity).Return(repoErr)
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).NotBefore(del.Call)
+		return svc.RemoveMember(ctx, stored.ID, identity)
+	}
 	removeMemberOfMissingGroup := func(
 		ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error,
 	) error {
-		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.GroupRecord{}, repoErr)
-		return svc.RemoveMember(ctx, stored.ID, identity)
-	}
-	removeMember := func(ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error) error {
-		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
-		repo.EXPECT().DeleteMember(mock.Anything, stored.ID, identity).Return(repoErr)
+		del := repo.EXPECT().DeleteMember(mock.Anything, stored.ID, identity).
+			Return(fmt.Errorf("query: %w", repository.ErrMemberNotFound))
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.GroupRecord{}, repoErr).NotBefore(del.Call)
 		return svc.RemoveMember(ctx, stored.ID, identity)
 	}
 
@@ -316,27 +337,35 @@ func TestGroupService_TranslatesRepositoryErrors(t *testing.T) {
 		{name: "delete not found", call: del, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},
 		{name: "delete unexpected", call: del, repoErr: errDB, wantErr: errDB},
 		{name: "add member group not found", call: addMember, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},
+		{name: "add member unexpected", call: addMember, repoErr: errDB, wantErr: errDB},
 		{
-			name: "add member identity not found", call: addMember,
+			name: "add member identity not found", call: addMissingIdentity,
 			repoErr: repository.ErrIdentityNotFound, wantErr: ErrIdentityNotFound,
 		},
-		{name: "add member unexpected", call: addMember, repoErr: errDB, wantErr: errDB},
+		{
+			name: "add member group and identity not found", call: addMissingIdentityToMissingGroup,
+			repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound,
+		},
+		{
+			name: "add member identity not found, group unexpected", call: addMissingIdentityToMissingGroup,
+			repoErr: errDB, wantErr: errDB,
+		},
+		{name: "list members unexpected", call: listMembers, repoErr: errDB, wantErr: errDB},
 		{
 			name: "list members group not found", call: listMembersOfMissingGroup,
 			repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound,
 		},
 		{name: "list members group unexpected", call: listMembersOfMissingGroup, repoErr: errDB, wantErr: errDB},
-		{name: "list members unexpected", call: listMembers, repoErr: errDB, wantErr: errDB},
+		{name: "remove member unexpected", call: removeMember, repoErr: errDB, wantErr: errDB},
+		{
+			name: "remove member not found", call: removeNonMember,
+			repoErr: repository.ErrMemberNotFound, wantErr: ErrMemberNotFound,
+		},
 		{
 			name: "remove member group not found", call: removeMemberOfMissingGroup,
 			repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound,
 		},
 		{name: "remove member group unexpected", call: removeMemberOfMissingGroup, repoErr: errDB, wantErr: errDB},
-		{
-			name: "remove member not found", call: removeMember,
-			repoErr: repository.ErrMemberNotFound, wantErr: ErrMemberNotFound,
-		},
-		{name: "remove member unexpected", call: removeMember, repoErr: errDB, wantErr: errDB},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

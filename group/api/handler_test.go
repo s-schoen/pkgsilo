@@ -13,10 +13,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/audit"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/pagination"
 	"pkgsilo/group/service"
 	"pkgsilo/group/service/mocks"
+	identityapi "pkgsilo/identity/api"
 	"pkgsilo/test/apitest"
 	"pkgsilo/test/loggertest"
 )
@@ -25,7 +27,7 @@ var (
 	maintainers = service.Group{
 		ID:        uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
 		Name:      "Maintainers",
-		CreatedBy: service.SystemActor,
+		CreatedBy: audit.SystemActor(),
 		UpdatedBy: uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
 		CreatedAt: time.Date(2026, time.November, 2, 10, 0, 0, 0, time.UTC),
 		UpdatedAt: time.Date(2026, time.November, 2, 11, 30, 0, 123456000, time.UTC),
@@ -44,7 +46,7 @@ var (
 
 	ada = service.Member{
 		IdentityID: uuid.MustParse("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f"),
-		CreatedBy:  service.SystemActor,
+		CreatedBy:  audit.SystemActor(),
 		CreatedAt:  time.Date(2026, time.November, 2, 12, 0, 0, 0, time.UTC),
 	}
 	adaJSON = `{
@@ -100,7 +102,7 @@ func TestHandler_List_Empty(t *testing.T) {
 func TestHandler_Create(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Create(mock.Anything, service.SystemActor, maintainersInput).Return(maintainers, nil)
+	svc.EXPECT().Create(mock.Anything, audit.SystemActor(), maintainersInput).Return(maintainers, nil)
 
 	api.Post("/groups", maintainersBody).AssertCreated(maintainersPath, maintainersJSON)
 }
@@ -116,7 +118,7 @@ func TestHandler_Get(t *testing.T) {
 func TestHandler_Replace(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Replace(mock.Anything, service.SystemActor, maintainers.ID, maintainersInput).Return(maintainers, nil)
+	svc.EXPECT().Replace(mock.Anything, audit.SystemActor(), maintainers.ID, maintainersInput).Return(maintainers, nil)
 
 	api.Put(maintainersPath, maintainersBody).AssertResource(maintainersJSON)
 }
@@ -159,9 +161,19 @@ func TestHandler_ListMembers_Empty(t *testing.T) {
 func TestHandler_AddMember(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().AddMember(mock.Anything, service.SystemActor, maintainers.ID, ada.IdentityID).Return(nil)
+	svc.EXPECT().AddMember(mock.Anything, audit.SystemActor(), maintainers.ID, ada.IdentityID).Return(nil)
 
 	api.Put(adaPath, "").AssertNoContent()
+}
+
+func TestHandler_AddMember_Body(t *testing.T) {
+	t.Parallel()
+	// The mock fails the test if the service is called.
+	api, _ := newTestClient(t, loggertest.Discard())
+
+	api.Put(adaPath, `{"role":"admin"}`).AssertProblem(envelope.BadRequestProblem.New(envelope.Occurrence{
+		Detail: "The request body must be empty.",
+	}))
 }
 
 func TestHandler_RemoveMember(t *testing.T) {
@@ -207,23 +219,19 @@ func TestHandler_InvalidBody(t *testing.T) {
 
 func TestHandler_InvalidID(t *testing.T) {
 	t.Parallel()
-	const (
-		badGroup  = "/groups/not-a-uuid"
-		badMember = membersPath + "/not-a-uuid"
-	)
+	const badGroup = "/groups/not-a-uuid"
 	adaID := ada.IdentityID.String()
 	tests := []struct {
 		method, target string
-		want           envelope.Problem
 	}{
-		{method: http.MethodGet, target: badGroup, want: groupNotFoundProblem},
-		{method: http.MethodPut, target: badGroup, want: groupNotFoundProblem},
-		{method: http.MethodDelete, target: badGroup, want: groupNotFoundProblem},
-		{method: http.MethodGet, target: badGroup + "/members", want: groupNotFoundProblem},
-		{method: http.MethodPut, target: badGroup + "/members/" + adaID, want: groupNotFoundProblem},
-		{method: http.MethodDelete, target: badGroup + "/members/" + adaID, want: groupNotFoundProblem},
-		{method: http.MethodPut, target: badMember, want: identityNotFoundProblem},
-		{method: http.MethodDelete, target: badMember, want: memberNotFoundProblem},
+		{method: http.MethodGet, target: badGroup},
+		{method: http.MethodPut, target: badGroup},
+		{method: http.MethodDelete, target: badGroup},
+		{method: http.MethodGet, target: badGroup + "/members"},
+		{method: http.MethodPut, target: badGroup + "/members/" + adaID},
+		{method: http.MethodDelete, target: badGroup + "/members/" + adaID},
+		{method: http.MethodPut, target: badGroup + "/members/not-a-uuid"},
+		{method: http.MethodDelete, target: badGroup + "/members/not-a-uuid"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.target, func(t *testing.T) {
@@ -231,7 +239,45 @@ func TestHandler_InvalidID(t *testing.T) {
 			// The mock fails the test if the service is called.
 			api, _ := newTestClient(t, loggertest.Discard())
 
-			api.Send(tt.method, tt.target, maintainersBody).AssertProblem(tt.want)
+			api.Send(tt.method, tt.target, maintainersBody).AssertProblem(groupNotFoundProblem)
+		})
+	}
+}
+
+// TestHandler_InvalidMemberID checks that an identity ID that isn't a UUID is answered like an
+// unknown identity, once the group was found to exist.
+func TestHandler_InvalidMemberID(t *testing.T) {
+	t.Parallel()
+	const badMember = membersPath + "/not-a-uuid"
+	groupNotFoundErr := fmt.Errorf("get group: %w", service.ErrGroupNotFound)
+	tests := []struct {
+		name     string
+		method   string
+		getErr   error
+		want     envelope.Problem
+		wantLogs int
+	}{
+		{name: "add", method: http.MethodPut, want: identityapi.IdentityNotFoundProblem},
+		{name: "remove", method: http.MethodDelete, want: memberNotFoundProblem},
+		{name: "add to missing group", method: http.MethodPut, getErr: groupNotFoundErr, want: groupNotFoundProblem},
+		{
+			name: "remove from missing group", method: http.MethodDelete,
+			getErr: groupNotFoundErr, want: groupNotFoundProblem,
+		},
+		{
+			name: "group unexpected", method: http.MethodPut, getErr: errors.New("connection refused"),
+			want: envelope.InternalServerErrorProblem.New(envelope.Occurrence{}), wantLogs: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			logger, buf := loggertest.NewJSON()
+			api, svc := newTestClient(t, logger)
+			svc.EXPECT().Get(mock.Anything, maintainers.ID).Return(maintainers, tt.getErr)
+
+			api.Send(tt.method, badMember, "").AssertProblem(tt.want)
+			assert.Len(t, loggertest.Entries(t, buf), tt.wantLogs)
 		})
 	}
 }
@@ -329,7 +375,7 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		},
 		{
 			name: "add member identity not found", endpoint: addMember,
-			err: identityNotFoundErr, want: identityNotFoundProblem,
+			err: identityNotFoundErr, want: identityapi.IdentityNotFoundProblem,
 		},
 		{name: "add member unexpected", endpoint: addMember, err: unexpectedErr, want: internal},
 		{
