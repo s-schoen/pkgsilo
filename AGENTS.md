@@ -2,7 +2,7 @@
 
 ## Feature structure
 
-Every feature is a vertical slice shaped like `identity/`, the reference slice: read it before building a new feature.
+Every feature is a vertical slice shaped like `identity/`, the reference slice: read it before building a new feature, and register the new feature as a component in `.github/codecov.yml`.
 
 A feature is a directory with three layer packages: `<feature>/api` → `<feature>/service` → `<feature>/repository`. Each layer calls only the layer below and owns its types and errors. The layer above always translates, even when the types are identical today: record → domain model → API response, repository error → domain error → HTTP problem.
 

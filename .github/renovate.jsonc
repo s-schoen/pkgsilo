@@ -32,7 +32,8 @@
   // master has no required checks, so GitHub's auto-merge wouldn't wait for CI: Renovate merges
   // itself once every check is green.
   "platformAutomerge": false,
-  // Pull requests, not branches: test (PostgreSQL) and code scanning run only on pull requests.
+  // Pull requests, not branches: of the branches, only master gets test (PostgreSQL), and code
+  // scanning checks only pull requests.
   "automergeType": "pr",
   // The go-mod-tidy hook fails on an untidy go.mod.
   "postUpdateOptions": [

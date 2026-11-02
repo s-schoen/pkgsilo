@@ -8,6 +8,8 @@ golangci-lint = "2.15.0"
 gomigrate = "4.20.1"
 mockery = "3.9.0"
 task = "3.54.0"
+# Runs `task test`, to write a JUnit report next to the coverage profile.
+gotestsum = "1.13.0"
 "go:golang.org/x/tools/gopls" = "0.24.0"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
 prek = "0.5.9"

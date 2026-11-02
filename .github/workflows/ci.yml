@@ -1,7 +1,8 @@
 name: CI
 
-# Every pushed commit gets the prek hooks and the short tests. Pull requests add the tests that need a
-# PostgreSQL container. Go comes from the toolchain line in go.mod, every other tool from mise.toml.
+# Every pushed commit gets the prek hooks and the short tests. Pull requests and master add the tests that
+# need a PostgreSQL container, and upload their coverage and results to Codecov (.github/codecov.yml). Go
+# comes from the toolchain line in go.mod, every other tool from mise.toml.
 on:
   push:
   pull_request:
@@ -64,9 +65,14 @@ jobs:
 
   test:
     name: test (PostgreSQL)
-    if: github.event_name == 'pull_request'
+    # Codecov compares a pull request with the coverage of its base commit, so master uploads as well.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      # The Codecov uploads authenticate with an OIDC token instead of a secret.
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -74,8 +80,22 @@ jobs:
           go-version-file: go.mod
       - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
-          install_args: task
+          install_args: task gotestsum
       - run: task test
-      - name: Report coverage
-        run: |
-          echo "Coverage: $(go tool cover -func=build/coverage | tail -n 1 | awk '{print $NF}')" >> "$GITHUB_STEP_SUMMARY"
+      # Under act, the uploads would send a local run to Codecov. A pull request from a fork gets no OIDC
+      # token: the action then uploads without one, which Codecov accepts for a public repository. An
+      # upload error doesn't fail the job, so that a Codecov outage doesn't hold back Renovate's automerge.
+      - if: ${{ !env.ACT }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: build/coverage
+          disable_search: true
+      # Runs after failed tests too, so that Codecov reports which tests failed.
+      - if: ${{ !cancelled() && !env.ACT }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          report_type: test_results
+          use_oidc: true
+          files: build/junit.xml
+          disable_search: true

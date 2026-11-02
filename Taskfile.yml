@@ -65,9 +65,14 @@ tasks:
       - golangci-lint run --fix
 
   test:
+    vars:
+      # Every package except the mocks that mockery generates.
+      COVERPKG:
+        sh: go list ./... | grep -v '/mocks$' | paste -sd, -
     cmds:
       - mkdir -p build
-      - go test -coverpkg=./... -coverprofile build/coverage ./...
+      # gotestsum writes the JUnit report for Codecov's Test Analytics, with go test's own output.
+      - gotestsum --format standard-quiet --junitfile build/junit.xml -- -coverpkg={{.COVERPKG}} -coverprofile build/coverage ./...
 
   "test:short":
     cmds:
