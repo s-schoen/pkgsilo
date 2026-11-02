@@ -9,15 +9,15 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"pkgsilo/core/router"
-	groupapi "pkgsilo/group/api"
-	grouprepo "pkgsilo/group/repository"
-	groupservice "pkgsilo/group/service"
-	healthapi "pkgsilo/health/api"
-	healthrepo "pkgsilo/health/repository"
-	healthservice "pkgsilo/health/service"
-	identityapi "pkgsilo/identity/api"
-	identityrepo "pkgsilo/identity/repository"
-	identityservice "pkgsilo/identity/service"
+	groupapi "pkgsilo/feature/group/api"
+	grouprepo "pkgsilo/feature/group/repository"
+	groupservice "pkgsilo/feature/group/service"
+	healthapi "pkgsilo/feature/health/api"
+	healthrepo "pkgsilo/feature/health/repository"
+	healthservice "pkgsilo/feature/health/service"
+	identityapi "pkgsilo/feature/identity/api"
+	identityrepo "pkgsilo/feature/identity/repository"
+	identityservice "pkgsilo/feature/identity/service"
 )
 
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
