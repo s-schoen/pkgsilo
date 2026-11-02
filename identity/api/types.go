@@ -7,6 +7,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
+	"pkgsilo/core/request"
 	"pkgsilo/identity/service"
 )
 
@@ -22,6 +23,8 @@ var (
 	}
 	displayNameRules = []validation.Rule{
 		validation.Required,
+		request.NotBlank,
+		request.NoControlCharacters,
 		validation.RuneLength(1, 128),
 	}
 )
