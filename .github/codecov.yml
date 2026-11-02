@@ -30,6 +30,9 @@ component_management:
     - component_id: identity
       paths:
         - "identity/**"
+    - component_id: group
+      paths:
+        - "group/**"
     - component_id: health
       paths:
         - "health/**"
