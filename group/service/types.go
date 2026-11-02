@@ -6,14 +6,11 @@ import (
 	"uuid"
 )
 
-// SystemActor attributes changes to pkgsilo itself rather than to an identity.
-var SystemActor = uuid.Nil()
-
 // Group is a named set of identities, its members.
 type Group struct {
 	ID   uuid.UUID
 	Name string
-	// CreatedBy and UpdatedBy are the identities, or SystemActor, that made the changes.
+	// CreatedBy and UpdatedBy are the identities, or audit.SystemActor, that made the changes.
 	CreatedBy uuid.UUID
 	UpdatedBy uuid.UUID
 	CreatedAt time.Time
@@ -28,7 +25,7 @@ type GroupInput struct {
 // Member is the membership of an identity in a group.
 type Member struct {
 	IdentityID uuid.UUID
-	// CreatedBy is the identity, or SystemActor, that added the member, and CreatedAt is when.
+	// CreatedBy is the identity, or audit.SystemActor, that added the member, and CreatedAt is when.
 	CreatedBy uuid.UUID
 	CreatedAt time.Time
 }

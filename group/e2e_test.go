@@ -241,8 +241,11 @@ func TestGroups_Members(t *testing.T) {
 //
 //  1. Create the identities ada and grace and the groups maintainers and reviewers, and add ada
 //     and grace to both groups: 201 and 204 for each.
-//  2. Add an identity that doesn't exist to maintainers: 404 identity-not-found.
-//  3. List, add and remove members of a group that doesn't exist: 404 group-not-found for each.
+//  2. Add an identity that doesn't exist, and one whose ID isn't a UUID, to maintainers: 404
+//     identity-not-found for both.
+//  3. List members of a group that doesn't exist, and add and remove ada, an identity that
+//     doesn't exist and one whose ID isn't a UUID: 404 group-not-found for each, so a missing
+//     group is reported before a missing identity.
 //  4. Delete grace: 204, and she is no longer a member of maintainers.
 //  5. Delete reviewers, which still has members: 204.
 //  6. Delete ada: 204, and maintainers has no members left.
@@ -262,13 +265,18 @@ func TestGroups_MemberReferences(t *testing.T) {
 	}
 
 	// 2. Add a missing identity.
-	api.Put(maintainersPath+"/members/"+uuid.NewV4().String(), "").AssertProblemType(identityNotFound)
+	missingIdentityIDs := []string{uuid.NewV4().String(), "not-a-uuid"}
+	for _, id := range missingIdentityIDs {
+		api.Put(maintainersPath+"/members/"+id, "").AssertProblemType(identityNotFound)
+	}
 
 	// 3. Use a missing group.
 	missingMembersPath := groupsPath + "/" + uuid.NewV4().String() + "/members"
 	api.Get(missingMembersPath).AssertProblemType(groupNotFound)
-	api.Put(missingMembersPath+"/"+ada.String(), "").AssertProblemType(groupNotFound)
-	api.Delete(missingMembersPath + "/" + ada.String()).AssertProblemType(groupNotFound)
+	for _, id := range append([]string{ada.String()}, missingIdentityIDs...) {
+		api.Put(missingMembersPath+"/"+id, "").AssertProblemType(groupNotFound)
+		api.Delete(missingMembersPath + "/" + id).AssertProblemType(groupNotFound)
+	}
 
 	// 4. Delete grace.
 	api.Delete(identitiesPath + "/" + grace.String()).AssertNoContent()

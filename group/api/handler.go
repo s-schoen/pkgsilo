@@ -9,9 +9,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"pkgsilo/core/audit"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/group/service"
+	identityapi "pkgsilo/identity/api"
 )
 
 // Handler serves the group endpoints.
@@ -66,7 +68,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.service.Create(r.Context(), service.SystemActor, body.toInput())
+	group, err := h.service.Create(r.Context(), audit.SystemActor(), body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -101,7 +103,7 @@ func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.service.Replace(r.Context(), service.SystemActor, id, body.toInput())
+	group, err := h.service.Replace(r.Context(), audit.SystemActor(), id, body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -155,13 +157,16 @@ func (h *Handler) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// An ID that isn't a UUID can't identify an identity to add.
-	identityID, ok := uuidParam(w, r, "identityID", identityNotFoundProblem)
+	identityID, ok := h.memberID(w, r, id, identityapi.IdentityNotFoundProblem)
 	if !ok {
 		return
 	}
 
-	if err := h.service.AddMember(r.Context(), service.SystemActor, id, identityID); err != nil {
+	if !request.EnsureEmptyBody(w, r) {
+		return
+	}
+
+	if err := h.service.AddMember(r.Context(), audit.SystemActor(), id, identityID); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
@@ -175,8 +180,7 @@ func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// An ID that isn't a UUID can't identify a member of the group.
-	identityID, ok := uuidParam(w, r, "identityID", memberNotFoundProblem)
+	identityID, ok := h.memberID(w, r, id, memberNotFoundProblem)
 	if !ok {
 		return
 	}
@@ -189,20 +193,28 @@ func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// groupID returns the group ID from the request path. An ID that isn't a UUID can't identify a
-// group, so it's answered with 404 like an unknown one.
-func groupID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	return uuidParam(w, r, "id", groupNotFoundProblem)
-}
-
-// uuidParam returns the UUID in the path parameter name. A value that isn't a UUID can't identify
-// anything, so it's answered with notFound.
-func uuidParam(w http.ResponseWriter, r *http.Request, name string, notFound envelope.Problem) (uuid.UUID, bool) {
-	id, err := uuid.Parse(chi.URLParam(r, name))
-	if err != nil {
-		envelope.WriteProblem(w, notFound)
-		return uuid.UUID{}, false
+// memberID returns the identity ID from the path of a member of the group groupID. An ID that
+// isn't a UUID can't identify an identity, so it's answered with notFound like an unknown one, but
+// only after the group was found: like the service for unknown identities, it reports a missing
+// group first.
+func (h *Handler) memberID(
+	w http.ResponseWriter, r *http.Request, groupID uuid.UUID, notFound envelope.Problem,
+) (uuid.UUID, bool) {
+	if identityID, err := uuid.Parse(chi.URLParam(r, "identityID")); err == nil {
+		return identityID, true
 	}
 
-	return id, true
+	if _, err := h.service.Get(r.Context(), groupID); err != nil {
+		h.writeError(w, r, err)
+		return uuid.UUID{}, false
+	}
+	envelope.WriteProblem(w, notFound)
+
+	return uuid.UUID{}, false
+}
+
+// groupID returns the group ID from the request path, answering one that isn't a UUID like an
+// unknown one.
+func groupID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	return request.UUIDParam(w, r, "id", groupNotFoundProblem)
 }

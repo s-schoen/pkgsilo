@@ -60,6 +60,22 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst validation.Validatab
 	return true
 }
 
+// EnsureEmptyBody is the counterpart of DecodeJSON for endpoints that take no body. On a request
+// with a body, it writes a 400 problem and returns false, so that a client doesn't mistake input
+// that would be ignored for input that was accepted.
+func EnsureEmptyBody(w http.ResponseWriter, r *http.Request) bool {
+	// A single byte tells an empty body apart from any other.
+	if _, err := io.ReadFull(r.Body, make([]byte, 1)); errors.Is(err, io.EOF) {
+		return true
+	}
+
+	envelope.WriteProblem(w, envelope.BadRequestProblem.New(envelope.Occurrence{
+		Detail: "The request body must be empty.",
+	}))
+
+	return false
+}
+
 var errTrailingData = errors.New("trailing data after JSON value")
 
 func writeDecodeProblem(w http.ResponseWriter, err error) {
