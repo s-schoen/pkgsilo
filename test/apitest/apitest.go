@@ -13,10 +13,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"uuid"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/authn"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/core/router"
@@ -26,13 +28,38 @@ import (
 // jsonMediaType is the media type of request bodies and of successful JSON responses.
 const jsonMediaType = "application/json"
 
+// Actor is the identity that requests to the routes of Mount are authenticated as.
+var Actor = uuid.MustParse("5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b")
+
 // Mount returns the application router, as router.New builds it, with routes mounted at prefix, so
-// that a feature's routes are served behind the shared middleware and 404 and 405 handlers.
+// that a feature's routes are served behind the shared middleware and 404 and 405 handlers. Every
+// request to them is authenticated as Actor.
 func Mount(prefix string, routes http.Handler) http.Handler {
-	r := router.New(router.Options{}, loggertest.Discard())
-	r.Mount(prefix, routes)
+	logger := loggertest.Discard()
+	r := router.New(router.Options{}, logger)
+	r.With(authn.Require(logger, actorAuthenticator{})).Mount(prefix, routes)
 
 	return r
+}
+
+// actorAuthenticator authenticates every request as Actor.
+type actorAuthenticator struct{}
+
+var _ authn.Authenticator = actorAuthenticator{}
+
+// Method returns the name of the authentication method.
+func (actorAuthenticator) Method() string {
+	return "test"
+}
+
+// Authenticate returns the principal of Actor.
+func (actorAuthenticator) Authenticate(*http.Request) (authn.Principal, error) {
+	return authn.Principal{IdentityID: Actor}, nil
+}
+
+// Challenge returns a challenge that no response uses, since every request is authenticated.
+func (actorAuthenticator) Challenge() string {
+	return "Test"
 }
 
 // Client sends requests to a handler and reports failed assertions on the responses to its test.
@@ -42,6 +69,8 @@ func Mount(prefix string, routes http.Handler) http.Handler {
 type Client struct {
 	tb      testing.TB
 	handler http.Handler
+	// header holds the headers of every request, unless the request sets them itself.
+	header http.Header
 }
 
 // NewClient returns a client that sends requests to h and reports to tb.
@@ -55,7 +84,25 @@ func NewClient(tb testing.TB, h http.Handler) *Client {
 func (c *Client) For(tb testing.TB) *Client {
 	tb.Helper()
 
-	return &Client{tb: tb, handler: c.handler}
+	return &Client{tb: tb, handler: c.handler, header: c.header}
+}
+
+// WithHeader returns a client for the same handler that also sets the given header on every request,
+// such as the credential of a test's caller.
+func (c *Client) WithHeader(name, value string) *Client {
+	header := c.header.Clone()
+	if header == nil {
+		header = http.Header{}
+	}
+	header.Set(name, value)
+
+	return &Client{tb: c.tb, handler: c.handler, header: header}
+}
+
+// Anonymous returns a client for the same handler that sets no headers on its requests of its own, so
+// that they hold no credential.
+func (c *Client) Anonymous() *Client {
+	return &Client{tb: c.tb, handler: c.handler}
 }
 
 // Get sends a GET request to target.
@@ -95,6 +142,12 @@ func (c *Client) Send(method, target, body string) *Response {
 // Do sends req, for requests that Send can't build, such as ones with other content types or
 // headers.
 func (c *Client) Do(req *http.Request) *Response {
+	for name, values := range c.header {
+		if _, set := req.Header[name]; !set {
+			req.Header[name] = values
+		}
+	}
+
 	rec := httptest.NewRecorder()
 	c.handler.ServeHTTP(rec, req)
 

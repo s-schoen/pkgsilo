@@ -5,11 +5,13 @@ package apikey_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/envelope"
 	apikeyapi "pkgsilo/feature/apikey/api"
@@ -32,6 +34,15 @@ type (
 	createdAPIKey = apikeyapi.CreatedKeyResponse
 	identity      = identityapi.IdentityResponse
 )
+
+// assertUnauthorized asserts the answer to a request without a valid credential, which doesn't say why
+// it's rejected and tells which method is expected.
+func assertUnauthorized(t *testing.T, resp *apitest.Response) {
+	t.Helper()
+
+	resp.AssertProblem(envelope.UnauthorizedProblem.New(envelope.Occurrence{}))
+	assert.Equal(t, []string{`ApiKey realm="pkgsilo"`}, resp.Header().Values("WWW-Authenticate"))
+}
 
 // createIdentity creates an identity with the given username and returns it with the path of its API
 // keys.
@@ -210,4 +221,241 @@ func TestAPIKeys_OfAnotherIdentity(t *testing.T) {
 
 	// 3. Get through ada.
 	api.Get(adaKeysPath + "/" + key.ID.String()).AssertStatus(http.StatusOK)
+}
+
+// TestAuthentication_Required sends requests without a credential:
+//
+//  1. To every route of the identities, their API keys and the groups: 401 with the challenge.
+//  2. To the identities again, as the first start's admin: only admin exists, so nothing was created.
+func TestAuthentication_Required(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	id := uuid.NewV4().String()
+
+	// 1. Send requests without a credential.
+	for _, route := range []struct{ method, target string }{
+		{http.MethodGet, identitiesPath},
+		{http.MethodPost, identitiesPath},
+		{http.MethodGet, identitiesPath + "/" + id},
+		{http.MethodPut, identitiesPath + "/" + id},
+		{http.MethodDelete, identitiesPath + "/" + id},
+		{http.MethodGet, identitiesPath + "/" + id + "/api-keys"},
+		{http.MethodPost, identitiesPath + "/" + id + "/api-keys"},
+		{http.MethodGet, identitiesPath + "/" + id + "/api-keys/" + id},
+		{http.MethodDelete, identitiesPath + "/" + id + "/api-keys/" + id},
+		{http.MethodGet, "/api/v1/groups"},
+		{http.MethodPost, "/api/v1/groups"},
+		{http.MethodGet, "/api/v1/groups/" + id},
+		{http.MethodPut, "/api/v1/groups/" + id},
+		{http.MethodDelete, "/api/v1/groups/" + id},
+		{http.MethodGet, "/api/v1/groups/" + id + "/members"},
+		{http.MethodPut, "/api/v1/groups/" + id + "/members/" + id},
+		{http.MethodDelete, "/api/v1/groups/" + id + "/members/" + id},
+	} {
+		body := ""
+		if route.method == http.MethodPost || route.method == http.MethodPut {
+			body = `{"username":"ada","displayName":"Ada","name":"ada"}`
+		}
+		assertUnauthorized(t, api.Anonymous().Send(route.method, route.target, body))
+	}
+
+	// 2. List the identities as admin.
+	assert.Len(t, apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data, 1)
+}
+
+// TestAuthentication_RejectedKeys sends requests with keys that aren't any API key's, all of which get
+// the same 401 with the challenge, whatever the reason.
+func TestAuthentication_RejectedKeys(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	_, keysPath := createIdentity(api, "ada")
+	key := createKey(api, keysPath, "ci").Key
+
+	for name, rejected := range map[string]string{
+		"without the prefix": "not-a-key",
+		"only the prefix":    "psk_",
+		"unknown":            "psk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"altered":            key + "A",
+		"lowercased":         strings.ToLower(key),
+		"without the suffix": key[:len(key)-4],
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assertUnauthorized(t, api.For(t).WithHeader("X-API-Key", rejected).Get(identitiesPath))
+		})
+	}
+}
+
+// TestAuthentication_KeyActsAsItsIdentity follows the requests of one key of ada:
+//
+//  1. Create ada as admin, then a key of hers: it has not been used.
+//  2. Create grace with ada's key: 201, attributed to ada rather than admin.
+//  3. Replace grace with ada's key: 200, the update attributed to ada.
+//  4. Create a key of grace with ada's key: 201, attributed to ada, but belonging to grace.
+//  5. Get ada's key: its last use is now recorded.
+func TestAuthentication_KeyActsAsItsIdentity(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create ada and her key.
+	ada, adaKeysPath := createIdentity(api, "ada")
+	key := createKey(api, adaKeysPath, "ci")
+	assert.Nil(t, key.LastUsedAt)
+	asAda := api.WithHeader("X-API-Key", key.Key)
+
+	// 2. Create grace.
+	grace, graceKeysPath := createIdentity(asAda, "grace")
+	assert.Equal(t, ada.ID, grace.CreatedBy)
+
+	// 3. Replace grace.
+	replaced := apitest.DecodeResource[identity](asAda.Put(identitiesPath+"/"+grace.ID.String(),
+		`{"username":"grace","displayName":"Grace Hopper"}`), http.StatusOK)
+	assert.Equal(t, ada.ID, replaced.UpdatedBy)
+
+	// 4. Create a key of grace.
+	graceKey := createKey(asAda, graceKeysPath, "ci")
+	assert.Equal(t, ada.ID, graceKey.CreatedBy)
+	assert.Equal(t, grace.ID, graceKey.IdentityID)
+
+	// 5. Get ada's key.
+	used := apitest.DecodeResource[apiKey](api.Get(adaKeysPath+"/"+key.ID.String()), http.StatusOK)
+	if assert.NotNil(t, used.LastUsedAt) {
+		assert.WithinDuration(t, time.Now(), *used.LastUsedAt, time.Minute)
+	}
+}
+
+// TestAuthentication_DeletedKeyStopsWorking checks that revoking one key takes effect at once and
+// leaves the identity's others alone:
+//
+//  1. Create ada with two keys: both work.
+//  2. Delete the first: 204.
+//  3. Use both: 401 with the challenge for the first, and the second still works.
+func TestAuthentication_DeletedKeyStopsWorking(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	_, keysPath := createIdentity(api, "ada")
+	first, second := createKey(api, keysPath, "first"), createKey(api, keysPath, "second")
+	api.WithHeader("X-API-Key", first.Key).Get(identitiesPath).AssertStatus(http.StatusOK)
+	api.WithHeader("X-API-Key", second.Key).Get(identitiesPath).AssertStatus(http.StatusOK)
+
+	// 2. Delete the first.
+	api.Delete(keysPath + "/" + first.ID.String()).AssertNoContent()
+
+	// 3. Use both.
+	assertUnauthorized(t, api.WithHeader("X-API-Key", first.Key).Get(identitiesPath))
+	api.WithHeader("X-API-Key", second.Key).Get(identitiesPath).AssertStatus(http.StatusOK)
+}
+
+// TestAuthentication_DeletedIdentityStopsWorking checks that the keys of an identity don't outlive it:
+//
+//  1. Create ada with a key: it works.
+//  2. Delete ada: 204.
+//  3. Use the key: 401 with the challenge.
+func TestAuthentication_DeletedIdentityStopsWorking(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, keysPath := createIdentity(api, "ada")
+	asAda := api.WithHeader("X-API-Key", createKey(api, keysPath, "ci").Key)
+	asAda.Get(identitiesPath).AssertStatus(http.StatusOK)
+
+	// 2. Delete ada.
+	api.Delete(identitiesPath + "/" + ada.ID.String()).AssertNoContent()
+
+	// 3. Use the key.
+	assertUnauthorized(t, asAda.Get(identitiesPath))
+}
+
+// TestAuthentication_ExpiredKeyStopsWorking checks that a key works until its expiry only:
+//
+//  1. Create ada with a key that expires shortly: it works.
+//  2. Wait for the expiry, then use the key: 401 with the challenge.
+//  3. Get the key: it still exists, and its last use is from before the expiry.
+func TestAuthentication_ExpiredKeyStopsWorking(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	_, keysPath := createIdentity(api, "ada")
+	expiresAt := time.Now().Add(3 * time.Second).UTC()
+	created := apitest.DecodeResource[createdAPIKey](
+		api.Post(keysPath, `{"name":"ci","expiresAt":"`+expiresAt.Format(time.RFC3339Nano)+`"}`), http.StatusCreated)
+	asAda := api.WithHeader("X-API-Key", created.Key)
+	asAda.Get(identitiesPath).AssertStatus(http.StatusOK)
+
+	// 2. Wait for the expiry.
+	assert.Eventually(t, func() bool {
+		return asAda.Get(identitiesPath).Code == http.StatusUnauthorized
+	}, 30*time.Second, 100*time.Millisecond)
+	assertUnauthorized(t, asAda.Get(identitiesPath))
+
+	// 3. Get the key.
+	got := apitest.DecodeResource[apiKey](api.Get(keysPath+"/"+created.ID.String()), http.StatusOK)
+	if assert.NotNil(t, got.LastUsedAt) {
+		assert.True(t, got.LastUsedAt.Before(expiresAt))
+	}
+}
+
+// TestAuthentication_FirstStart checks what the first start leaves behind, and that its key can be
+// replaced as its log message asks:
+//
+//  1. List the identities: admin alone, attributed to pkgsilo itself.
+//  2. List admin's keys: bootstrap alone, which never expires, attributed to pkgsilo itself and last
+//     used by these requests.
+//  3. Create a key of admin with the bootstrap key: 201, attributed to admin.
+//  4. Delete the bootstrap key with the new key: 204.
+//  5. Use both: 401 with the challenge for the bootstrap key, and the new key still works.
+func TestAuthentication_FirstStart(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. List the identities.
+	identities := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data
+	require.Len(t, identities, 1)
+	admin := identities[0]
+	assert.Equal(t, "admin", admin.Username)
+	assert.Equal(t, uuid.Nil(), admin.CreatedBy)
+
+	// 2. List admin's keys.
+	keysPath := identitiesPath + "/" + admin.ID.String() + "/api-keys"
+	keys := apitest.DecodeCollection[apiKey](api.Get(keysPath), http.StatusOK).Data
+	require.Len(t, keys, 1)
+	bootstrap := keys[0]
+	assert.Equal(t, "bootstrap", bootstrap.Name)
+	assert.Nil(t, bootstrap.ExpiresAt)
+	assert.NotNil(t, bootstrap.LastUsedAt)
+	assert.Equal(t, uuid.Nil(), bootstrap.CreatedBy)
+
+	// 3. Create a key.
+	own := createKey(api, keysPath, "own")
+	assert.Equal(t, admin.ID, own.CreatedBy)
+
+	// 4. Delete the bootstrap key.
+	asOwn := api.WithHeader("X-API-Key", own.Key)
+	asOwn.Delete(keysPath + "/" + bootstrap.ID.String()).AssertNoContent()
+
+	// 5. Use both.
+	assertUnauthorized(t, api.Get(identitiesPath))
+	asOwn.Get(identitiesPath).AssertStatus(http.StatusOK)
+}
+
+// TestAuthentication_RoutingProblems checks that authenticated requests that match no route still get
+// the problems of the application router, past the authentication's route group:
+//
+//  1. Get an unknown path below the identities: 404 with the generic problem.
+//  2. Patch the identities, which has no such method: 405 with the generic problem.
+func TestAuthentication_RoutingProblems(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Get an unknown path.
+	api.Get(identitiesPath + "/" + uuid.NewV4().String() + "/unknown").
+		AssertProblem(envelope.NotFoundProblem.New(envelope.Occurrence{}))
+
+	// 2. Patch the identities.
+	api.Send(http.MethodPatch, identitiesPath, "").
+		AssertProblem(envelope.MethodNotAllowedProblem.New(envelope.Occurrence{}))
 }

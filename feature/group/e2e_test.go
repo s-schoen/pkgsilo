@@ -52,6 +52,12 @@ func createIdentity(api *apitest.Client, username string) uuid.UUID {
 	return apitest.DecodeResource[identity](resp, http.StatusCreated).ID
 }
 
+// adminID returns the ID of the identity that the client of apptest.New authenticates as: the one that
+// the first start created, before all others.
+func adminID(api *apitest.Client) uuid.UUID {
+	return apitest.DecodeCollection[identity](api.Get(identitiesPath+"?limit=1"), http.StatusOK).Data[0].ID
+}
+
 // memberIDs lists the members of the group at groupPath and returns their identity IDs, in order.
 func memberIDs(api *apitest.Client, groupPath string) []uuid.UUID {
 	members := apitest.DecodeCollection[member](api.Get(groupPath+"/members"), http.StatusOK).Data
@@ -216,7 +222,7 @@ func TestGroups_Members(t *testing.T) {
 	if assert.Len(t, first.Data, 2) {
 		assert.Equal(t, ada, first.Data[0].IdentityID, "members are listed in the order they were added")
 		assert.Equal(t, grace, first.Data[1].IdentityID)
-		assert.Equal(t, uuid.Nil(), first.Data[0].CreatedBy, "the system actor added ada")
+		assert.Equal(t, adminID(api), first.Data[0].CreatedBy, "the change is attributed to the caller")
 		assert.WithinDuration(t, time.Now(), first.Data[0].CreatedAt, time.Minute)
 	}
 	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, first.Pagination)

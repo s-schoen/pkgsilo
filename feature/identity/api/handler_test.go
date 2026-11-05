@@ -94,7 +94,7 @@ func TestHandler_List_InvalidPagination(t *testing.T) {
 func TestHandler_Create(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Create(mock.Anything, audit.SystemActor(), adaInput).Return(ada, nil)
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, adaInput).Return(ada, nil)
 
 	api.Post("/identities", adaBody).AssertCreated(adaPath, adaJSON)
 }
@@ -110,7 +110,7 @@ func TestHandler_Get(t *testing.T) {
 func TestHandler_Replace(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Replace(mock.Anything, audit.SystemActor(), ada.ID, adaInput).Return(ada, nil)
+	svc.EXPECT().Replace(mock.Anything, apitest.Actor, ada.ID, adaInput).Return(ada, nil)
 
 	api.Put(adaPath, adaBody).AssertResource(adaJSON)
 }

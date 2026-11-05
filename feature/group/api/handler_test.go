@@ -102,7 +102,7 @@ func TestHandler_List_Empty(t *testing.T) {
 func TestHandler_Create(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Create(mock.Anything, audit.SystemActor(), maintainersInput).Return(maintainers, nil)
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, maintainersInput).Return(maintainers, nil)
 
 	api.Post("/groups", maintainersBody).AssertCreated(maintainersPath, maintainersJSON)
 }
@@ -118,7 +118,7 @@ func TestHandler_Get(t *testing.T) {
 func TestHandler_Replace(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Replace(mock.Anything, audit.SystemActor(), maintainers.ID, maintainersInput).Return(maintainers, nil)
+	svc.EXPECT().Replace(mock.Anything, apitest.Actor, maintainers.ID, maintainersInput).Return(maintainers, nil)
 
 	api.Put(maintainersPath, maintainersBody).AssertResource(maintainersJSON)
 }
@@ -161,7 +161,7 @@ func TestHandler_ListMembers_Empty(t *testing.T) {
 func TestHandler_AddMember(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().AddMember(mock.Anything, audit.SystemActor(), maintainers.ID, ada.IdentityID).Return(nil)
+	svc.EXPECT().AddMember(mock.Anything, apitest.Actor, maintainers.ID, ada.IdentityID).Return(nil)
 
 	api.Put(adaPath, "").AssertNoContent()
 }

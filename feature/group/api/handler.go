@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"pkgsilo/core/audit"
+	"pkgsilo/core/authn"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/feature/group/service"
@@ -68,7 +68,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.service.Create(r.Context(), audit.SystemActor(), body.toInput())
+	group, err := h.service.Create(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -103,7 +103,7 @@ func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.service.Replace(r.Context(), audit.SystemActor(), id, body.toInput())
+	group, err := h.service.Replace(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -166,7 +166,7 @@ func (h *Handler) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.AddMember(r.Context(), audit.SystemActor(), id, identityID); err != nil {
+	if err := h.service.AddMember(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, identityID); err != nil {
 		h.writeError(w, r, err)
 		return
 	}

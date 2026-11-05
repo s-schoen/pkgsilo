@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/audit"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/pagination"
 	"pkgsilo/feature/apikey/service"
@@ -95,7 +94,7 @@ func TestHandler_Create(t *testing.T) {
 	created := service.CreatedAPIKey{APIKey: ciKey, Key: "psk_NEWKEY"}
 	expiresAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	in := service.APIKeyInput{Name: "ci", ExpiresAt: &expiresAt}
-	svc.EXPECT().Create(mock.Anything, audit.SystemActor(), ciKey.IdentityID, in).Return(created, nil)
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciKey.IdentityID, in).Return(created, nil)
 
 	resp := api.Post(keysPath, `{"name":"ci","expiresAt":"`+expiresAt.Format(time.RFC3339)+`"}`)
 
@@ -107,7 +106,7 @@ func TestHandler_Create_NeverExpires(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
 	created := service.APIKey{IdentityID: ciKey.IdentityID, Name: "ci"}
-	svc.EXPECT().Create(mock.Anything, audit.SystemActor(), ciKey.IdentityID, service.APIKeyInput{Name: "ci"}).
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciKey.IdentityID, service.APIKeyInput{Name: "ci"}).
 		Return(service.CreatedAPIKey{APIKey: created, Key: "psk_NEWKEY"}, nil)
 
 	got := apitest.DecodeResource[CreatedKeyResponse](api.Post(keysPath, `{"name":"ci"}`), http.StatusCreated)
@@ -222,7 +221,7 @@ func TestHandler_EndpointErrors(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		t.Parallel()
 		api, svc := newTestClient(t, loggertest.Discard())
-		svc.EXPECT().Create(mock.Anything, audit.SystemActor(), ciKey.IdentityID, service.APIKeyInput{Name: "ci"}).
+		svc.EXPECT().Create(mock.Anything, apitest.Actor, ciKey.IdentityID, service.APIKeyInput{Name: "ci"}).
 			Return(service.CreatedAPIKey{}, notFound)
 
 		resp := api.Post(keysPath, `{"name":"ci"}`)
