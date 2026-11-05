@@ -36,6 +36,9 @@ component_management:
     - component_id: health
       paths:
         - "feature/health/**"
+    - component_id: apikey
+      paths:
+        - "feature/apikey/**"
     - component_id: app
       name: app and cmd
       paths:

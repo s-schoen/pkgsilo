@@ -9,6 +9,9 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"pkgsilo/core/router"
+	apikeyapi "pkgsilo/feature/apikey/api"
+	apikeyrepo "pkgsilo/feature/apikey/repository"
+	apikeyservice "pkgsilo/feature/apikey/service"
 	groupapi "pkgsilo/feature/group/api"
 	grouprepo "pkgsilo/feature/group/repository"
 	groupservice "pkgsilo/feature/group/service"
@@ -21,16 +24,19 @@ import (
 )
 
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
-// on the router that opts configures. Requests and errors are logged to logger.
-func NewHandler(opts router.Options, db *sqlx.DB, logger *slog.Logger) http.Handler {
+// on the router that opts configures. API keys are hashed under the secret apiKeyPepper. Requests and
+// errors are logged to logger.
+func NewHandler(opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger) http.Handler {
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db))
 	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db))
+	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), apiKeyPepper)
 
 	r := router.New(opts, logger)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Mount("/health", healthapi.NewHandler(health, logger).Routes())
 		r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
+		r.Mount("/identities/{identityID}/api-keys", apikeyapi.NewHandler(apiKeys, logger).Routes())
 		r.Mount("/groups", groupapi.NewHandler(groups, logger).Routes())
 	})
 

@@ -19,6 +19,12 @@ packages:
   pkgsilo/feature/group/service:
     interfaces:
       GroupService: {}
+  pkgsilo/feature/apikey/repository:
+    interfaces:
+      APIKeyRepository: {}
+  pkgsilo/feature/apikey/service:
+    interfaces:
+      APIKeyService: {}
   pkgsilo/feature/health/repository:
     interfaces:
       HealthRepository: {}

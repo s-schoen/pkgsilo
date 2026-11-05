@@ -15,6 +15,9 @@ import (
 	"pkgsilo/test/databasetest"
 )
 
+// apiKeyPepper is the secret key of the API key hashes in the tests' databases.
+const apiKeyPepper = "test-pepper-of-at-least-32-characters"
+
 // New returns a client for the application, wired as cmd/main.go serves it, on a new database with
 // all migrations applied. The application logs to the test's output, which is shown for failed
 // tests and with -v. New skips the test in short mode.
@@ -24,5 +27,5 @@ func New(t *testing.T) *apitest.Client {
 	db := databasetest.New(t)
 	log := logger.New(t.Output(), logger.Options{Level: slog.LevelInfo})
 
-	return apitest.NewClient(t, app.NewHandler(router.Options{}, db, log))
+	return apitest.NewClient(t, app.NewHandler(router.Options{}, db, []byte(apiKeyPepper), log))
 }

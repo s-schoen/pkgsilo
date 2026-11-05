@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testPepper = "test-pepper-of-at-least-32-characters"
+
 func TestLoad_Defaults(t *testing.T) {
 	// Empty values fall back to the defaults, isolating the test from the shell environment.
 	t.Setenv("ENV", "")
@@ -17,6 +19,7 @@ func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("TRUSTED_PROXIES", "")
 	t.Setenv("DATABASE_MAX_CONNS", "")
 	t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
+	t.Setenv("API_KEY_PEPPER", testPepper)
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -37,6 +40,7 @@ func TestLoad_FromEnv(t *testing.T) {
 	t.Setenv("TRUSTED_PROXIES", "10.0.0.1, 192.168.0.0/16")
 	t.Setenv("DATABASE_URL", "postgres://db.internal/pkgsilo")
 	t.Setenv("DATABASE_MAX_CONNS", "25")
+	t.Setenv("API_KEY_PEPPER", testPepper)
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -50,6 +54,7 @@ func TestLoad_FromEnv(t *testing.T) {
 	}, cfg.TrustedProxies)
 	assert.Equal(t, "postgres://db.internal/pkgsilo", cfg.DatabaseURL)
 	assert.Equal(t, 25, cfg.DatabaseMaxConns)
+	assert.Equal(t, Pepper(testPepper), cfg.APIKeyPepper)
 }
 
 func TestLoad_Invalid(t *testing.T) {
@@ -58,18 +63,30 @@ func TestLoad_Invalid(t *testing.T) {
 		"TRUSTED_PROXIES":    "10.0.0.1,proxy.local",
 		"DATABASE_URL":       "",
 		"DATABASE_MAX_CONNS": "many",
+		"API_KEY_PEPPER":     "",
 	}
 
 	for key, value := range tests {
 		t.Run(key, func(t *testing.T) {
-			// A valid required value, so each case fails only because of its own key.
+			// Valid required values, so each case fails only because of its own key.
 			t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
+			t.Setenv("API_KEY_PEPPER", testPepper)
 			t.Setenv(key, value)
 
 			_, err := Load()
 			assert.Error(t, err)
 		})
 	}
+}
+
+func TestLoad_ShortPepper(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
+	t.Setenv("API_KEY_PEPPER", "too-short-to-be-a-pepper")
+
+	_, err := Load()
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "too-short-to-be-a-pepper", "errors are logged, so they must not hold the secret")
 }
 
 func TestPrefixes_UnmarshalText(t *testing.T) {
