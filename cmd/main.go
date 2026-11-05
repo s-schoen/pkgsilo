@@ -57,6 +57,15 @@ func run() error {
 
 	log.Info("database connected")
 
+	apiKey, err := app.Bootstrap(ctx, db, cfg.APIKeyPepper)
+	if err != nil {
+		return fmt.Errorf("bootstrap: %w", err)
+	}
+	if apiKey != "" {
+		log.Warn("created identity admin with an api key that never expires: create your own key and delete this one",
+			"api_key", apiKey)
+	}
+
 	h := app.NewHandler(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, db, cfg.APIKeyPepper, log)
 
 	if err := server.Run(ctx, server.Options{Addr: cfg.HTTPAddr}, log, h); err != nil {
