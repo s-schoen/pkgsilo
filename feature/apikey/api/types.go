@@ -26,7 +26,10 @@ func (r CreateKeyRequest) Validate() error {
 			request.NoControlCharacters,
 			validation.RuneLength(1, 128),
 		),
-		validation.Field(&r.ExpiresAt, validation.Min(time.Now()).Exclusive().Error("must be in the future")),
+		validation.Field(&r.ExpiresAt,
+			// Without ValidateEmpty, the rule skips the zero time as empty.
+			validation.Min(time.Now()).Exclusive().ValidateEmpty().Error("must be in the future"),
+		),
 	)
 }
 

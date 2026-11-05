@@ -13,7 +13,7 @@ import (
 
 func TestCreateKeyRequest_Validate(t *testing.T) {
 	t.Parallel()
-	future, past := time.Now().Add(time.Minute), time.Now().Add(-time.Minute)
+	future, past, zero := time.Now().Add(time.Minute), time.Now().Add(-time.Minute), time.Time{}
 	tests := []struct {
 		name      string
 		keyName   string
@@ -30,6 +30,7 @@ func TestCreateKeyRequest_Validate(t *testing.T) {
 		{name: "name NUL", keyName: "ci\x00", wantInvalid: []string{"name"}},
 		{name: "name line break", keyName: "ci\nkey", wantInvalid: []string{"name"}},
 		{name: "expired", keyName: "ci", expiresAt: &past, wantInvalid: []string{"expiresAt"}},
+		{name: "expires at zero time", keyName: "ci", expiresAt: &zero, wantInvalid: []string{"expiresAt"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
