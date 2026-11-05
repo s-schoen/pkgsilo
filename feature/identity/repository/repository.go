@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"uuid"
 
-	"github.com/jmoiron/sqlx"
+	"pkgsilo/core/database"
 )
 
 // IdentityRepository stores identity records.
@@ -28,13 +28,13 @@ const identityColumns = "id, username, display_name, created_by, updated_by, cre
 
 // PostgresIdentityRepository stores identity records in the identities table of PostgreSQL.
 type PostgresIdentityRepository struct {
-	db *sqlx.DB
+	db database.Querier
 }
 
 var _ IdentityRepository = (*PostgresIdentityRepository)(nil)
 
 // NewPostgresIdentityRepository returns a PostgresIdentityRepository that stores records in db.
-func NewPostgresIdentityRepository(db *sqlx.DB) *PostgresIdentityRepository {
+func NewPostgresIdentityRepository(db database.Querier) *PostgresIdentityRepository {
 	return &PostgresIdentityRepository{db: db}
 }
 
