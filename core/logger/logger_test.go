@@ -2,6 +2,7 @@ package logger_test
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,4 +47,29 @@ func TestLogger_AddsRequestIDFromContext(t *testing.T) {
 	assert.Equal(t, "req-1", entries[1]["request_id"])
 	assert.Equal(t, map[string]any{"request_id": "req-1"}, entries[2]["grp"])
 	assert.NotContains(t, entries[3], "request_id")
+}
+
+func TestLogger_AddsLogAttrsFromContext(t *testing.T) {
+	t.Parallel()
+	logger, buf := loggertest.NewJSON()
+
+	var handled *http.Request
+	h := middleware.RequestLogger(loggertest.Discard())(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		handled = r
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	ctx := handled.Context()
+	middleware.AddLogAttrs(ctx, slog.String("identity_id", "ada"))
+
+	logger.InfoContext(ctx, "plain")
+	logger.With("component", "test").InfoContext(ctx, "derived via With")
+	logger.InfoContext(t.Context(), "no request")
+
+	entries := loggertest.Entries(t, buf)
+	require.Len(t, entries, 3)
+
+	assert.Equal(t, "ada", entries[0]["identity_id"])
+	assert.Equal(t, "ada", entries[1]["identity_id"])
+	assert.NotContains(t, entries[2], "identity_id")
 }

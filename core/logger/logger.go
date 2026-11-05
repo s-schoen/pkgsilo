@@ -20,7 +20,8 @@ type Options struct {
 }
 
 // New returns a colored, human-readable logger in development and a JSON logger otherwise.
-// Records logged with a request context automatically include its request ID.
+// Records logged with a request context automatically include its request ID and the attributes
+// added with middleware.AddLogAttrs.
 func New(w io.Writer, opts Options) *slog.Logger {
 	var h slog.Handler
 	if opts.Dev {
@@ -44,6 +45,7 @@ func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	if id := middleware.RequestIDFromContext(ctx); id != "" {
 		r.AddAttrs(slog.String("request_id", id)) //nolint:sloglint // The one place that adds the request ID.
 	}
+	r.AddAttrs(middleware.LogAttrsFromContext(ctx)...)
 
 	return h.Handler.Handle(ctx, r) //nolint:wrapcheck // A decorating handler passes errors through unchanged.
 }

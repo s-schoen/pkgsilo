@@ -9,15 +9,17 @@ import (
 )
 
 // RequestLogger logs every request once it has been handled. Responses with a 5xx status
-// are logged at error level. The request ID is added by the logger's context handler.
+// are logged at error level. The request ID and the attributes of AddLogAttrs are added by the
+// logger's context handler.
 func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			// chi's wrapper keeps optional interfaces like http.Flusher and http.Hijacker intact.
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			ctx := withLogAttrs(r.Context())
 
-			next.ServeHTTP(ww, r)
+			next.ServeHTTP(ww, r.WithContext(ctx))
 
 			status := ww.Status()
 			if status == 0 {
@@ -29,13 +31,13 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 				level = slog.LevelError
 			}
 
-			logger.LogAttrs(r.Context(), level, "request",
+			logger.LogAttrs(ctx, level, "request",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.Int("status", status),
 				slog.Int("bytes", ww.BytesWritten()),
 				slog.Duration("duration", time.Since(start)),
-				slog.Any("client_ip", ClientIPFromContext(r.Context())),
+				slog.Any("client_ip", ClientIPFromContext(ctx)),
 			)
 		})
 	}
