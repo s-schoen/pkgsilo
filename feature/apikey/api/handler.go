@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"pkgsilo/core/audit"
+	"pkgsilo/core/authn"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/feature/apikey/service"
@@ -76,7 +76,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := h.service.Create(r.Context(), audit.SystemActor(), identity, body.toInput())
+	key, err := h.service.Create(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, identity, body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return

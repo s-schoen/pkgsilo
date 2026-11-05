@@ -10,13 +10,13 @@ import (
 	"pkgsilo/test/apptest"
 )
 
-// TestHealth_DatabaseReachable gets the health with the database up: 200, healthy, with the database
-// component healthy.
+// TestHealth_DatabaseReachable gets the health with the database up and without a credential, since
+// monitoring has none: 200, healthy, with the database component healthy.
 func TestHealth_DatabaseReachable(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
 
-	api.Get("/api/v1/health").AssertJSON(http.StatusOK, `{
+	api.Anonymous().Get("/api/v1/health").AssertJSON(http.StatusOK, `{
 		"status": "healthy",
 		"service": "pkgsilo",
 		"components": [{"name":"database","status":"healthy"}]

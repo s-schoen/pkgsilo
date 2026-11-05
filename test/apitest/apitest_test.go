@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/authn"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/middleware"
 	"pkgsilo/core/request"
@@ -105,6 +106,42 @@ func TestClient_For(t *testing.T) {
 	assert.True(t, rec.Failed(), "the failure must be reported to the client's new test")
 }
 
+// newHeaderClient returns a client for a handler that answers with the request's X-Test header.
+func newHeaderClient(t *testing.T) *Client {
+	t.Helper()
+
+	return NewClient(t, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		_, _ = io.WriteString(w, req.Header.Get("X-Test"))
+	}))
+}
+
+func TestClient_WithHeader(t *testing.T) {
+	t.Parallel()
+	api := newHeaderClient(t)
+	withHeader := api.WithHeader("X-Test", "ada")
+
+	assert.Equal(t, "ada", withHeader.Get("/").Body.String(), "every request of the client holds the header")
+	assert.Empty(t, api.Get("/").Body.String(), "the client it came from stays as it is")
+	assert.Equal(t, "grace", withHeader.WithHeader("X-Test", "grace").Get("/").Body.String(), "the last value wins")
+	assert.Equal(t, "ada", withHeader.For(t).Get("/").Body.String(), "the client of a subtest keeps the header")
+}
+
+func TestClient_WithHeader_RequestWins(t *testing.T) {
+	t.Parallel()
+	api := newHeaderClient(t).WithHeader("X-Test", "ada")
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	req.Header.Set("X-Test", "grace")
+
+	assert.Equal(t, "grace", api.Do(req).Body.String())
+}
+
+func TestClient_Anonymous(t *testing.T) {
+	t.Parallel()
+	api := newHeaderClient(t).WithHeader("X-Test", "ada")
+
+	assert.Empty(t, api.Anonymous().Get("/").Body.String())
+}
+
 func TestMount(t *testing.T) {
 	t.Parallel()
 	api := newTestClient(t)
@@ -114,6 +151,18 @@ func TestMount(t *testing.T) {
 	unmatched.AssertProblem(envelope.NotFoundProblem.New(envelope.Occurrence{}))
 	assert.NotEmpty(t, unmatched.Header().Get(middleware.RequestIDHeader), "the shared middleware must run")
 	api.Get("/items/panic").AssertInternalError()
+}
+
+func TestMount_AuthenticatesAsActor(t *testing.T) {
+	t.Parallel()
+	routes := chi.NewRouter()
+	routes.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		_, _ = io.WriteString(w, authn.PrincipalFrom(req.Context()).IdentityID.String())
+	})
+
+	got := NewClient(t, Mount("/items", routes)).Get("/items")
+
+	assert.Equal(t, Actor.String(), got.Body.String())
 }
 
 // TestResponse_Passes runs every assertion on a response that it matches.
