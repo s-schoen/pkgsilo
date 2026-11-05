@@ -3,6 +3,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -16,6 +17,17 @@ const (
 	databasePingTimeout     = 5 * time.Second
 	databaseConnMaxIdleTime = 5 * time.Minute
 )
+
+// Querier runs the queries of a repository, on the connection pool or in a transaction: *sqlx.DB and
+// *sqlx.Tx implement it, so that the caller decides whether a repository takes part in a transaction.
+type Querier interface {
+	// GetContext scans the single row of the query into dest.
+	GetContext(ctx context.Context, dest any, query string, args ...any) error
+	// SelectContext scans the rows of the query into the slice dest.
+	SelectContext(ctx context.Context, dest any, query string, args ...any) error
+	// ExecContext runs the query without returning rows.
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
 
 // Options configures the database connection.
 type Options struct {

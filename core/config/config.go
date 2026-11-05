@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"github.com/caarlos0/env/v11"
@@ -23,6 +24,8 @@ type Config struct {
 	DatabaseURL string `env:"DATABASE_URL,notEmpty"`
 	// DatabaseMaxConns caps the open connections in the pool.
 	DatabaseMaxConns int `env:"DATABASE_MAX_CONNS" envDefault:"10"`
+	// APIKeyPepper is the secret key of the stored API key hashes. Changing it invalidates every API key.
+	APIKeyPepper Pepper `env:"API_KEY_PEPPER,notEmpty"`
 }
 
 // Load parses the configuration from the process environment.
@@ -33,6 +36,24 @@ func Load() (Config, error) {
 // IsDev reports whether the application runs in the development environment.
 func (c Config) IsDev() bool {
 	return c.Env == "dev"
+}
+
+// minPepperLength is the least number of bytes of a Pepper. Hex-encoded random bytes, as from
+// `openssl rand -hex 32`, then hold at least 128 bits.
+const minPepperLength = 32
+
+// Pepper is a secret key for hashing. Its value is used as raw bytes, whatever its encoding.
+type Pepper []byte
+
+// UnmarshalText parses a pepper of at least minPepperLength bytes. Its error doesn't hold the value.
+func (p *Pepper) UnmarshalText(text []byte) error {
+	if len(text) < minPepperLength {
+		return fmt.Errorf("must be at least %d characters long", minPepperLength)
+	}
+
+	*p = slices.Clone(text)
+
+	return nil
 }
 
 // Prefixes is a list of IP prefixes, parsed from a comma-separated list of IPs and CIDRs.

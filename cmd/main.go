@@ -57,7 +57,7 @@ func run() error {
 
 	log.Info("database connected")
 
-	h := app.NewHandler(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, db, log)
+	h := app.NewHandler(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, db, cfg.APIKeyPepper, log)
 
 	if err := server.Run(ctx, server.Options{Addr: cfg.HTTPAddr}, log, h); err != nil {
 		return fmt.Errorf("run server: %w", err)
