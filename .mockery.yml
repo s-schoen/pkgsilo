@@ -4,6 +4,9 @@ pkgname: mocks
 filename: mocks.go
 structname: "Mock{{.InterfaceName}}"
 packages:
+  pkgsilo/core/authn:
+    interfaces:
+      Authenticator: {}
   pkgsilo/feature/identity/repository:
     interfaces:
       IdentityRepository: {}
