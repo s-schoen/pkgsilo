@@ -7,11 +7,14 @@ import (
 	"net/http"
 	"testing"
 	"time"
+	"uuid"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/envelope"
+	groupapi "pkgsilo/feature/group/api"
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/test/apitest"
 	"pkgsilo/test/apptest"
@@ -148,4 +151,139 @@ func TestIdentities_ListPages(t *testing.T) {
 	last := apitest.DecodeCollection[identity](api.Get(identitiesPath+"?offset=2&limit=2"), http.StatusOK)
 	assert.Equal(t, created[1:], last.Data)
 	assert.Equal(t, envelope.Pagination{Offset: 2, Limit: 2}, last.Pagination)
+}
+
+// addPolicy stores a policy and announces it, like every policy write does. The policies can't be managed
+// through the API yet, so they're written directly.
+func addPolicy(t *testing.T, db *sqlx.DB, source string) {
+	t.Helper()
+
+	id := uuid.NewV4()
+	_, err := db.ExecContext(t.Context(), `
+		INSERT INTO policies (id, name, source, created_by, updated_by, created_at, updated_at)
+		VALUES ($1, $2, $3, $1, $1, now(), now())`,
+		id, id.String(), source,
+	)
+	require.NoError(t, err)
+	_, err = db.ExecContext(t.Context(), `UPDATE policy_revision SET revision = revision + 1`)
+	require.NoError(t, err)
+}
+
+// TestIdentities_OwnIdentityOnly checks what the seeded policies give an identity outside the
+// administrators group, which is reading itself alone:
+//
+//  1. Create ada and grace, each with an API key: 201 for each.
+//  2. As ada, get ada: 200 with ada.
+//  3. As ada, get grace: the same 404 identity-not-found, to the byte, as an identity that doesn't exist.
+//  4. As ada, list the identities: ada alone, without a nextOffset, so that the admin and grace leave no
+//     trace.
+//  5. As ada, list from offset 1: empty, without a nextOffset.
+//  6. As admin, get grace and list the identities: 200 with grace, and all three, so that the first start
+//     has full access through the administrators group.
+func TestIdentities_OwnIdentityOnly(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	grace, _ := apptest.NewIdentity(api, "grace")
+	gracePath := identitiesPath + "/" + grace.ID.String()
+
+	// 2. Get ada.
+	assert.Equal(t, ada, apitest.DecodeResource[identity](asAda.Get(identitiesPath+"/"+ada.ID.String()), http.StatusOK))
+
+	// 3. Get grace.
+	hidden := asAda.Get(gracePath)
+	hidden.AssertProblemType(identityNotFound)
+	missing := asAda.Get(identitiesPath + "/" + uuid.NewV4().String())
+	assert.Equal(t, missing.Body.String(), hidden.Body.String(), "a hidden identity must look like a missing one")
+
+	// 4. List.
+	listed := apitest.DecodeCollection[identity](asAda.Get(identitiesPath), http.StatusOK)
+	assert.Equal(t, []identity{ada}, listed.Data)
+	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 50}, listed.Pagination)
+
+	// 5. List from offset 1.
+	past := apitest.DecodeCollection[identity](asAda.Get(identitiesPath+"?offset=1"), http.StatusOK)
+	assert.Empty(t, past.Data)
+	assert.Equal(t, envelope.Pagination{Offset: 1, Limit: 50}, past.Pagination)
+
+	// 6. As admin.
+	assert.Equal(t, grace, apitest.DecodeResource[identity](api.Get(gracePath), http.StatusOK))
+	all := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data
+	require.Len(t, all, 3)
+	assert.Equal(t, []identity{ada, grace}, all[1:])
+}
+
+// TestIdentities_ListPagesWithHiddenRows pages through what a policy lets an identity read, with hidden
+// identities in between, which must not show in the page sizes. It also shows that a policy applies on the
+// next request and matches through the resource's groups:
+//
+//  1. Create the reader and identities one to six, and the group visible with two, four and six as
+//     members: 201 and 204 for each.
+//  2. As the reader, list the identities: the reader alone, since no policy lets it read more yet.
+//  3. Add a policy that lets the reader read the members of visible.
+//  4. List the first page of 2: the reader and two, and a nextOffset of 2, with hidden one between them.
+//  5. List from offset 2: four and six, without a nextOffset, with hidden three and five around them.
+//  6. Get three: 404 identity-not-found. Get four: 200.
+func TestIdentities_ListPagesWithHiddenRows(t *testing.T) {
+	t.Parallel()
+	api, db := apptest.NewWithDB(t)
+
+	// 1. Create.
+	reader, asReader := apptest.NewIdentity(api, "reader")
+	created := map[string]identity{}
+	for _, username := range []string{"one", "two", "three", "four", "five", "six"} {
+		resp := api.Post(identitiesPath, `{"username":"`+username+`","displayName":"`+username+`"}`)
+		created[username] = apitest.DecodeResource[identity](resp, http.StatusCreated)
+	}
+	group := apitest.DecodeResource[groupapi.GroupResponse](
+		api.Post("/api/v1/groups", `{"name":"visible"}`), http.StatusCreated)
+	for _, username := range []string{"two", "four", "six"} {
+		api.Put("/api/v1/groups/"+group.ID.String()+"/members/"+created[username].ID.String(), "").AssertNoContent()
+	}
+
+	// 2. List before the policy.
+	assert.Equal(t, []identity{reader},
+		apitest.DecodeCollection[identity](asReader.Get(identitiesPath), http.StatusOK).Data)
+
+	// 3. Add the policy.
+	addPolicy(t, db, `permit (
+		principal == Identity::"`+reader.ID.String()+`",
+		action in Action::"read",
+		resource in Group::"`+group.ID.String()+`"
+	);`)
+
+	// 4. List the first page.
+	first := apitest.DecodeCollection[identity](asReader.Get(identitiesPath+"?limit=2"), http.StatusOK)
+	assert.Equal(t, []identity{reader, created["two"]}, first.Data)
+	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, first.Pagination)
+
+	// 5. List the last page.
+	last := apitest.DecodeCollection[identity](asReader.Get(identitiesPath+"?offset=2&limit=2"), http.StatusOK)
+	assert.Equal(t, []identity{created["four"], created["six"]}, last.Data)
+	assert.Equal(t, envelope.Pagination{Offset: 2, Limit: 2}, last.Pagination)
+
+	// 6. Get one by one.
+	asReader.Get(identitiesPath + "/" + created["three"].ID.String()).AssertProblemType(identityNotFound)
+	assert.Equal(t, created["four"],
+		apitest.DecodeResource[identity](asReader.Get(identitiesPath+"/"+created["four"].ID.String()), http.StatusOK))
+}
+
+// TestIdentities_FailingPolicy checks that a policy that fails to evaluate results in an error rather than
+// in access, even for the admin, whom another policy allows everything:
+//
+//  1. Add a forbid that fails to evaluate on every request.
+//  2. Get the admin and list the identities: 500 for both, without details.
+func TestIdentities_FailingPolicy(t *testing.T) {
+	t.Parallel()
+	api, db := apptest.NewWithDB(t)
+	admin := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data[0]
+
+	// 1. Add the policy.
+	addPolicy(t, db, `forbid (principal, action, resource) when { resource.missing == principal };`)
+
+	// 2. Get and list.
+	api.Get(identitiesPath + "/" + admin.ID.String()).AssertInternalError()
+	api.Get(identitiesPath).AssertInternalError()
 }

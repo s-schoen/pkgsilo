@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/authz"
+	authzmocks "pkgsilo/core/authz/mocks"
 	"pkgsilo/core/pagination"
 	"pkgsilo/feature/identity/repository"
 	"pkgsilo/feature/identity/repository/mocks"
@@ -44,15 +46,60 @@ var (
 		UpdatedAt:   stored.UpdatedAt,
 	}
 
+	maintainers = uuid.MustParse("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f")
+	reviewers   = uuid.MustParse("4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a")
+
 	errDB = errors.New("connection refused")
 )
 
+// newTestService returns a service that may do everything, on a mock repository.
 func newTestService(t *testing.T) (*identityService, *mocks.MockIdentityRepository) {
+	t.Helper()
+
+	return newTestServiceWith(t, authz.AllowAll())
+}
+
+// newTestServiceWith returns a service that asks authorizer, on a mock repository.
+func newTestServiceWith(
+	t *testing.T, authorizer authz.Authorizer,
+) (*identityService, *mocks.MockIdentityRepository) {
 	t.Helper()
 
 	repo := mocks.NewMockIdentityRepository(t)
 
-	return newIdentityService(repo, func() time.Time { return now }), repo
+	return newIdentityService(repo, authorizer, func() time.Time { return now }), repo
+}
+
+// newDeciding returns an authorizer that answers actor's requests with a mock decider.
+func newDeciding(t *testing.T) (*authzmocks.MockAuthorizer, *authzmocks.MockDecider) {
+	t.Helper()
+
+	authorizer := authzmocks.NewMockAuthorizer(t)
+	decider := authzmocks.NewMockDecider(t)
+	authorizer.EXPECT().For(mock.Anything, actor).Return(decider, nil)
+
+	return authorizer, decider
+}
+
+// newRecords returns stored records with the given IDs' last bytes, in order.
+func newRecords(lastBytes ...byte) []repository.IdentityRecord {
+	recs := make([]repository.IdentityRecord, len(lastBytes))
+	for i, lastByte := range lastBytes {
+		recs[i] = stored
+		recs[i].ID = uuid.UUID{15: lastByte}
+	}
+
+	return recs
+}
+
+// idsOf returns the IDs' last bytes of the identities, in order.
+func idsOf(identities []Identity) []byte {
+	ids := make([]byte, len(identities))
+	for i, identity := range identities {
+		ids[i] = identity.ID[15]
+	}
+
+	return ids
 }
 
 func TestIdentityService_Create(t *testing.T) {
@@ -99,48 +146,160 @@ func TestIdentityService_Create_GeneratesUniqueIDs(t *testing.T) {
 
 func TestIdentityService_Get(t *testing.T) {
 	t.Parallel()
-	svc, repo := newTestService(t)
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
 	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+	repo.EXPECT().ListMemberships(mock.Anything, []uuid.UUID{stored.ID}).Return([]repository.MembershipRecord{
+		{IdentityID: stored.ID, GroupID: maintainers},
+		{IdentityID: stored.ID, GroupID: reviewers},
+	}, nil)
+	decider.EXPECT().Can(actionRead, authz.Resource{
+		Type: "Identity", ID: stored.ID, Groups: []uuid.UUID{maintainers, reviewers},
+	}).Return(true, nil)
 
-	got, err := svc.Get(t.Context(), stored.ID)
+	got, err := svc.Get(t.Context(), actor, stored.ID)
 	require.NoError(t, err)
 
 	assert.Equal(t, storedIdentity, got)
 }
 
-func TestIdentityService_List(t *testing.T) {
+func TestIdentityService_Get_Hidden(t *testing.T) {
 	t.Parallel()
-	svc, repo := newTestService(t)
-	// The repository is asked for one more record than the page holds.
-	repo.EXPECT().List(mock.Anything, 10, 3).Return([]repository.IdentityRecord{stored, stored}, nil)
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+	repo.EXPECT().ListMemberships(mock.Anything, []uuid.UUID{stored.ID}).Return(nil, nil)
+	decider.EXPECT().Can(actionRead, authz.Resource{Type: "Identity", ID: stored.ID}).Return(false, nil)
 
-	got, err := svc.List(t.Context(), 10, 2)
-	require.NoError(t, err)
+	got, err := svc.Get(t.Context(), actor, stored.ID)
 
-	assert.Equal(t, pagination.Page[Identity]{Items: []Identity{storedIdentity, storedIdentity}}, got)
+	require.ErrorIs(t, err, ErrIdentityNotFound, "a hidden identity must look like a missing one")
+	assert.Equal(t, Identity{}, got)
 }
 
-func TestIdentityService_List_HasMore(t *testing.T) {
+// TestIdentityService_List_Pages cuts the pages out of what the actor may read, with hidden rows between
+// them, so that only the last page can be short and HasMore counts readable rows only.
+func TestIdentityService_List_Pages(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name          string
+		offset, limit int
+		wantIDs       []byte
+		wantHasMore   bool
+	}{
+		{name: "first page", offset: 0, limit: 2, wantIDs: []byte{2, 4}, wantHasMore: true},
+		{name: "middle page", offset: 1, limit: 2, wantIDs: []byte{4, 6}, wantHasMore: true},
+		{name: "full last page, with hidden rows after it", offset: 2, limit: 2, wantIDs: []byte{6, 8}},
+		{name: "short last page", offset: 3, limit: 2, wantIDs: []byte{8}},
+		{name: "all", offset: 0, limit: 50, wantIDs: []byte{2, 4, 6, 8}},
+		{name: "past the end", offset: 4, limit: 2, wantIDs: []byte{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			svc, repo := newTestServiceWith(t, authorizer)
+			repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2, 3, 4, 5, 6, 7, 8, 9), nil)
+			repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
+			decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+				func(_ authz.Action, resource authz.Resource) (bool, error) {
+					return resource.ID[15]%2 == 0, nil
+				},
+			)
+
+			got, err := svc.List(t.Context(), actor, tt.offset, tt.limit)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantIDs, idsOf(got.Items))
+			assert.Equal(t, tt.wantHasMore, got.HasMore)
+			decider.AssertNumberOfCalls(t, "Can", 9)
+		})
+	}
+}
+
+func TestIdentityService_List_TranslatesRecords(t *testing.T) {
 	t.Parallel()
 	svc, repo := newTestService(t)
-	repo.EXPECT().List(mock.Anything, 10, 3).Return([]repository.IdentityRecord{stored, stored, stored}, nil)
+	repo.EXPECT().ListAll(mock.Anything).Return([]repository.IdentityRecord{stored}, nil)
+	repo.EXPECT().ListMemberships(mock.Anything, []uuid.UUID{stored.ID}).Return(nil, nil)
 
-	got, err := svc.List(t.Context(), 10, 2)
+	got, err := svc.List(t.Context(), actor, 0, 10)
 	require.NoError(t, err)
 
-	assert.Equal(t, pagination.Page[Identity]{Items: []Identity{storedIdentity, storedIdentity}, HasMore: true}, got)
+	assert.Equal(t, pagination.Page[Identity]{Items: []Identity{storedIdentity}}, got)
+}
+
+func TestIdentityService_List_NothingReadable(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2), nil)
+	repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
+	decider.EXPECT().Can(actionRead, mock.Anything).Return(false, nil)
+
+	got, err := svc.List(t.Context(), actor, 0, 5)
+	require.NoError(t, err)
+
+	assert.Empty(t, got.Items)
+	assert.False(t, got.HasMore)
 }
 
 func TestIdentityService_List_Empty(t *testing.T) {
 	t.Parallel()
 	svc, repo := newTestService(t)
-	repo.EXPECT().List(mock.Anything, 0, 6).Return(nil, nil)
+	repo.EXPECT().ListAll(mock.Anything).Return(nil, nil)
+	repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
 
-	got, err := svc.List(t.Context(), 0, 5)
+	got, err := svc.List(t.Context(), actor, 0, 5)
 	require.NoError(t, err)
 
 	assert.Empty(t, got.Items)
 	assert.False(t, got.HasMore)
+}
+
+// TestIdentityService_List_LoadsGroupsInBulk checks that one query serves all rows, each of which gets
+// its own groups.
+func TestIdentityService_List_LoadsGroupsInBulk(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	recs := newRecords(1, 2)
+	repo.EXPECT().ListAll(mock.Anything).Return(recs, nil)
+	repo.EXPECT().ListMemberships(mock.Anything, []uuid.UUID{recs[0].ID, recs[1].ID}).
+		Return([]repository.MembershipRecord{
+			{IdentityID: recs[0].ID, GroupID: maintainers},
+			{IdentityID: recs[0].ID, GroupID: reviewers},
+		}, nil).
+		Once()
+	decider.EXPECT().Can(actionRead, authz.Resource{
+		Type: "Identity", ID: recs[0].ID, Groups: []uuid.UUID{maintainers, reviewers},
+	}).Return(true, nil)
+	decider.EXPECT().Can(actionRead, authz.Resource{Type: "Identity", ID: recs[1].ID}).Return(true, nil)
+
+	got, err := svc.List(t.Context(), actor, 0, 5)
+	require.NoError(t, err)
+
+	assert.Len(t, got.Items, 2)
+}
+
+func TestIdentityService_List_ChecksContextBetweenRows(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2, 3), nil)
+	repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
+	decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+		func(authz.Action, authz.Resource) (bool, error) {
+			cancel()
+			return true, nil
+		},
+	).Once()
+
+	_, err := svc.List(ctx, actor, 0, 5)
+
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestIdentityService_Replace(t *testing.T) {
@@ -179,12 +338,28 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 	}
 	get := func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error {
 		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.IdentityRecord{}, repoErr)
-		_, err := svc.Get(ctx, stored.ID)
+		_, err := svc.Get(ctx, actor, stored.ID)
+		return err
+	}
+	getGroups := func(
+		ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error,
+	) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+		repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, repoErr)
+		_, err := svc.Get(ctx, actor, stored.ID)
 		return err
 	}
 	list := func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error {
-		repo.EXPECT().List(mock.Anything, 0, 6).Return(nil, repoErr)
-		_, err := svc.List(ctx, 0, 5)
+		repo.EXPECT().ListAll(mock.Anything).Return(nil, repoErr)
+		_, err := svc.List(ctx, actor, 0, 5)
+		return err
+	}
+	listGroups := func(
+		ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error,
+	) error {
+		repo.EXPECT().ListAll(mock.Anything).Return([]repository.IdentityRecord{stored}, nil)
+		repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, repoErr)
+		_, err := svc.List(ctx, actor, 0, 5)
 		return err
 	}
 	replace := func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error {
@@ -207,7 +382,11 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 		{name: "create unexpected", call: create, repoErr: errDB, wantErr: errDB},
 		{name: "get not found", call: get, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
 		{name: "get unexpected", call: get, repoErr: errDB, wantErr: errDB},
+		{name: "get groups unexpected", call: getGroups, repoErr: errDB, wantErr: errDB},
 		{name: "list unexpected", call: list, repoErr: errDB, wantErr: errDB},
+		// Answered with a logged 500 like any other unexpected error.
+		{name: "list over the ceiling", call: list, repoErr: repository.ErrTooManyRows, wantErr: repository.ErrTooManyRows},
+		{name: "list groups unexpected", call: listGroups, repoErr: errDB, wantErr: errDB},
 		{name: "replace not found", call: replace, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
 		{name: "replace username taken", call: replace, repoErr: repository.ErrDuplicateUsername, wantErr: ErrUsernameTaken},
 		{name: "replace unexpected", call: replace, repoErr: errDB, wantErr: errDB},
@@ -222,6 +401,52 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 			err := tt.call(t.Context(), svc, repo, fmt.Errorf("query: %w", tt.repoErr))
 
 			servicetest.AssertTranslated(t, err, tt.wantErr, tt.repoErr)
+		})
+	}
+}
+
+// TestIdentityService_AuthorizationFails checks that failing to decide is an error and never an answer:
+// not access, and not a missing identity, which would hide a broken policy from the logs.
+func TestIdentityService_AuthorizationFails(t *testing.T) {
+	t.Parallel()
+	errDecision := errors.New("policy failed")
+
+	calls := map[string]func(*identityService) error{
+		"get": func(svc *identityService) error {
+			_, err := svc.Get(t.Context(), actor, stored.ID)
+			return err
+		},
+		"list": func(svc *identityService) error {
+			_, err := svc.List(t.Context(), actor, 0, 5)
+			return err
+		},
+	}
+	for name, call := range calls {
+		t.Run(name+" no decider", func(t *testing.T) {
+			t.Parallel()
+			authorizer := authzmocks.NewMockAuthorizer(t)
+			authorizer.EXPECT().For(mock.Anything, actor).Return(nil, errDecision)
+			// The mock fails the test if the repository is called.
+			svc, _ := newTestServiceWith(t, authorizer)
+
+			err := call(svc)
+
+			require.ErrorIs(t, err, errDecision)
+			assert.NotErrorIs(t, err, ErrIdentityNotFound)
+		})
+		t.Run(name+" no decision", func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			decider.EXPECT().Can(actionRead, mock.Anything).Return(false, errDecision)
+			svc, repo := newTestServiceWith(t, authorizer)
+			repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).Maybe()
+			repo.EXPECT().ListAll(mock.Anything).Return([]repository.IdentityRecord{stored}, nil).Maybe()
+			repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
+
+			err := call(svc)
+
+			require.ErrorIs(t, err, errDecision)
+			assert.NotErrorIs(t, err, ErrIdentityNotFound)
 		})
 	}
 }

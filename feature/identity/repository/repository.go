@@ -7,6 +7,7 @@ import (
 	"uuid"
 
 	"pkgsilo/core/database"
+	"pkgsilo/core/pagination"
 )
 
 // IdentityRepository stores identity records.
@@ -15,8 +16,11 @@ type IdentityRepository interface {
 	Insert(ctx context.Context, rec IdentityRecord) (IdentityRecord, error)
 	// Get returns the record with the given ID.
 	Get(ctx context.Context, id uuid.UUID) (IdentityRecord, error)
-	// List returns up to limit records, skipping the first offset, ordered by creation time.
-	List(ctx context.Context, offset, limit int) ([]IdentityRecord, error)
+	// ListAll returns all records, ordered by creation time. It returns an error wrapping
+	// ErrTooManyRows if there are more than pagination.MaxAllRows.
+	ListAll(ctx context.Context) ([]IdentityRecord, error)
+	// ListMemberships returns the group memberships of the identities with the given IDs, in one query.
+	ListMemberships(ctx context.Context, identityIDs []uuid.UUID) ([]MembershipRecord, error)
 	// Update overwrites the username, display name, UpdatedBy and UpdatedAt of the record with
 	// rec.ID and returns it as stored. CreatedBy and CreatedAt are immutable and ignored.
 	Update(ctx context.Context, rec IdentityRecord) (IdentityRecord, error)
@@ -65,17 +69,35 @@ func (r *PostgresIdentityRepository) Get(ctx context.Context, id uuid.UUID) (Ide
 	return rec, nil
 }
 
-// List returns up to limit records, skipping the first offset, ordered by creation time.
-func (r *PostgresIdentityRepository) List(ctx context.Context, offset, limit int) ([]IdentityRecord, error) {
+// ListAll returns all records, ordered by creation time. It returns an error wrapping ErrTooManyRows if
+// there are more than pagination.MaxAllRows.
+func (r *PostgresIdentityRepository) ListAll(ctx context.Context) ([]IdentityRecord, error) {
 	var recs []IdentityRecord
 	err := r.db.SelectContext(ctx, &recs, `
 		SELECT `+identityColumns+` FROM identities
 		ORDER BY created_at, id
-		LIMIT $1 OFFSET $2`,
-		limit, offset,
+		LIMIT $1`,
+		pagination.MaxAllRows+1,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list identities: %w", err)
+		return nil, fmt.Errorf("list all identities: %w", err)
+	}
+	if len(recs) > pagination.MaxAllRows {
+		return nil, fmt.Errorf("list all identities: over %d: %w", pagination.MaxAllRows, ErrTooManyRows)
+	}
+
+	return recs, nil
+}
+
+// ListMemberships returns the group memberships of the identities with the given IDs, in one query.
+func (r *PostgresIdentityRepository) ListMemberships(
+	ctx context.Context, identityIDs []uuid.UUID,
+) ([]MembershipRecord, error) {
+	var recs []MembershipRecord
+	err := r.db.SelectContext(ctx, &recs,
+		`SELECT identity_id, group_id FROM group_members WHERE identity_id = ANY($1)`, identityIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list identity memberships: %w", err)
 	}
 
 	return recs, nil

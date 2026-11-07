@@ -179,8 +179,8 @@ func (_c *MockIdentityService_Delete_Call) RunAndReturn(run func(ctx context.Con
 }
 
 // Get provides a mock function for the type MockIdentityService
-func (_mock *MockIdentityService) Get(ctx context.Context, id uuid.UUID) (service.Identity, error) {
-	ret := _mock.Called(ctx, id)
+func (_mock *MockIdentityService) Get(ctx context.Context, actor uuid.UUID, id uuid.UUID) (service.Identity, error) {
+	ret := _mock.Called(ctx, actor, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Get")
@@ -188,16 +188,16 @@ func (_mock *MockIdentityService) Get(ctx context.Context, id uuid.UUID) (servic
 
 	var r0 service.Identity
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) (service.Identity, error)); ok {
-		return returnFunc(ctx, id)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) (service.Identity, error)); ok {
+		return returnFunc(ctx, actor, id)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) service.Identity); ok {
-		r0 = returnFunc(ctx, id)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) service.Identity); ok {
+		r0 = returnFunc(ctx, actor, id)
 	} else {
 		r0 = ret.Get(0).(service.Identity)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
-		r1 = returnFunc(ctx, id)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, actor, id)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -211,12 +211,13 @@ type MockIdentityService_Get_Call struct {
 
 // Get is a helper method to define mock.On call
 //   - ctx context.Context
+//   - actor uuid.UUID
 //   - id uuid.UUID
-func (_e *MockIdentityService_Expecter) Get(ctx any, id any) *MockIdentityService_Get_Call {
-	return &MockIdentityService_Get_Call{Call: _e.mock.On("Get", ctx, id)}
+func (_e *MockIdentityService_Expecter) Get(ctx any, actor any, id any) *MockIdentityService_Get_Call {
+	return &MockIdentityService_Get_Call{Call: _e.mock.On("Get", ctx, actor, id)}
 }
 
-func (_c *MockIdentityService_Get_Call) Run(run func(ctx context.Context, id uuid.UUID)) *MockIdentityService_Get_Call {
+func (_c *MockIdentityService_Get_Call) Run(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID)) *MockIdentityService_Get_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -226,9 +227,14 @@ func (_c *MockIdentityService_Get_Call) Run(run func(ctx context.Context, id uui
 		if args[1] != nil {
 			arg1 = args[1].(uuid.UUID)
 		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -239,14 +245,14 @@ func (_c *MockIdentityService_Get_Call) Return(identity service.Identity, err er
 	return _c
 }
 
-func (_c *MockIdentityService_Get_Call) RunAndReturn(run func(ctx context.Context, id uuid.UUID) (service.Identity, error)) *MockIdentityService_Get_Call {
+func (_c *MockIdentityService_Get_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID) (service.Identity, error)) *MockIdentityService_Get_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // List provides a mock function for the type MockIdentityService
-func (_mock *MockIdentityService) List(ctx context.Context, offset int, limit int) (pagination.Page[service.Identity], error) {
-	ret := _mock.Called(ctx, offset, limit)
+func (_mock *MockIdentityService) List(ctx context.Context, actor uuid.UUID, offset int, limit int) (pagination.Page[service.Identity], error) {
+	ret := _mock.Called(ctx, actor, offset, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
@@ -254,16 +260,16 @@ func (_mock *MockIdentityService) List(ctx context.Context, offset int, limit in
 
 	var r0 pagination.Page[service.Identity]
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) (pagination.Page[service.Identity], error)); ok {
-		return returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, int, int) (pagination.Page[service.Identity], error)); ok {
+		return returnFunc(ctx, actor, offset, limit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) pagination.Page[service.Identity]); ok {
-		r0 = returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, int, int) pagination.Page[service.Identity]); ok {
+		r0 = returnFunc(ctx, actor, offset, limit)
 	} else {
 		r0 = ret.Get(0).(pagination.Page[service.Identity])
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
-		r1 = returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, int, int) error); ok {
+		r1 = returnFunc(ctx, actor, offset, limit)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -277,30 +283,36 @@ type MockIdentityService_List_Call struct {
 
 // List is a helper method to define mock.On call
 //   - ctx context.Context
+//   - actor uuid.UUID
 //   - offset int
 //   - limit int
-func (_e *MockIdentityService_Expecter) List(ctx any, offset any, limit any) *MockIdentityService_List_Call {
-	return &MockIdentityService_List_Call{Call: _e.mock.On("List", ctx, offset, limit)}
+func (_e *MockIdentityService_Expecter) List(ctx any, actor any, offset any, limit any) *MockIdentityService_List_Call {
+	return &MockIdentityService_List_Call{Call: _e.mock.On("List", ctx, actor, offset, limit)}
 }
 
-func (_c *MockIdentityService_List_Call) Run(run func(ctx context.Context, offset int, limit int)) *MockIdentityService_List_Call {
+func (_c *MockIdentityService_List_Call) Run(run func(ctx context.Context, actor uuid.UUID, offset int, limit int)) *MockIdentityService_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 int
+		var arg1 uuid.UUID
 		if args[1] != nil {
-			arg1 = args[1].(int)
+			arg1 = args[1].(uuid.UUID)
 		}
 		var arg2 int
 		if args[2] != nil {
 			arg2 = args[2].(int)
 		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -311,7 +323,7 @@ func (_c *MockIdentityService_List_Call) Return(page pagination.Page[service.Ide
 	return _c
 }
 
-func (_c *MockIdentityService_List_Call) RunAndReturn(run func(ctx context.Context, offset int, limit int) (pagination.Page[service.Identity], error)) *MockIdentityService_List_Call {
+func (_c *MockIdentityService_List_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, offset int, limit int) (pagination.Page[service.Identity], error)) *MockIdentityService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

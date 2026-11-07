@@ -44,7 +44,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identities, err := h.service.List(r.Context(), page.Offset, page.Limit)
+	identities, err := h.service.List(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, page.Offset, page.Limit)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -79,7 +79,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identity, err := h.service.Get(r.Context(), id)
+	identity, err := h.service.Get(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id)
 	if err != nil {
 		h.writeError(w, r, err)
 		return

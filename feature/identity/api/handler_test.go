@@ -60,7 +60,8 @@ func newTestClient(t *testing.T, logger *slog.Logger) (*apitest.Client, *mocks.M
 func TestHandler_List(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().List(mock.Anything, 0, 50).Return(pagination.Page[service.Identity]{Items: []service.Identity{ada}}, nil)
+	svc.EXPECT().List(mock.Anything, apitest.Actor, 0, 50).
+		Return(pagination.Page[service.Identity]{Items: []service.Identity{ada}}, nil)
 
 	api.Get("/identities").AssertCollection(`[`+adaJSON+`]`, envelope.Pagination{Offset: 0, Limit: 50})
 }
@@ -69,7 +70,7 @@ func TestHandler_List_NextPage(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
 	page := pagination.Page[service.Identity]{Items: []service.Identity{ada}, HasMore: true}
-	svc.EXPECT().List(mock.Anything, 2, 1).Return(page, nil)
+	svc.EXPECT().List(mock.Anything, apitest.Actor, 2, 1).Return(page, nil)
 
 	api.Get("/identities?offset=2&limit=1").
 		AssertCollection(`[`+adaJSON+`]`, envelope.Pagination{Offset: 2, Limit: 1, NextOffset: new(3)})
@@ -78,7 +79,7 @@ func TestHandler_List_NextPage(t *testing.T) {
 func TestHandler_List_Empty(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().List(mock.Anything, 0, 50).Return(pagination.Page[service.Identity]{}, nil)
+	svc.EXPECT().List(mock.Anything, apitest.Actor, 0, 50).Return(pagination.Page[service.Identity]{}, nil)
 
 	api.Get("/identities").AssertCollection(`[]`, envelope.Pagination{Offset: 0, Limit: 50})
 }
@@ -102,7 +103,7 @@ func TestHandler_Create(t *testing.T) {
 func TestHandler_Get(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Get(mock.Anything, ada.ID).Return(ada, nil)
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, ada.ID).Return(ada, nil)
 
 	api.Get(adaPath).AssertResource(adaJSON)
 }
@@ -165,7 +166,8 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		list = endpoint{
 			method: http.MethodGet, target: "/identities",
 			expect: func(svc *mocks.MockIdentityService, err error) {
-				svc.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).Return(pagination.Page[service.Identity]{}, err)
+				svc.EXPECT().List(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(pagination.Page[service.Identity]{}, err)
 			},
 		}
 		create = endpoint{
@@ -177,7 +179,7 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		get = endpoint{
 			method: http.MethodGet, target: adaPath,
 			expect: func(svc *mocks.MockIdentityService, err error) {
-				svc.EXPECT().Get(mock.Anything, mock.Anything).Return(service.Identity{}, err)
+				svc.EXPECT().Get(mock.Anything, mock.Anything, mock.Anything).Return(service.Identity{}, err)
 			},
 		}
 		replace = endpoint{
@@ -232,7 +234,7 @@ func TestHandler_UnexpectedErrorIsLogged(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	api, svc := newTestClient(t, logger)
-	svc.EXPECT().Get(mock.Anything, ada.ID).Return(service.Identity{}, errors.New("connection refused"))
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, ada.ID).Return(service.Identity{}, errors.New("connection refused"))
 
 	api.Get(adaPath).AssertInternalError()
 
