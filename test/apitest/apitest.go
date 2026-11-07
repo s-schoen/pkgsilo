@@ -99,6 +99,12 @@ func (c *Client) WithHeader(name, value string) *Client {
 	return &Client{tb: c.tb, handler: c.handler, header: header}
 }
 
+// WithHandler returns a client that sends requests with the same headers to h, such as another instance of
+// the same application.
+func (c *Client) WithHandler(h http.Handler) *Client {
+	return &Client{tb: c.tb, handler: h, header: c.header}
+}
+
 // Anonymous returns a client for the same handler that sets no headers on its requests of its own, so
 // that they hold no credential.
 func (c *Client) Anonymous() *Client {

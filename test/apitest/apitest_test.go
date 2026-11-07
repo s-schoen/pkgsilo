@@ -135,6 +135,17 @@ func TestClient_WithHeader_RequestWins(t *testing.T) {
 	assert.Equal(t, "grace", api.Do(req).Body.String())
 }
 
+func TestClient_WithHandler(t *testing.T) {
+	t.Parallel()
+	api := newHeaderClient(t).WithHeader("X-Test", "ada")
+	other := api.WithHandler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		_, _ = io.WriteString(w, "other "+req.Header.Get("X-Test"))
+	}))
+
+	assert.Equal(t, "other ada", other.Get("/").Body.String(), "the new handler gets the client's headers")
+	assert.Equal(t, "ada", api.Get("/").Body.String(), "the client it came from stays as it is")
+}
+
 func TestClient_Anonymous(t *testing.T) {
 	t.Parallel()
 	api := newHeaderClient(t).WithHeader("X-Test", "ada")
