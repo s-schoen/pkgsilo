@@ -7,6 +7,7 @@ import (
 	"uuid"
 
 	"pkgsilo/core/database"
+	"pkgsilo/core/pagination"
 )
 
 // GroupRepository stores group records and the member records of each group.
@@ -15,8 +16,9 @@ type GroupRepository interface {
 	Insert(ctx context.Context, rec GroupRecord) (GroupRecord, error)
 	// Get returns the record with the given ID.
 	Get(ctx context.Context, id uuid.UUID) (GroupRecord, error)
-	// List returns up to limit records, skipping the first offset, ordered by creation time.
-	List(ctx context.Context, offset, limit int) ([]GroupRecord, error)
+	// ListAll returns all records, ordered by creation time. It returns an error wrapping ErrTooManyRows if
+	// there are more than pagination.MaxAllRows.
+	ListAll(ctx context.Context) ([]GroupRecord, error)
 	// Update overwrites the name, UpdatedBy and UpdatedAt of the record with rec.ID and returns it
 	// as stored. CreatedBy and CreatedAt are immutable and ignored.
 	Update(ctx context.Context, rec GroupRecord) (GroupRecord, error)
@@ -30,6 +32,9 @@ type GroupRepository interface {
 	ListMembers(ctx context.Context, groupID uuid.UUID, offset, limit int) ([]MemberRecord, error)
 	// DeleteMember removes the member record of the identity from the group.
 	DeleteMember(ctx context.Context, groupID, identityID uuid.UUID) error
+	// ListIdentityGroups returns the IDs of the groups that the identity is a member of, in no particular
+	// order. An identity that doesn't exist is a member of none.
+	ListIdentityGroups(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error)
 }
 
 const (
@@ -77,17 +82,21 @@ func (r *PostgresGroupRepository) Get(ctx context.Context, id uuid.UUID) (GroupR
 	return rec, nil
 }
 
-// List returns up to limit records, skipping the first offset, ordered by creation time.
-func (r *PostgresGroupRepository) List(ctx context.Context, offset, limit int) ([]GroupRecord, error) {
+// ListAll returns all records, ordered by creation time. It returns an error wrapping ErrTooManyRows if
+// there are more than pagination.MaxAllRows.
+func (r *PostgresGroupRepository) ListAll(ctx context.Context) ([]GroupRecord, error) {
 	var recs []GroupRecord
 	err := r.db.SelectContext(ctx, &recs, `
 		SELECT `+groupColumns+` FROM groups
 		ORDER BY created_at, id
-		LIMIT $1 OFFSET $2`,
-		limit, offset,
+		LIMIT $1`,
+		pagination.MaxAllRows+1,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list groups: %w", err)
+		return nil, fmt.Errorf("list all groups: %w", err)
+	}
+	if len(recs) > pagination.MaxAllRows {
+		return nil, fmt.Errorf("list all groups: over %d: %w", pagination.MaxAllRows, ErrTooManyRows)
 	}
 
 	return recs, nil
@@ -182,4 +191,16 @@ func (r *PostgresGroupRepository) DeleteMember(ctx context.Context, groupID, ide
 	}
 
 	return nil
+}
+
+// ListIdentityGroups returns the IDs of the groups that the identity is a member of, in no particular
+// order. An identity that doesn't exist is a member of none.
+func (r *PostgresGroupRepository) ListIdentityGroups(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error) {
+	var groups []uuid.UUID
+	err := r.db.SelectContext(ctx, &groups, `SELECT group_id FROM group_members WHERE identity_id = $1`, identityID)
+	if err != nil {
+		return nil, fmt.Errorf("list identity groups: %w", err)
+	}
+
+	return groups, nil
 }

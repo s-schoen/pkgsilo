@@ -63,7 +63,7 @@ func Bootstrap(ctx context.Context, db *sqlx.DB, apiKeyPepper []byte) (string, e
 		return "", fmt.Errorf("create admin: %w", err)
 	}
 
-	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(tx))
+	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(tx), authz.AllowAll())
 	if err := groups.AddMember(ctx, audit.SystemActor(), administratorsGroupID, admin.ID); err != nil {
 		return "", fmt.Errorf("add admin to administrators: %w", err)
 	}

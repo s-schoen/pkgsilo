@@ -16,6 +16,8 @@ var (
 	ErrIdentityNotFound = errors.New("member identity not found")
 	// ErrMemberNotFound is returned when the group has no member record for the identity.
 	ErrMemberNotFound = errors.New("member record not found")
+	// ErrTooManyRows is returned when loading all records would exceed pagination.MaxAllRows.
+	ErrTooManyRows = errors.New("too many group records to load")
 )
 
 const (

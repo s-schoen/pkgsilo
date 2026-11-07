@@ -4,7 +4,9 @@ import (
 	"errors"
 	"net/http"
 
+	"pkgsilo/core/authz"
 	"pkgsilo/core/envelope"
+	"pkgsilo/core/request"
 	"pkgsilo/feature/group/service"
 	identityapi "pkgsilo/feature/identity/api"
 )
@@ -22,12 +24,20 @@ var (
 	memberNotFoundProblem = memberNotFoundType.New(envelope.Occurrence{
 		Detail: "The identity is not a member of the group.",
 	})
+	forbiddenProblem = envelope.ForbiddenProblem.New(envelope.Occurrence{
+		Detail: "The policies do not allow this action on the group.",
+	})
 )
 
 // writeError answers a service error with its problem. Unexpected errors are logged and
 // answered with 500, without exposing their details.
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	var fieldsDenied *authz.FieldsDeniedError
 	switch {
+	case errors.As(err, &fieldsDenied):
+		envelope.WriteProblem(w, request.FieldsDeniedProblem(fieldsDenied.Fields...))
+	case errors.Is(err, authz.ErrDenied):
+		envelope.WriteProblem(w, forbiddenProblem)
 	case errors.Is(err, service.ErrGroupNotFound):
 		envelope.WriteProblem(w, groupNotFoundProblem)
 	case errors.Is(err, service.ErrGroupNameTaken):

@@ -31,6 +31,13 @@ func Declaration() authz.Declaration {
 	}
 }
 
+// ReadAction returns the action of reading an identity. Other features check it on an identity that a
+// request refers to, such as a new group member, and report an identity that the actor may not read like
+// a missing one. The identity as the resource must carry its groups.
+func ReadAction() authz.Action {
+	return actionRead
+}
+
 // CreatableFields returns the names of the fields that creating an identity sets, each of which has an
 // identity:create:<field> action.
 func CreatableFields() []string {

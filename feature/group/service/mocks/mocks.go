@@ -191,16 +191,16 @@ func (_c *MockGroupService_Create_Call) RunAndReturn(run func(ctx context.Contex
 }
 
 // Delete provides a mock function for the type MockGroupService
-func (_mock *MockGroupService) Delete(ctx context.Context, id uuid.UUID) error {
-	ret := _mock.Called(ctx, id)
+func (_mock *MockGroupService) Delete(ctx context.Context, actor uuid.UUID, id uuid.UUID) error {
+	ret := _mock.Called(ctx, actor, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) error); ok {
-		r0 = returnFunc(ctx, id)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, actor, id)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -214,12 +214,13 @@ type MockGroupService_Delete_Call struct {
 
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
+//   - actor uuid.UUID
 //   - id uuid.UUID
-func (_e *MockGroupService_Expecter) Delete(ctx any, id any) *MockGroupService_Delete_Call {
-	return &MockGroupService_Delete_Call{Call: _e.mock.On("Delete", ctx, id)}
+func (_e *MockGroupService_Expecter) Delete(ctx any, actor any, id any) *MockGroupService_Delete_Call {
+	return &MockGroupService_Delete_Call{Call: _e.mock.On("Delete", ctx, actor, id)}
 }
 
-func (_c *MockGroupService_Delete_Call) Run(run func(ctx context.Context, id uuid.UUID)) *MockGroupService_Delete_Call {
+func (_c *MockGroupService_Delete_Call) Run(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID)) *MockGroupService_Delete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -229,9 +230,14 @@ func (_c *MockGroupService_Delete_Call) Run(run func(ctx context.Context, id uui
 		if args[1] != nil {
 			arg1 = args[1].(uuid.UUID)
 		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -242,14 +248,14 @@ func (_c *MockGroupService_Delete_Call) Return(err error) *MockGroupService_Dele
 	return _c
 }
 
-func (_c *MockGroupService_Delete_Call) RunAndReturn(run func(ctx context.Context, id uuid.UUID) error) *MockGroupService_Delete_Call {
+func (_c *MockGroupService_Delete_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID) error) *MockGroupService_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Get provides a mock function for the type MockGroupService
-func (_mock *MockGroupService) Get(ctx context.Context, id uuid.UUID) (service.Group, error) {
-	ret := _mock.Called(ctx, id)
+func (_mock *MockGroupService) Get(ctx context.Context, actor uuid.UUID, id uuid.UUID) (service.Group, error) {
+	ret := _mock.Called(ctx, actor, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Get")
@@ -257,16 +263,16 @@ func (_mock *MockGroupService) Get(ctx context.Context, id uuid.UUID) (service.G
 
 	var r0 service.Group
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) (service.Group, error)); ok {
-		return returnFunc(ctx, id)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) (service.Group, error)); ok {
+		return returnFunc(ctx, actor, id)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) service.Group); ok {
-		r0 = returnFunc(ctx, id)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) service.Group); ok {
+		r0 = returnFunc(ctx, actor, id)
 	} else {
 		r0 = ret.Get(0).(service.Group)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
-		r1 = returnFunc(ctx, id)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, actor, id)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -280,12 +286,13 @@ type MockGroupService_Get_Call struct {
 
 // Get is a helper method to define mock.On call
 //   - ctx context.Context
+//   - actor uuid.UUID
 //   - id uuid.UUID
-func (_e *MockGroupService_Expecter) Get(ctx any, id any) *MockGroupService_Get_Call {
-	return &MockGroupService_Get_Call{Call: _e.mock.On("Get", ctx, id)}
+func (_e *MockGroupService_Expecter) Get(ctx any, actor any, id any) *MockGroupService_Get_Call {
+	return &MockGroupService_Get_Call{Call: _e.mock.On("Get", ctx, actor, id)}
 }
 
-func (_c *MockGroupService_Get_Call) Run(run func(ctx context.Context, id uuid.UUID)) *MockGroupService_Get_Call {
+func (_c *MockGroupService_Get_Call) Run(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID)) *MockGroupService_Get_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -295,9 +302,14 @@ func (_c *MockGroupService_Get_Call) Run(run func(ctx context.Context, id uuid.U
 		if args[1] != nil {
 			arg1 = args[1].(uuid.UUID)
 		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -308,14 +320,14 @@ func (_c *MockGroupService_Get_Call) Return(group service.Group, err error) *Moc
 	return _c
 }
 
-func (_c *MockGroupService_Get_Call) RunAndReturn(run func(ctx context.Context, id uuid.UUID) (service.Group, error)) *MockGroupService_Get_Call {
+func (_c *MockGroupService_Get_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID) (service.Group, error)) *MockGroupService_Get_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // List provides a mock function for the type MockGroupService
-func (_mock *MockGroupService) List(ctx context.Context, offset int, limit int) (pagination.Page[service.Group], error) {
-	ret := _mock.Called(ctx, offset, limit)
+func (_mock *MockGroupService) List(ctx context.Context, actor uuid.UUID, offset int, limit int) (pagination.Page[service.Group], error) {
+	ret := _mock.Called(ctx, actor, offset, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
@@ -323,16 +335,16 @@ func (_mock *MockGroupService) List(ctx context.Context, offset int, limit int) 
 
 	var r0 pagination.Page[service.Group]
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) (pagination.Page[service.Group], error)); ok {
-		return returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, int, int) (pagination.Page[service.Group], error)); ok {
+		return returnFunc(ctx, actor, offset, limit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) pagination.Page[service.Group]); ok {
-		r0 = returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, int, int) pagination.Page[service.Group]); ok {
+		r0 = returnFunc(ctx, actor, offset, limit)
 	} else {
 		r0 = ret.Get(0).(pagination.Page[service.Group])
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
-		r1 = returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, int, int) error); ok {
+		r1 = returnFunc(ctx, actor, offset, limit)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -346,86 +358,14 @@ type MockGroupService_List_Call struct {
 
 // List is a helper method to define mock.On call
 //   - ctx context.Context
+//   - actor uuid.UUID
 //   - offset int
 //   - limit int
-func (_e *MockGroupService_Expecter) List(ctx any, offset any, limit any) *MockGroupService_List_Call {
-	return &MockGroupService_List_Call{Call: _e.mock.On("List", ctx, offset, limit)}
+func (_e *MockGroupService_Expecter) List(ctx any, actor any, offset any, limit any) *MockGroupService_List_Call {
+	return &MockGroupService_List_Call{Call: _e.mock.On("List", ctx, actor, offset, limit)}
 }
 
-func (_c *MockGroupService_List_Call) Run(run func(ctx context.Context, offset int, limit int)) *MockGroupService_List_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 int
-		if args[1] != nil {
-			arg1 = args[1].(int)
-		}
-		var arg2 int
-		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockGroupService_List_Call) Return(page pagination.Page[service.Group], err error) *MockGroupService_List_Call {
-	_c.Call.Return(page, err)
-	return _c
-}
-
-func (_c *MockGroupService_List_Call) RunAndReturn(run func(ctx context.Context, offset int, limit int) (pagination.Page[service.Group], error)) *MockGroupService_List_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ListMembers provides a mock function for the type MockGroupService
-func (_mock *MockGroupService) ListMembers(ctx context.Context, groupID uuid.UUID, offset int, limit int) (pagination.Page[service.Member], error) {
-	ret := _mock.Called(ctx, groupID, offset, limit)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ListMembers")
-	}
-
-	var r0 pagination.Page[service.Member]
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, int, int) (pagination.Page[service.Member], error)); ok {
-		return returnFunc(ctx, groupID, offset, limit)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, int, int) pagination.Page[service.Member]); ok {
-		r0 = returnFunc(ctx, groupID, offset, limit)
-	} else {
-		r0 = ret.Get(0).(pagination.Page[service.Member])
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, int, int) error); ok {
-		r1 = returnFunc(ctx, groupID, offset, limit)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockGroupService_ListMembers_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListMembers'
-type MockGroupService_ListMembers_Call struct {
-	*mock.Call
-}
-
-// ListMembers is a helper method to define mock.On call
-//   - ctx context.Context
-//   - groupID uuid.UUID
-//   - offset int
-//   - limit int
-func (_e *MockGroupService_Expecter) ListMembers(ctx any, groupID any, offset any, limit any) *MockGroupService_ListMembers_Call {
-	return &MockGroupService_ListMembers_Call{Call: _e.mock.On("ListMembers", ctx, groupID, offset, limit)}
-}
-
-func (_c *MockGroupService_ListMembers_Call) Run(run func(ctx context.Context, groupID uuid.UUID, offset int, limit int)) *MockGroupService_ListMembers_Call {
+func (_c *MockGroupService_List_Call) Run(run func(ctx context.Context, actor uuid.UUID, offset int, limit int)) *MockGroupService_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -453,47 +393,58 @@ func (_c *MockGroupService_ListMembers_Call) Run(run func(ctx context.Context, g
 	return _c
 }
 
-func (_c *MockGroupService_ListMembers_Call) Return(page pagination.Page[service.Member], err error) *MockGroupService_ListMembers_Call {
+func (_c *MockGroupService_List_Call) Return(page pagination.Page[service.Group], err error) *MockGroupService_List_Call {
 	_c.Call.Return(page, err)
 	return _c
 }
 
-func (_c *MockGroupService_ListMembers_Call) RunAndReturn(run func(ctx context.Context, groupID uuid.UUID, offset int, limit int) (pagination.Page[service.Member], error)) *MockGroupService_ListMembers_Call {
+func (_c *MockGroupService_List_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, offset int, limit int) (pagination.Page[service.Group], error)) *MockGroupService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// RemoveMember provides a mock function for the type MockGroupService
-func (_mock *MockGroupService) RemoveMember(ctx context.Context, groupID uuid.UUID, identityID uuid.UUID) error {
-	ret := _mock.Called(ctx, groupID, identityID)
+// ListMembers provides a mock function for the type MockGroupService
+func (_mock *MockGroupService) ListMembers(ctx context.Context, actor uuid.UUID, groupID uuid.UUID, offset int, limit int) (pagination.Page[service.Member], error) {
+	ret := _mock.Called(ctx, actor, groupID, offset, limit)
 
 	if len(ret) == 0 {
-		panic("no return value specified for RemoveMember")
+		panic("no return value specified for ListMembers")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) error); ok {
-		r0 = returnFunc(ctx, groupID, identityID)
-	} else {
-		r0 = ret.Error(0)
+	var r0 pagination.Page[service.Member]
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, int, int) (pagination.Page[service.Member], error)); ok {
+		return returnFunc(ctx, actor, groupID, offset, limit)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, int, int) pagination.Page[service.Member]); ok {
+		r0 = returnFunc(ctx, actor, groupID, offset, limit)
+	} else {
+		r0 = ret.Get(0).(pagination.Page[service.Member])
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID, int, int) error); ok {
+		r1 = returnFunc(ctx, actor, groupID, offset, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
-// MockGroupService_RemoveMember_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveMember'
-type MockGroupService_RemoveMember_Call struct {
+// MockGroupService_ListMembers_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListMembers'
+type MockGroupService_ListMembers_Call struct {
 	*mock.Call
 }
 
-// RemoveMember is a helper method to define mock.On call
+// ListMembers is a helper method to define mock.On call
 //   - ctx context.Context
+//   - actor uuid.UUID
 //   - groupID uuid.UUID
-//   - identityID uuid.UUID
-func (_e *MockGroupService_Expecter) RemoveMember(ctx any, groupID any, identityID any) *MockGroupService_RemoveMember_Call {
-	return &MockGroupService_RemoveMember_Call{Call: _e.mock.On("RemoveMember", ctx, groupID, identityID)}
+//   - offset int
+//   - limit int
+func (_e *MockGroupService_Expecter) ListMembers(ctx any, actor any, groupID any, offset any, limit any) *MockGroupService_ListMembers_Call {
+	return &MockGroupService_ListMembers_Call{Call: _e.mock.On("ListMembers", ctx, actor, groupID, offset, limit)}
 }
 
-func (_c *MockGroupService_RemoveMember_Call) Run(run func(ctx context.Context, groupID uuid.UUID, identityID uuid.UUID)) *MockGroupService_RemoveMember_Call {
+func (_c *MockGroupService_ListMembers_Call) Run(run func(ctx context.Context, actor uuid.UUID, groupID uuid.UUID, offset int, limit int)) *MockGroupService_ListMembers_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -507,10 +458,89 @@ func (_c *MockGroupService_RemoveMember_Call) Run(run func(ctx context.Context, 
 		if args[2] != nil {
 			arg2 = args[2].(uuid.UUID)
 		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
+		var arg4 int
+		if args[4] != nil {
+			arg4 = args[4].(int)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGroupService_ListMembers_Call) Return(page pagination.Page[service.Member], err error) *MockGroupService_ListMembers_Call {
+	_c.Call.Return(page, err)
+	return _c
+}
+
+func (_c *MockGroupService_ListMembers_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, groupID uuid.UUID, offset int, limit int) (pagination.Page[service.Member], error)) *MockGroupService_ListMembers_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RemoveMember provides a mock function for the type MockGroupService
+func (_mock *MockGroupService) RemoveMember(ctx context.Context, actor uuid.UUID, groupID uuid.UUID, identityID uuid.UUID) error {
+	ret := _mock.Called(ctx, actor, groupID, identityID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveMember")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, actor, groupID, identityID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockGroupService_RemoveMember_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveMember'
+type MockGroupService_RemoveMember_Call struct {
+	*mock.Call
+}
+
+// RemoveMember is a helper method to define mock.On call
+//   - ctx context.Context
+//   - actor uuid.UUID
+//   - groupID uuid.UUID
+//   - identityID uuid.UUID
+func (_e *MockGroupService_Expecter) RemoveMember(ctx any, actor any, groupID any, identityID any) *MockGroupService_RemoveMember_Call {
+	return &MockGroupService_RemoveMember_Call{Call: _e.mock.On("RemoveMember", ctx, actor, groupID, identityID)}
+}
+
+func (_c *MockGroupService_RemoveMember_Call) Run(run func(ctx context.Context, actor uuid.UUID, groupID uuid.UUID, identityID uuid.UUID)) *MockGroupService_RemoveMember_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
+		var arg3 uuid.UUID
+		if args[3] != nil {
+			arg3 = args[3].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -521,7 +551,7 @@ func (_c *MockGroupService_RemoveMember_Call) Return(err error) *MockGroupServic
 	return _c
 }
 
-func (_c *MockGroupService_RemoveMember_Call) RunAndReturn(run func(ctx context.Context, groupID uuid.UUID, identityID uuid.UUID) error) *MockGroupService_RemoveMember_Call {
+func (_c *MockGroupService_RemoveMember_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, groupID uuid.UUID, identityID uuid.UUID) error) *MockGroupService_RemoveMember_Call {
 	_c.Call.Return(run)
 	return _c
 }
