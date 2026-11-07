@@ -122,16 +122,16 @@ func (_c *MockIdentityService_Create_Call) RunAndReturn(run func(ctx context.Con
 }
 
 // Delete provides a mock function for the type MockIdentityService
-func (_mock *MockIdentityService) Delete(ctx context.Context, id uuid.UUID) error {
-	ret := _mock.Called(ctx, id)
+func (_mock *MockIdentityService) Delete(ctx context.Context, actor uuid.UUID, id uuid.UUID) error {
+	ret := _mock.Called(ctx, actor, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) error); ok {
-		r0 = returnFunc(ctx, id)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, actor, id)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -145,12 +145,13 @@ type MockIdentityService_Delete_Call struct {
 
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
+//   - actor uuid.UUID
 //   - id uuid.UUID
-func (_e *MockIdentityService_Expecter) Delete(ctx any, id any) *MockIdentityService_Delete_Call {
-	return &MockIdentityService_Delete_Call{Call: _e.mock.On("Delete", ctx, id)}
+func (_e *MockIdentityService_Expecter) Delete(ctx any, actor any, id any) *MockIdentityService_Delete_Call {
+	return &MockIdentityService_Delete_Call{Call: _e.mock.On("Delete", ctx, actor, id)}
 }
 
-func (_c *MockIdentityService_Delete_Call) Run(run func(ctx context.Context, id uuid.UUID)) *MockIdentityService_Delete_Call {
+func (_c *MockIdentityService_Delete_Call) Run(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID)) *MockIdentityService_Delete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -160,9 +161,14 @@ func (_c *MockIdentityService_Delete_Call) Run(run func(ctx context.Context, id 
 		if args[1] != nil {
 			arg1 = args[1].(uuid.UUID)
 		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -173,7 +179,7 @@ func (_c *MockIdentityService_Delete_Call) Return(err error) *MockIdentityServic
 	return _c
 }
 
-func (_c *MockIdentityService_Delete_Call) RunAndReturn(run func(ctx context.Context, id uuid.UUID) error) *MockIdentityService_Delete_Call {
+func (_c *MockIdentityService_Delete_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID) error) *MockIdentityService_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
