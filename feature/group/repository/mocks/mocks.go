@@ -357,76 +357,132 @@ func (_c *MockGroupRepository_InsertMember_Call) RunAndReturn(run func(ctx conte
 	return _c
 }
 
-// List provides a mock function for the type MockGroupRepository
-func (_mock *MockGroupRepository) List(ctx context.Context, offset int, limit int) ([]repository.GroupRecord, error) {
-	ret := _mock.Called(ctx, offset, limit)
+// ListAll provides a mock function for the type MockGroupRepository
+func (_mock *MockGroupRepository) ListAll(ctx context.Context) ([]repository.GroupRecord, error) {
+	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
-		panic("no return value specified for List")
+		panic("no return value specified for ListAll")
 	}
 
 	var r0 []repository.GroupRecord
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) ([]repository.GroupRecord, error)); ok {
-		return returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]repository.GroupRecord, error)); ok {
+		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) []repository.GroupRecord); ok {
-		r0 = returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []repository.GroupRecord); ok {
+		r0 = returnFunc(ctx)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]repository.GroupRecord)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
-		r1 = returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockGroupRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
-type MockGroupRepository_List_Call struct {
+// MockGroupRepository_ListAll_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAll'
+type MockGroupRepository_ListAll_Call struct {
 	*mock.Call
 }
 
-// List is a helper method to define mock.On call
+// ListAll is a helper method to define mock.On call
 //   - ctx context.Context
-//   - offset int
-//   - limit int
-func (_e *MockGroupRepository_Expecter) List(ctx any, offset any, limit any) *MockGroupRepository_List_Call {
-	return &MockGroupRepository_List_Call{Call: _e.mock.On("List", ctx, offset, limit)}
+func (_e *MockGroupRepository_Expecter) ListAll(ctx any) *MockGroupRepository_ListAll_Call {
+	return &MockGroupRepository_ListAll_Call{Call: _e.mock.On("ListAll", ctx)}
 }
 
-func (_c *MockGroupRepository_List_Call) Run(run func(ctx context.Context, offset int, limit int)) *MockGroupRepository_List_Call {
+func (_c *MockGroupRepository_ListAll_Call) Run(run func(ctx context.Context)) *MockGroupRepository_ListAll_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 int
-		if args[1] != nil {
-			arg1 = args[1].(int)
-		}
-		var arg2 int
-		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
 		run(
 			arg0,
-			arg1,
-			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockGroupRepository_List_Call) Return(groupRecords []repository.GroupRecord, err error) *MockGroupRepository_List_Call {
+func (_c *MockGroupRepository_ListAll_Call) Return(groupRecords []repository.GroupRecord, err error) *MockGroupRepository_ListAll_Call {
 	_c.Call.Return(groupRecords, err)
 	return _c
 }
 
-func (_c *MockGroupRepository_List_Call) RunAndReturn(run func(ctx context.Context, offset int, limit int) ([]repository.GroupRecord, error)) *MockGroupRepository_List_Call {
+func (_c *MockGroupRepository_ListAll_Call) RunAndReturn(run func(ctx context.Context) ([]repository.GroupRecord, error)) *MockGroupRepository_ListAll_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListIdentityGroups provides a mock function for the type MockGroupRepository
+func (_mock *MockGroupRepository) ListIdentityGroups(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error) {
+	ret := _mock.Called(ctx, identityID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListIdentityGroups")
+	}
+
+	var r0 []uuid.UUID
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) ([]uuid.UUID, error)); ok {
+		return returnFunc(ctx, identityID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) []uuid.UUID); ok {
+		r0 = returnFunc(ctx, identityID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]uuid.UUID)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, identityID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockGroupRepository_ListIdentityGroups_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListIdentityGroups'
+type MockGroupRepository_ListIdentityGroups_Call struct {
+	*mock.Call
+}
+
+// ListIdentityGroups is a helper method to define mock.On call
+//   - ctx context.Context
+//   - identityID uuid.UUID
+func (_e *MockGroupRepository_Expecter) ListIdentityGroups(ctx any, identityID any) *MockGroupRepository_ListIdentityGroups_Call {
+	return &MockGroupRepository_ListIdentityGroups_Call{Call: _e.mock.On("ListIdentityGroups", ctx, identityID)}
+}
+
+func (_c *MockGroupRepository_ListIdentityGroups_Call) Run(run func(ctx context.Context, identityID uuid.UUID)) *MockGroupRepository_ListIdentityGroups_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGroupRepository_ListIdentityGroups_Call) Return(uUIDs []uuid.UUID, err error) *MockGroupRepository_ListIdentityGroups_Call {
+	_c.Call.Return(uUIDs, err)
+	return _c
+}
+
+func (_c *MockGroupRepository_ListIdentityGroups_Call) RunAndReturn(run func(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error)) *MockGroupRepository_ListIdentityGroups_Call {
 	_c.Call.Return(run)
 	return _c
 }

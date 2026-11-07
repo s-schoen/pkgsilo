@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/pagination"
 	"pkgsilo/test/databasetest"
 )
 
@@ -106,7 +107,7 @@ func TestPostgresGroupRepository_Get_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestPostgresGroupRepository_List(t *testing.T) {
+func TestPostgresGroupRepository_ListAll(t *testing.T) {
 	t.Parallel()
 	repo, _ := newTestRepo(t)
 	first := newRecord("first", baseTime)
@@ -118,36 +119,48 @@ func TestPostgresGroupRepository_List(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	tests := []struct {
-		name   string
-		offset int
-		limit  int
-		want   []GroupRecord
-	}{
-		{name: "all", offset: 0, limit: 10, want: []GroupRecord{first, second, third}},
-		{name: "limited", offset: 0, limit: 2, want: []GroupRecord{first, second}},
-		{name: "offset", offset: 1, limit: 1, want: []GroupRecord{second}},
-		{name: "past the end", offset: 3, limit: 10, want: nil},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := repo.List(t.Context(), tt.offset, tt.limit)
-			require.NoError(t, err)
+	got, err := repo.ListAll(t.Context())
+	require.NoError(t, err)
 
-			assert.Equal(t, tt.want, got)
-		})
-	}
+	assert.Equal(t, []GroupRecord{first, second, third}, got)
 }
 
-func TestPostgresGroupRepository_List_Empty(t *testing.T) {
+func TestPostgresGroupRepository_ListAll_Empty(t *testing.T) {
 	t.Parallel()
 	repo, _ := newTestRepo(t)
 
-	got, err := repo.List(t.Context(), 0, 10)
+	got, err := repo.ListAll(t.Context())
 	require.NoError(t, err)
 
 	assert.Empty(t, got)
+}
+
+// insertGroups stores count group rows, in one statement to keep the test fast.
+func insertGroups(t *testing.T, db *sqlx.DB, prefix string, count int) {
+	t.Helper()
+
+	_, err := db.ExecContext(t.Context(), `
+		INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
+		SELECT gen_random_uuid(), $1 || n, $2::uuid, $2::uuid, $3::timestamptz, $3::timestamptz
+		FROM generate_series(1, $4::int) AS n`,
+		prefix, uuid.NewV4(), baseTime, count,
+	)
+	require.NoError(t, err)
+}
+
+func TestPostgresGroupRepository_ListAll_Ceiling(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+
+	insertGroups(t, db, "at-ceiling-", pagination.MaxAllRows)
+	got, err := repo.ListAll(t.Context())
+	require.NoError(t, err)
+	assert.Len(t, got, pagination.MaxAllRows)
+
+	insertGroups(t, db, "over-ceiling-", 1)
+	got, err = repo.ListAll(t.Context())
+	require.ErrorIs(t, err, ErrTooManyRows)
+	assert.Nil(t, got)
 }
 
 func TestPostgresGroupRepository_Update(t *testing.T) {
@@ -337,4 +350,43 @@ func TestPostgresGroupRepository_DeleteMember_NotFound(t *testing.T) {
 	err := repo.DeleteMember(t.Context(), group.ID, insertIdentity(t, db))
 
 	assert.ErrorIs(t, err, ErrMemberNotFound)
+}
+
+func TestPostgresGroupRepository_ListIdentityGroups(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+	ada := insertIdentity(t, db)
+	grace := insertIdentity(t, db)
+	maintainers := insertGroup(t, repo, "Maintainers")
+	reviewers := insertGroup(t, repo, "Reviewers")
+	releasers := insertGroup(t, repo, "Releasers")
+	for _, rec := range []MemberRecord{
+		newMember(maintainers.ID, ada, baseTime),
+		newMember(reviewers.ID, ada, baseTime),
+		// Another identity's group, which must not be listed.
+		newMember(releasers.ID, grace, baseTime),
+	} {
+		require.NoError(t, repo.InsertMember(t.Context(), rec))
+	}
+
+	got, err := repo.ListIdentityGroups(t.Context(), ada)
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []uuid.UUID{maintainers.ID, reviewers.ID}, got)
+}
+
+func TestPostgresGroupRepository_ListIdentityGroups_None(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+	insertGroup(t, repo, "Maintainers")
+
+	for name, id := range map[string]uuid.UUID{"no groups": insertIdentity(t, db), "missing": uuid.NewV4()} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, err := repo.ListIdentityGroups(t.Context(), id)
+			require.NoError(t, err)
+
+			assert.Empty(t, got)
+		})
+	}
 }

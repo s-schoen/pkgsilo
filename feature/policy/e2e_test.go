@@ -429,8 +429,7 @@ func TestPolicies_SecondInstance(t *testing.T) {
 }
 
 // TestPolicies_IdentitiesButNotOtherTypes checks a policy that limits access by object type: the
-// members of a group manage identities, but nothing else. Groups aren't authorized yet, so policies stand in
-// for the other types:
+// members of a group manage identities, but nothing else, here policies. The group tests cover groups:
 //
 //  1. Create ada with an API key, and the group identity-managers with her as a member: 201 and 204.
 //  2. Add a policy that lets identity-managers read, create, replace and delete identities: 201.

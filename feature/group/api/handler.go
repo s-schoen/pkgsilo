@@ -48,7 +48,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groups, err := h.service.List(r.Context(), page.Offset, page.Limit)
+	groups, err := h.service.List(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, page.Offset, page.Limit)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -83,7 +83,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.service.Get(r.Context(), id)
+	group, err := h.service.Get(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -118,7 +118,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	if err := h.service.Delete(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
@@ -137,7 +137,8 @@ func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	members, err := h.service.ListMembers(r.Context(), id, page.Offset, page.Limit)
+	members, err := h.service.ListMembers(
+		r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, page.Offset, page.Limit)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -185,7 +186,8 @@ func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.RemoveMember(r.Context(), id, identityID); err != nil {
+	err := h.service.RemoveMember(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, identityID)
+	if err != nil {
 		h.writeError(w, r, err)
 		return
 	}
@@ -195,8 +197,8 @@ func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
 
 // memberID returns the identity ID from the path of a member of the group groupID. An ID that
 // isn't a UUID can't identify an identity, so it's answered with notFound like an unknown one, but
-// only after the group was found: like the service for unknown identities, it reports a missing
-// group first.
+// only after the group was found: like the service for unknown identities, it reports a missing or
+// hidden group first.
 func (h *Handler) memberID(
 	w http.ResponseWriter, r *http.Request, groupID uuid.UUID, notFound envelope.Problem,
 ) (uuid.UUID, bool) {
@@ -204,7 +206,7 @@ func (h *Handler) memberID(
 		return identityID, true
 	}
 
-	if _, err := h.service.Get(r.Context(), groupID); err != nil {
+	if _, err := h.service.Get(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, groupID); err != nil {
 		h.writeError(w, r, err)
 		return uuid.UUID{}, false
 	}
