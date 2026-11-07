@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"uuid"
 
-	"github.com/jmoiron/sqlx"
+	"pkgsilo/core/database"
 )
 
 // GroupRepository stores group records and the member records of each group.
@@ -40,13 +40,13 @@ const (
 // PostgresGroupRepository stores group records in the groups table of PostgreSQL and their member
 // records in the group_members table.
 type PostgresGroupRepository struct {
-	db *sqlx.DB
+	db database.Querier
 }
 
 var _ GroupRepository = (*PostgresGroupRepository)(nil)
 
 // NewPostgresGroupRepository returns a PostgresGroupRepository that stores records in db.
-func NewPostgresGroupRepository(db *sqlx.DB) *PostgresGroupRepository {
+func NewPostgresGroupRepository(db database.Querier) *PostgresGroupRepository {
 	return &PostgresGroupRepository{db: db}
 }
 
