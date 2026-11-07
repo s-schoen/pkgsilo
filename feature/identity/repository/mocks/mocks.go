@@ -237,76 +237,132 @@ func (_c *MockIdentityRepository_Insert_Call) RunAndReturn(run func(ctx context.
 	return _c
 }
 
-// List provides a mock function for the type MockIdentityRepository
-func (_mock *MockIdentityRepository) List(ctx context.Context, offset int, limit int) ([]repository.IdentityRecord, error) {
-	ret := _mock.Called(ctx, offset, limit)
+// ListAll provides a mock function for the type MockIdentityRepository
+func (_mock *MockIdentityRepository) ListAll(ctx context.Context) ([]repository.IdentityRecord, error) {
+	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
-		panic("no return value specified for List")
+		panic("no return value specified for ListAll")
 	}
 
 	var r0 []repository.IdentityRecord
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) ([]repository.IdentityRecord, error)); ok {
-		return returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]repository.IdentityRecord, error)); ok {
+		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) []repository.IdentityRecord); ok {
-		r0 = returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []repository.IdentityRecord); ok {
+		r0 = returnFunc(ctx)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]repository.IdentityRecord)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
-		r1 = returnFunc(ctx, offset, limit)
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockIdentityRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
-type MockIdentityRepository_List_Call struct {
+// MockIdentityRepository_ListAll_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAll'
+type MockIdentityRepository_ListAll_Call struct {
 	*mock.Call
 }
 
-// List is a helper method to define mock.On call
+// ListAll is a helper method to define mock.On call
 //   - ctx context.Context
-//   - offset int
-//   - limit int
-func (_e *MockIdentityRepository_Expecter) List(ctx any, offset any, limit any) *MockIdentityRepository_List_Call {
-	return &MockIdentityRepository_List_Call{Call: _e.mock.On("List", ctx, offset, limit)}
+func (_e *MockIdentityRepository_Expecter) ListAll(ctx any) *MockIdentityRepository_ListAll_Call {
+	return &MockIdentityRepository_ListAll_Call{Call: _e.mock.On("ListAll", ctx)}
 }
 
-func (_c *MockIdentityRepository_List_Call) Run(run func(ctx context.Context, offset int, limit int)) *MockIdentityRepository_List_Call {
+func (_c *MockIdentityRepository_ListAll_Call) Run(run func(ctx context.Context)) *MockIdentityRepository_ListAll_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 int
-		if args[1] != nil {
-			arg1 = args[1].(int)
-		}
-		var arg2 int
-		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
 		run(
 			arg0,
-			arg1,
-			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockIdentityRepository_List_Call) Return(identityRecords []repository.IdentityRecord, err error) *MockIdentityRepository_List_Call {
+func (_c *MockIdentityRepository_ListAll_Call) Return(identityRecords []repository.IdentityRecord, err error) *MockIdentityRepository_ListAll_Call {
 	_c.Call.Return(identityRecords, err)
 	return _c
 }
 
-func (_c *MockIdentityRepository_List_Call) RunAndReturn(run func(ctx context.Context, offset int, limit int) ([]repository.IdentityRecord, error)) *MockIdentityRepository_List_Call {
+func (_c *MockIdentityRepository_ListAll_Call) RunAndReturn(run func(ctx context.Context) ([]repository.IdentityRecord, error)) *MockIdentityRepository_ListAll_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListMemberships provides a mock function for the type MockIdentityRepository
+func (_mock *MockIdentityRepository) ListMemberships(ctx context.Context, identityIDs []uuid.UUID) ([]repository.MembershipRecord, error) {
+	ret := _mock.Called(ctx, identityIDs)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListMemberships")
+	}
+
+	var r0 []repository.MembershipRecord
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uuid.UUID) ([]repository.MembershipRecord, error)); ok {
+		return returnFunc(ctx, identityIDs)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uuid.UUID) []repository.MembershipRecord); ok {
+		r0 = returnFunc(ctx, identityIDs)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]repository.MembershipRecord)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, identityIDs)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockIdentityRepository_ListMemberships_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListMemberships'
+type MockIdentityRepository_ListMemberships_Call struct {
+	*mock.Call
+}
+
+// ListMemberships is a helper method to define mock.On call
+//   - ctx context.Context
+//   - identityIDs []uuid.UUID
+func (_e *MockIdentityRepository_Expecter) ListMemberships(ctx any, identityIDs any) *MockIdentityRepository_ListMemberships_Call {
+	return &MockIdentityRepository_ListMemberships_Call{Call: _e.mock.On("ListMemberships", ctx, identityIDs)}
+}
+
+func (_c *MockIdentityRepository_ListMemberships_Call) Run(run func(ctx context.Context, identityIDs []uuid.UUID)) *MockIdentityRepository_ListMemberships_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockIdentityRepository_ListMemberships_Call) Return(membershipRecords []repository.MembershipRecord, err error) *MockIdentityRepository_ListMemberships_Call {
+	_c.Call.Return(membershipRecords, err)
+	return _c
+}
+
+func (_c *MockIdentityRepository_ListMemberships_Call) RunAndReturn(run func(ctx context.Context, identityIDs []uuid.UUID) ([]repository.MembershipRecord, error)) *MockIdentityRepository_ListMemberships_Call {
 	_c.Call.Return(run)
 	return _c
 }

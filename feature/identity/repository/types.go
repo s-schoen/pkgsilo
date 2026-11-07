@@ -15,3 +15,9 @@ type IdentityRecord struct {
 	CreatedAt   time.Time `db:"created_at"`
 	UpdatedAt   time.Time `db:"updated_at"`
 }
+
+// MembershipRecord says that an identity is a member of a group, as far as identities need to know.
+type MembershipRecord struct {
+	IdentityID uuid.UUID `db:"identity_id"`
+	GroupID    uuid.UUID `db:"group_id"`
+}

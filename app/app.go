@@ -9,6 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"pkgsilo/core/authn"
+	"pkgsilo/core/authz"
 	"pkgsilo/core/router"
 	apikeyapi "pkgsilo/feature/apikey/api"
 	apikeyrepo "pkgsilo/feature/apikey/repository"
@@ -28,8 +29,9 @@ import (
 // on the router that opts configures. All routes but the health check need an authenticated request.
 // API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger.
 func NewHandler(opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger) http.Handler {
+	authorizer := authz.New(db)
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
-	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db))
+	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db), authorizer)
 	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db))
 	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), apiKeyPepper)
 
