@@ -224,6 +224,23 @@ func TestEngine_GroupsOfResource(t *testing.T) {
 	assertCan(t, false, engine, ada, testAction, identityResource(grace, visible, secret))
 }
 
+// TestEngine_PrincipalInGroupResource checks that a group as the resource is the entity that its members
+// are in, so that a policy can let the members of a group read it.
+func TestEngine_PrincipalInGroupResource(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	member := insertIdentity(t, db)
+	outsider := insertIdentity(t, db)
+	maintainers := insertGroup(t, db, member)
+	removeSeededPolicies(t, db)
+	addPolicy(t, db, `permit (principal, action, resource is Group) when { principal in resource };`)
+	engine := New(db)
+	resource := Resource{Type: GroupType, ID: maintainers}
+
+	assertCan(t, true, engine, member, testAction, resource)
+	assertCan(t, false, engine, outsider, testAction, resource)
+}
+
 func TestEngine_EvaluationError(t *testing.T) {
 	t.Parallel()
 	// An attribute that the entity lacks fails the evaluation.

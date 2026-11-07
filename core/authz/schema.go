@@ -46,10 +46,10 @@ func Schema(declarations ...Declaration) string {
 
 // writeEntityTypes writes the entity types of the schema to b: Group, Identity and each declared type once.
 func writeEntityTypes(b *strings.Builder, declarations []Declaration) {
-	b.WriteString("entity " + string(groupType) + ";\n")
-	b.WriteString("entity " + IdentityType + " in [" + string(groupType) + "];\n")
+	b.WriteString("entity " + GroupType + ";\n")
+	b.WriteString("entity " + IdentityType + " in [" + GroupType + "];\n")
 
-	written := []string{string(groupType), IdentityType}
+	written := []string{GroupType, IdentityType}
 	for _, declaration := range declarations {
 		if !slices.Contains(written, declaration.Type) {
 			written = append(written, declaration.Type)

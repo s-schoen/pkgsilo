@@ -150,7 +150,7 @@ func (e requestEntities) Get(uid types.EntityUID) (types.Entity, bool) {
 func toEntity(entityType string, id uuid.UUID, groups []uuid.UUID) types.Entity {
 	parents := make([]types.EntityUID, len(groups))
 	for i, group := range groups {
-		parents[i] = types.NewEntityUID(groupType, types.String(group.String()))
+		parents[i] = types.NewEntityUID(GroupType, types.String(group.String()))
 	}
 
 	return types.Entity{
