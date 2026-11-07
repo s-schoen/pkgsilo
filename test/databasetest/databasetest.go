@@ -41,8 +41,9 @@ var (
 	serverURL *url.URL
 )
 
-// New returns a connection to a new, empty database with all migrations applied.
-// The database is dropped when the test ends. New skips the test in short mode.
+// New returns a connection to a new database with all migrations applied, so that it holds nothing but
+// the migrations' seeded data. The database is dropped when the test ends. New skips the test in short
+// mode.
 func New(t *testing.T) *sqlx.DB {
 	t.Helper()
 
@@ -215,6 +216,20 @@ func databaseURL(name string) string {
 	u.Path = "/" + name
 
 	return u.String()
+}
+
+// RunMigration applies the migration file of the given name to db, for tests of what a migration does to
+// a database that already holds data: such a test migrates down, sets up the data and migrates up again.
+func RunMigration(t *testing.T, db *sqlx.DB, name string) {
+	t.Helper()
+
+	stmts, err := os.ReadFile(filepath.Join(migrationsDir(), name)) //nolint:gosec // name comes from the test.
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	if _, err := db.ExecContext(t.Context(), string(stmts)); err != nil {
+		t.Fatalf("apply migration %s: %v", name, err)
+	}
 }
 
 // migrationsDir returns the repository's migrations directory. It's resolved from this

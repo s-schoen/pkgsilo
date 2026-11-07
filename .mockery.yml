@@ -7,6 +7,10 @@ packages:
   pkgsilo/core/authn:
     interfaces:
       Authenticator: {}
+  pkgsilo/core/authz:
+    interfaces:
+      Authorizer: {}
+      Decider: {}
   pkgsilo/feature/identity/repository:
     interfaces:
       IdentityRepository: {}

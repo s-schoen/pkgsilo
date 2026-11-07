@@ -74,7 +74,7 @@ func memberIDs(api *apitest.Client, groupPath string) []uuid.UUID {
 //  1. Create maintainers: 201 with the new group, its Location under /api/v1/groups, and its
 //     audit fields set by the server.
 //  2. Get it through the Location: the created group.
-//  3. List the groups: maintainers alone.
+//  3. List the groups: administrators, which the migrations seed, then maintainers.
 //  4. Replace its name: 200 with the new name, the ID and creation time kept and the update time
 //     advanced.
 //  5. Get it again: the replaced group, so the change was stored.
@@ -98,7 +98,11 @@ func TestGroups_Lifecycle(t *testing.T) {
 	assert.Equal(t, maintainers, apitest.DecodeResource[group](api.Get(location), http.StatusOK))
 
 	// 3. List.
-	assert.Equal(t, []group{maintainers}, apitest.DecodeCollection[group](api.Get(groupsPath), http.StatusOK).Data)
+	listed := apitest.DecodeCollection[group](api.Get(groupsPath), http.StatusOK).Data
+	if assert.Len(t, listed, 2) {
+		assert.Equal(t, "administrators", listed[0].Name)
+		assert.Equal(t, maintainers, listed[1])
+	}
 
 	// 4. Replace.
 	replaced := apitest.DecodeResource[group](api.Put(location, `{"name":"Core maintainers"}`), http.StatusOK)
@@ -154,8 +158,9 @@ func TestGroups_NameTaken(t *testing.T) {
 // TestGroups_ListPages pages through the groups, which are listed in creation order:
 //
 //  1. Create maintainers, reviewers and releasers, in that order: 201 for each.
-//  2. List the first page of 2: maintainers and reviewers, and a nextOffset of 2.
-//  3. List from offset 2: releasers alone, on the last page, without a nextOffset.
+//  2. List the first page of 2: administrators, which the migrations seed before them, then maintainers,
+//     and a nextOffset of 2.
+//  3. List from offset 2: reviewers and releasers, on the last page, without a nextOffset.
 func TestGroups_ListPages(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
@@ -169,12 +174,15 @@ func TestGroups_ListPages(t *testing.T) {
 
 	// 2. List the first page.
 	first := apitest.DecodeCollection[group](api.Get(groupsPath+"?limit=2"), http.StatusOK)
-	assert.Equal(t, created[:2], first.Data, "groups are listed in creation order")
+	if assert.Len(t, first.Data, 2) {
+		assert.Equal(t, "administrators", first.Data[0].Name, "groups are listed in creation order")
+		assert.Equal(t, created[0], first.Data[1])
+	}
 	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, first.Pagination)
 
 	// 3. List the last page.
 	last := apitest.DecodeCollection[group](api.Get(groupsPath+"?offset=2&limit=2"), http.StatusOK)
-	assert.Equal(t, created[2:], last.Data)
+	assert.Equal(t, created[1:], last.Data)
 	assert.Equal(t, envelope.Pagination{Offset: 2, Limit: 2}, last.Pagination)
 }
 
