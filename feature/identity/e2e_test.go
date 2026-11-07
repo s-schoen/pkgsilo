@@ -4,6 +4,7 @@
 package identity_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -25,6 +26,9 @@ import (
 var (
 	identityNotFound = envelope.DefineProblemType("identity-not-found", "Identity not found", http.StatusNotFound)
 	usernameTaken    = envelope.DefineProblemType("username-taken", "Username taken", http.StatusConflict)
+	fieldsDenied     = envelope.DefineProblemType("fields-denied", "Fields denied", http.StatusForbidden)
+	invalidBody      = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
+	forbidden        = envelope.ProblemType{Type: "about:blank", Title: "Forbidden", Status: http.StatusForbidden}
 )
 
 const identitiesPath = "/api/v1/identities"
@@ -286,4 +290,157 @@ func TestIdentities_FailingPolicy(t *testing.T) {
 	// 2. Get and list.
 	api.Get(identitiesPath + "/" + admin.ID.String()).AssertInternalError()
 	api.Get(identitiesPath).AssertInternalError()
+}
+
+// assertFieldsDenied asserts a fields-denied problem that points to the given members of the request body,
+// in that order.
+func assertFieldsDenied(t *testing.T, resp *apitest.Response, pointers ...string) {
+	t.Helper()
+	resp.AssertProblemType(fieldsDenied)
+
+	var problem struct {
+		Errors []envelope.ValidationError `json:"errors"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &problem))
+	got := make([]string, len(problem.Errors))
+	for i, err := range problem.Errors {
+		got[i] = err.Pointer
+	}
+	assert.Equal(t, pointers, got)
+}
+
+// TestIdentities_WritesDeniedByDefault checks what an identity outside the administrators group may write
+// with the seeded policies alone, which is nothing:
+//
+//  1. Create ada and grace, each with an API key: 201 for each.
+//  2. As ada, create carol: 403 fields-denied pointing to username and displayName, and, as admin, no
+//     carol in the list.
+//  3. As ada, replace ada with her current values: 403 fields-denied pointing to both, even though nothing
+//     would change, and ada is unchanged.
+//  4. As ada, delete ada: 403 Forbidden, and ada still exists.
+//  5. As ada, replace and delete grace, whom she can't read: the same 404 identity-not-found, to the byte,
+//     as for an identity that doesn't exist, rather than a 403 that would reveal grace.
+//  6. As ada, replace grace and an identity that doesn't exist with an invalid body: the same 422
+//     invalid-body for both.
+func TestIdentities_WritesDeniedByDefault(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	adaPath := identitiesPath + "/" + ada.ID.String()
+	grace, _ := apptest.NewIdentity(api, "grace")
+	gracePath := identitiesPath + "/" + grace.ID.String()
+	missingPath := identitiesPath + "/" + uuid.NewV4().String()
+
+	// 2. Create carol.
+	assertFieldsDenied(t, asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`),
+		"#/username", "#/displayName")
+	listed := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data
+	require.Len(t, listed, 3, "nothing may be created")
+	assert.Equal(t, []identity{ada, grace}, listed[1:])
+
+	// 3. Replace ada.
+	assertFieldsDenied(t, asAda.Put(adaPath, `{"username":"ada","displayName":"ada"}`),
+		"#/username", "#/displayName")
+	assert.Equal(t, ada, apitest.DecodeResource[identity](api.Get(adaPath), http.StatusOK))
+
+	// 4. Delete ada.
+	asAda.Delete(adaPath).AssertProblemType(forbidden)
+	assert.Equal(t, ada, apitest.DecodeResource[identity](api.Get(adaPath), http.StatusOK))
+
+	// 5. Replace and delete grace.
+	const body = `{"username":"grace","displayName":"grace"}`
+	hidden := asAda.Put(gracePath, body)
+	hidden.AssertProblemType(identityNotFound)
+	assert.Equal(t, asAda.Put(missingPath, body).Body.String(), hidden.Body.String())
+	hidden = asAda.Delete(gracePath)
+	hidden.AssertProblemType(identityNotFound)
+	assert.Equal(t, asAda.Delete(missingPath).Body.String(), hidden.Body.String())
+
+	// 6. Replace with an invalid body.
+	hidden = asAda.Put(gracePath, `{"username":"ab"}`)
+	hidden.AssertProblemType(invalidBody)
+	assert.Equal(t, asAda.Put(missingPath, `{"username":"ab"}`).Body.String(), hidden.Body.String())
+}
+
+// TestIdentities_UpdateSelf checks that a policy can let identities edit themselves, field by field, and
+// that this doesn't let them create identities:
+//
+//  1. Create ada with an API key: 201.
+//  2. Add a policy that lets every identity update itself.
+//  3. As ada, replace ada: 200 with the new values.
+//  4. As ada, create carol: 403 fields-denied pointing to username and displayName.
+//  5. Add a policy that forbids changing usernames.
+//  6. As ada, replace ada with a new display name and her username unchanged: 403 fields-denied pointing to
+//     username alone, and ada is unchanged.
+func TestIdentities_UpdateSelf(t *testing.T) {
+	t.Parallel()
+	api, db := apptest.NewWithDB(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	adaPath := identitiesPath + "/" + ada.ID.String()
+
+	// 2. Add the update policy.
+	addPolicy(t, db, `permit (principal, action in Action::"identity:update", resource)
+		when { resource == principal };`)
+
+	// 3. Replace ada.
+	replaced := apitest.DecodeResource[identity](
+		asAda.Put(adaPath, `{"username":"ada-lovelace","displayName":"Ada Lovelace"}`), http.StatusOK)
+	assert.Equal(t, "ada-lovelace", replaced.Username)
+	assert.Equal(t, "Ada Lovelace", replaced.DisplayName)
+	assert.Equal(t, ada.ID, replaced.UpdatedBy)
+
+	// 4. Create carol.
+	assertFieldsDenied(t, asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`),
+		"#/username", "#/displayName")
+
+	// 5. Add the forbid.
+	addPolicy(t, db, `forbid (principal, action == Action::"identity:update:username", resource);`)
+
+	// 6. Replace ada again.
+	assertFieldsDenied(t, asAda.Put(adaPath, `{"username":"ada-lovelace","displayName":"Countess of Lovelace"}`),
+		"#/username")
+	assert.Equal(t, replaced, apitest.DecodeResource[identity](api.Get(adaPath), http.StatusOK))
+}
+
+// TestIdentities_CreateAndDeleteByPolicy checks that a policy can let an identity outside the
+// administrators group create and delete identities, without letting it replace them:
+//
+//  1. Create ada with an API key: 201.
+//  2. Add a policy that lets ada read, create and delete identities.
+//  3. As ada, create carol: 201 with carol, attributed to ada, at her Location.
+//  4. As ada, replace carol: 403 fields-denied pointing to username and displayName.
+//  5. As ada, delete carol: 204, and, as admin, get her: 404 identity-not-found.
+func TestIdentities_CreateAndDeleteByPolicy(t *testing.T) {
+	t.Parallel()
+	api, db := apptest.NewWithDB(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+
+	// 2. Add the policy.
+	addPolicy(t, db, `permit (
+		principal == Identity::"`+ada.ID.String()+`",
+		action in [Action::"read", Action::"identity:create", Action::"identity:delete"],
+		resource is Identity
+	);`)
+
+	// 3. Create carol.
+	created := asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`)
+	carol := apitest.DecodeResource[identity](created, http.StatusCreated)
+	carolPath := identitiesPath + "/" + carol.ID.String()
+	assert.Equal(t, carolPath, created.Header().Get("Location"))
+	assert.Equal(t, "carol", carol.Username)
+	assert.Equal(t, ada.ID, carol.CreatedBy)
+
+	// 4. Replace carol.
+	assertFieldsDenied(t, asAda.Put(carolPath, `{"username":"carol","displayName":"Carol"}`),
+		"#/username", "#/displayName")
+
+	// 5. Delete carol.
+	asAda.Delete(carolPath).AssertNoContent()
+	api.Get(carolPath).AssertProblemType(identityNotFound)
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
+	"unicode"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
@@ -46,6 +48,9 @@ var (
 		UpdatedAt:   stored.UpdatedAt,
 	}
 
+	// storedResource is stored as a resource of decisions, in no group.
+	storedResource = authz.Resource{Type: "Identity", ID: stored.ID}
+
 	maintainers = uuid.MustParse("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f")
 	reviewers   = uuid.MustParse("4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a")
 
@@ -79,6 +84,13 @@ func newDeciding(t *testing.T) (*authzmocks.MockAuthorizer, *authzmocks.MockDeci
 	authorizer.EXPECT().For(mock.Anything, actor).Return(decider, nil)
 
 	return authorizer, decider
+}
+
+// expectReadable makes the repository return stored, in no group, and the decider allow reading it.
+func expectReadable(repo *mocks.MockIdentityRepository, decider *authzmocks.MockDecider) {
+	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+	repo.EXPECT().ListMemberships(mock.Anything, []uuid.UUID{stored.ID}).Return(nil, nil)
+	decider.EXPECT().Can(actionRead, storedResource).Return(true, nil)
 }
 
 // newRecords returns stored records with the given IDs' last bytes, in order.
@@ -142,6 +154,73 @@ func TestIdentityService_Create_GeneratesUniqueIDs(t *testing.T) {
 	}
 
 	assert.Len(t, ids, 2)
+}
+
+// TestIdentityService_Create_ChecksEveryField checks that creating needs the action of each field, on the
+// identity to be created, and that a denial lists every denied field and creates nothing.
+func TestIdentityService_Create_ChecksEveryField(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		allowed    []string
+		wantDenied []string
+	}{
+		{name: "all allowed", allowed: []string{"username", "displayName"}},
+		{name: "username denied", allowed: []string{"displayName"}, wantDenied: []string{"username"}},
+		{name: "all denied", wantDenied: []string{"username", "displayName"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			svc, repo := newTestServiceWith(t, authorizer)
+			var checked []authz.Resource
+			decider.EXPECT().Can(mock.Anything, mock.Anything).RunAndReturn(
+				func(action authz.Action, resource authz.Resource) (bool, error) {
+					checked = append(checked, resource)
+					for _, field := range tt.allowed {
+						if assert.ObjectsAreEqual(authz.NewAction("identity:create:"+field, "identity:create"), action) {
+							return true, nil
+						}
+					}
+
+					return false, nil
+				},
+			).Times(2)
+			var inserted repository.IdentityRecord
+			if tt.wantDenied == nil {
+				repo.EXPECT().Insert(mock.Anything, servicetest.Capture(&inserted)).Return(stored, nil)
+			}
+
+			_, err := svc.Create(t.Context(), actor, input)
+
+			if tt.wantDenied == nil {
+				require.NoError(t, err)
+				want := authz.Resource{Type: "Identity", ID: inserted.ID}
+				assert.Equal(t, []authz.Resource{want, want}, checked, "the checks must be on the identity to be created")
+				return
+			}
+			// The mock fails the test if the repository is called.
+			var denied *authz.FieldsDeniedError
+			require.ErrorAs(t, err, &denied)
+			assert.Equal(t, tt.wantDenied, denied.Fields)
+		})
+	}
+}
+
+// TestIdentityService_FieldActions checks that every field of IdentityInput, which creating and replacing
+// set, has an action of its own for each, so that no field is written unchecked.
+func TestIdentityService_FieldActions(t *testing.T) {
+	t.Parallel()
+	var fields []string
+	for field := range reflect.TypeFor[IdentityInput]().Fields() {
+		name := []rune(field.Name)
+		name[0] = unicode.ToLower(name[0])
+		fields = append(fields, string(name))
+	}
+
+	assert.ElementsMatch(t, fields, CreatableFields())
+	assert.ElementsMatch(t, fields, UpdatableFields())
 }
 
 func TestIdentityService_Get(t *testing.T) {
@@ -304,7 +383,13 @@ func TestIdentityService_List_ChecksContextBetweenRows(t *testing.T) {
 
 func TestIdentityService_Replace(t *testing.T) {
 	t.Parallel()
-	svc, repo := newTestService(t)
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	for _, field := range []string{"username", "displayName"} {
+		decider.EXPECT().Can(authz.NewAction("identity:update:"+field, "identity:update"), storedResource).
+			Return(true, nil).Once()
+	}
 	repo.EXPECT().Update(mock.Anything, repository.IdentityRecord{
 		ID:          stored.ID,
 		Username:    "ada",
@@ -319,12 +404,82 @@ func TestIdentityService_Replace(t *testing.T) {
 	assert.Equal(t, storedIdentity, got)
 }
 
+// TestIdentityService_Replace_FieldsDenied checks that replacing checks every field, even one whose value
+// doesn't change, and that a denial lists every denied field and writes nothing.
+func TestIdentityService_Replace_FieldsDenied(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The mock fails the test if the repository updates anything.
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	decider.EXPECT().Can(authz.NewAction("identity:update:username", "identity:update"), storedResource).
+		Return(false, nil)
+	decider.EXPECT().Can(authz.NewAction("identity:update:displayName", "identity:update"), storedResource).
+		Return(true, nil)
+	unchanged := IdentityInput{Username: stored.Username, DisplayName: "Rear Admiral Hopper"}
+
+	_, err := svc.Replace(t.Context(), actor, stored.ID, unchanged)
+
+	var denied *authz.FieldsDeniedError
+	require.ErrorAs(t, err, &denied)
+	assert.Equal(t, []string{"username"}, denied.Fields)
+}
+
 func TestIdentityService_Delete(t *testing.T) {
 	t.Parallel()
-	svc, repo := newTestService(t)
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	decider.EXPECT().Can(actionDelete, storedResource).Return(true, nil)
 	repo.EXPECT().Delete(mock.Anything, stored.ID).Return(nil)
 
-	assert.NoError(t, svc.Delete(t.Context(), stored.ID))
+	assert.NoError(t, svc.Delete(t.Context(), actor, stored.ID))
+}
+
+func TestIdentityService_Delete_Denied(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The mock fails the test if the repository deletes anything.
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	decider.EXPECT().Can(actionDelete, storedResource).Return(false, nil)
+
+	err := svc.Delete(t.Context(), actor, stored.ID)
+
+	require.ErrorIs(t, err, authz.ErrDenied)
+	assert.NotErrorIs(t, err, ErrIdentityNotFound)
+}
+
+// TestIdentityService_Writes_Hidden checks that a write to an identity that the actor may not read is
+// reported like a missing identity, before any write is checked: whether the actor may write it would
+// otherwise reveal that it exists.
+func TestIdentityService_Writes_Hidden(t *testing.T) {
+	t.Parallel()
+	calls := map[string]func(*identityService) error{
+		"replace": func(svc *identityService) error {
+			_, err := svc.Replace(t.Context(), actor, stored.ID, input)
+			return err
+		},
+		"delete": func(svc *identityService) error {
+			return svc.Delete(t.Context(), actor, stored.ID)
+		},
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			// The mocks fail the test on any other decision or on a write.
+			svc, repo := newTestServiceWith(t, authorizer)
+			repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+			repo.EXPECT().ListMemberships(mock.Anything, []uuid.UUID{stored.ID}).Return(nil, nil)
+			decider.EXPECT().Can(actionRead, storedResource).Return(false, nil)
+
+			err := call(svc)
+
+			require.ErrorIs(t, err, ErrIdentityNotFound)
+			assert.NotErrorIs(t, err, authz.ErrDenied)
+		})
+	}
 }
 
 func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
@@ -362,14 +517,29 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 		_, err := svc.List(ctx, actor, 0, 5)
 		return err
 	}
+	replaceGet := func(
+		ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error,
+	) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.IdentityRecord{}, repoErr)
+		_, err := svc.Replace(ctx, actor, stored.ID, input)
+		return err
+	}
 	replace := func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+		repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
 		repo.EXPECT().Update(mock.Anything, mock.Anything).Return(repository.IdentityRecord{}, repoErr)
 		_, err := svc.Replace(ctx, actor, stored.ID, input)
 		return err
 	}
+	delGet := func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.IdentityRecord{}, repoErr)
+		return svc.Delete(ctx, actor, stored.ID)
+	}
 	del := func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+		repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
 		repo.EXPECT().Delete(mock.Anything, stored.ID).Return(repoErr)
-		return svc.Delete(ctx, stored.ID)
+		return svc.Delete(ctx, actor, stored.ID)
 	}
 
 	tests := []struct {
@@ -387,9 +557,13 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 		// Answered with a logged 500 like any other unexpected error.
 		{name: "list over the ceiling", call: list, repoErr: repository.ErrTooManyRows, wantErr: repository.ErrTooManyRows},
 		{name: "list groups unexpected", call: listGroups, repoErr: errDB, wantErr: errDB},
+		{name: "replace get not found", call: replaceGet, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
+		{name: "replace get unexpected", call: replaceGet, repoErr: errDB, wantErr: errDB},
 		{name: "replace not found", call: replace, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
 		{name: "replace username taken", call: replace, repoErr: repository.ErrDuplicateUsername, wantErr: ErrUsernameTaken},
 		{name: "replace unexpected", call: replace, repoErr: errDB, wantErr: errDB},
+		{name: "delete get not found", call: delGet, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
+		{name: "delete get unexpected", call: delGet, repoErr: errDB, wantErr: errDB},
 		{name: "delete not found", call: del, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
 		{name: "delete unexpected", call: del, repoErr: errDB, wantErr: errDB},
 	}
@@ -412,6 +586,10 @@ func TestIdentityService_AuthorizationFails(t *testing.T) {
 	errDecision := errors.New("policy failed")
 
 	calls := map[string]func(*identityService) error{
+		"create": func(svc *identityService) error {
+			_, err := svc.Create(t.Context(), actor, input)
+			return err
+		},
 		"get": func(svc *identityService) error {
 			_, err := svc.Get(t.Context(), actor, stored.ID)
 			return err
@@ -419,6 +597,13 @@ func TestIdentityService_AuthorizationFails(t *testing.T) {
 		"list": func(svc *identityService) error {
 			_, err := svc.List(t.Context(), actor, 0, 5)
 			return err
+		},
+		"replace": func(svc *identityService) error {
+			_, err := svc.Replace(t.Context(), actor, stored.ID, input)
+			return err
+		},
+		"delete": func(svc *identityService) error {
+			return svc.Delete(t.Context(), actor, stored.ID)
 		},
 	}
 	for name, call := range calls {
@@ -432,21 +617,39 @@ func TestIdentityService_AuthorizationFails(t *testing.T) {
 			err := call(svc)
 
 			require.ErrorIs(t, err, errDecision)
-			assert.NotErrorIs(t, err, ErrIdentityNotFound)
+			require.NotErrorIs(t, err, ErrIdentityNotFound)
+			assert.NotErrorIs(t, err, authz.ErrDenied)
 		})
 		t.Run(name+" no decision", func(t *testing.T) {
 			t.Parallel()
 			authorizer, decider := newDeciding(t)
-			decider.EXPECT().Can(actionRead, mock.Anything).Return(false, errDecision)
+			decider.EXPECT().Can(mock.Anything, mock.Anything).Return(false, errDecision)
+			// The mock fails the test if the repository writes anything.
 			svc, repo := newTestServiceWith(t, authorizer)
 			repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).Maybe()
 			repo.EXPECT().ListAll(mock.Anything).Return([]repository.IdentityRecord{stored}, nil).Maybe()
-			repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
+			repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
 			err := call(svc)
 
 			require.ErrorIs(t, err, errDecision)
-			assert.NotErrorIs(t, err, ErrIdentityNotFound)
+			require.NotErrorIs(t, err, ErrIdentityNotFound)
+			assert.NotErrorIs(t, err, authz.ErrDenied)
 		})
+		// The write decisions, after the actor was allowed to read the identity.
+		if name == "replace" || name == "delete" {
+			t.Run(name+" no write decision", func(t *testing.T) {
+				t.Parallel()
+				authorizer, decider := newDeciding(t)
+				svc, repo := newTestServiceWith(t, authorizer)
+				expectReadable(repo, decider)
+				decider.EXPECT().Can(mock.Anything, storedResource).Return(false, errDecision)
+
+				err := call(svc)
+
+				require.ErrorIs(t, err, errDecision)
+				assert.NotErrorIs(t, err, authz.ErrDenied)
+			})
+		}
 	}
 }

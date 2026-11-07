@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -14,8 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/audit"
+	"pkgsilo/core/authz"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/pagination"
+	"pkgsilo/core/request"
 	"pkgsilo/feature/identity/service"
 	"pkgsilo/feature/identity/service/mocks"
 	"pkgsilo/test/apitest"
@@ -119,7 +123,7 @@ func TestHandler_Replace(t *testing.T) {
 func TestHandler_Delete(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Delete(mock.Anything, ada.ID).Return(nil)
+	svc.EXPECT().Delete(mock.Anything, apitest.Actor, ada.ID).Return(nil)
 
 	api.Delete(adaPath).AssertNoContent()
 }
@@ -140,6 +144,33 @@ func TestHandler_InvalidBody(t *testing.T) {
 				envelope.ValidationError{Pointer: "#/displayName", Detail: "cannot be blank"},
 				envelope.ValidationError{Pointer: "#/username", Detail: "the length must be between 3 and 64"},
 			)
+		})
+	}
+}
+
+// TestHandler_SettableMembersHaveActions checks that every member that a request body sets has an action
+// of its own in the service, and that every such action has a member. A member without one would be
+// written without being authorized, and a field denial couldn't point to a member that doesn't exist.
+func TestHandler_SettableMembersHaveActions(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		body    reflect.Type
+		actions []string
+	}{
+		{name: "create", body: reflect.TypeFor[CreateIdentityRequest](), actions: service.CreatableFields()},
+		{name: "replace", body: reflect.TypeFor[ReplaceIdentityRequest](), actions: service.UpdatableFields()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var members []string
+			for field := range tt.body.Fields() {
+				name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+				members = append(members, name)
+			}
+
+			assert.ElementsMatch(t, members, tt.actions)
 		})
 	}
 }
@@ -191,7 +222,7 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		del = endpoint{
 			method: http.MethodDelete, target: adaPath,
 			expect: func(svc *mocks.MockIdentityService, err error) {
-				svc.EXPECT().Delete(mock.Anything, mock.Anything).Return(err)
+				svc.EXPECT().Delete(mock.Anything, mock.Anything, mock.Anything).Return(err)
 			},
 		}
 	)
@@ -200,6 +231,10 @@ func TestHandler_ServiceErrors(t *testing.T) {
 	// Wrapped like the service wraps its errors.
 	notFoundErr := fmt.Errorf("get identity: %w", service.ErrIdentityNotFound)
 	takenErr := fmt.Errorf("create identity: %w", service.ErrUsernameTaken)
+	fieldsDeniedErr := fmt.Errorf("create identity: %w",
+		&authz.FieldsDeniedError{Fields: []string{"username", "displayName"}})
+	fieldsDenied := request.FieldsDeniedProblem("username", "displayName")
+	deniedErr := fmt.Errorf("delete identity: %w", authz.ErrDenied)
 	unexpectedErr := errors.New("connection refused")
 
 	tests := []struct {
@@ -210,13 +245,16 @@ func TestHandler_ServiceErrors(t *testing.T) {
 	}{
 		{name: "list unexpected", endpoint: list, err: unexpectedErr, want: internal},
 		{name: "create username taken", endpoint: create, err: takenErr, want: usernameTakenProblem},
+		{name: "create fields denied", endpoint: create, err: fieldsDeniedErr, want: fieldsDenied},
 		{name: "create unexpected", endpoint: create, err: unexpectedErr, want: internal},
 		{name: "get not found", endpoint: get, err: notFoundErr, want: IdentityNotFoundProblem},
 		{name: "get unexpected", endpoint: get, err: unexpectedErr, want: internal},
 		{name: "replace not found", endpoint: replace, err: notFoundErr, want: IdentityNotFoundProblem},
 		{name: "replace username taken", endpoint: replace, err: takenErr, want: usernameTakenProblem},
+		{name: "replace fields denied", endpoint: replace, err: fieldsDeniedErr, want: fieldsDenied},
 		{name: "replace unexpected", endpoint: replace, err: unexpectedErr, want: internal},
 		{name: "delete not found", endpoint: del, err: notFoundErr, want: IdentityNotFoundProblem},
+		{name: "delete denied", endpoint: del, err: deniedErr, want: forbiddenProblem},
 		{name: "delete unexpected", endpoint: del, err: unexpectedErr, want: internal},
 	}
 	for _, tt := range tests {

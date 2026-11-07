@@ -29,6 +29,10 @@ var (
 
 const identitiesPath = "/api/v1/identities"
 
+// administratorsPath is the path of the administrators group that the migrations seed, whose members the
+// seeded policy allows everything.
+const administratorsPath = "/api/v1/groups/7c1d3e52-8a4f-4b6e-9f21-5d0c8e7a3b14"
+
 type (
 	apiKey        = apikeyapi.KeyResponse
 	createdAPIKey = apikeyapi.CreatedKeyResponse
@@ -288,7 +292,8 @@ func TestAuthentication_RejectedKeys(t *testing.T) {
 
 // TestAuthentication_KeyActsAsItsIdentity follows the requests of one key of ada:
 //
-//  1. Create ada as admin, then a key of hers: it has not been used.
+//  1. Create ada as admin, add her to the administrators group, so that she may write identities and keys,
+//     then create a key of hers: it has not been used.
 //  2. Create grace with ada's key: 201, attributed to ada rather than admin.
 //  3. Replace grace with ada's key: 200, the update attributed to ada.
 //  4. Create a key of grace with ada's key: 201, attributed to ada, but belonging to grace.
@@ -299,6 +304,7 @@ func TestAuthentication_KeyActsAsItsIdentity(t *testing.T) {
 
 	// 1. Create ada and her key.
 	ada, adaKeysPath := createIdentity(api, "ada")
+	api.Put(administratorsPath+"/members/"+ada.ID.String(), "").AssertNoContent()
 	key := createKey(api, adaKeysPath, "ci")
 	assert.Nil(t, key.LastUsedAt)
 	asAda := api.WithHeader("X-API-Key", key.Key)

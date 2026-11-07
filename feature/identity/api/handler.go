@@ -114,7 +114,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	if err := h.service.Delete(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
