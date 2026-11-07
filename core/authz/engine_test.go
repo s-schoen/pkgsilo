@@ -1,0 +1,333 @@
+package authz
+
+import (
+	"testing"
+	"time"
+	"uuid"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"pkgsilo/test/databasetest"
+)
+
+// administratorsGroup is the ID of the group that the seeded administrators policy grants everything.
+var administratorsGroup = uuid.MustParse("7c1d3e52-8a4f-4b6e-9f21-5d0c8e7a3b14")
+
+// insertIdentity stores an identity row for memberships to refer to and returns its ID. The table belongs
+// to the identity feature, so the row is written directly.
+func insertIdentity(t *testing.T, db *sqlx.DB) uuid.UUID {
+	t.Helper()
+
+	id := uuid.NewV4()
+	_, err := db.ExecContext(t.Context(), `
+		INSERT INTO identities (id, username, display_name, created_by, updated_by, created_at, updated_at)
+		VALUES ($1, $2, 'Test', $1, $1, $3, $3)`,
+		id, "identity-"+id.String(), time.Now(),
+	)
+	require.NoError(t, err)
+
+	return id
+}
+
+// insertGroup stores a group row with the identities as members and returns its ID. The tables belong to
+// the group feature, so the rows are written directly.
+func insertGroup(t *testing.T, db *sqlx.DB, members ...uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	id := uuid.NewV4()
+	_, err := db.ExecContext(t.Context(), `
+		INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
+		VALUES ($1, $2, $1, $1, $3, $3)`,
+		id, "group-"+id.String(), time.Now(),
+	)
+	require.NoError(t, err)
+	addMembers(t, db, id, members...)
+
+	return id
+}
+
+// addMembers stores the membership rows of the identities in the group.
+func addMembers(t *testing.T, db *sqlx.DB, group uuid.UUID, members ...uuid.UUID) {
+	t.Helper()
+
+	for _, member := range members {
+		_, err := db.ExecContext(t.Context(), `
+			INSERT INTO group_members (group_id, identity_id, created_by, created_at) VALUES ($1, $2, $2, $3)`,
+			group, member, time.Now(),
+		)
+		require.NoError(t, err)
+	}
+}
+
+// insertPolicyRow stores a policy without announcing it, and returns its ID.
+func insertPolicyRow(t *testing.T, db *sqlx.DB, source string) uuid.UUID {
+	t.Helper()
+
+	id := uuid.NewV4()
+	_, err := db.ExecContext(t.Context(), `
+		INSERT INTO policies (id, name, source, created_by, updated_by, created_at, updated_at)
+		VALUES ($1, $2, $3, $1, $1, $4, $4)`,
+		id, "policy-"+id.String(), source, time.Now(),
+	)
+	require.NoError(t, err)
+
+	return id
+}
+
+// bumpRevision announces a policy change, like every policy write does in its transaction.
+func bumpRevision(t *testing.T, db *sqlx.DB) {
+	t.Helper()
+
+	_, err := db.ExecContext(t.Context(), `UPDATE policy_revision SET revision = revision + 1`)
+	require.NoError(t, err)
+}
+
+// addPolicy stores a policy and announces it, and returns its ID.
+func addPolicy(t *testing.T, db *sqlx.DB, source string) uuid.UUID {
+	t.Helper()
+
+	id := insertPolicyRow(t, db, source)
+	bumpRevision(t, db)
+
+	return id
+}
+
+// removeSeededPolicies removes the seeded policies, so that a test's own policies are the only ones.
+func removeSeededPolicies(t *testing.T, db *sqlx.DB) {
+	t.Helper()
+
+	_, err := db.ExecContext(t.Context(), `DELETE FROM policies`)
+	require.NoError(t, err)
+	bumpRevision(t, db)
+}
+
+// assertCan asserts the decision of a new Decider for the actor about the identity resource.
+func assertCan(t *testing.T, want bool, engine *Engine, actor uuid.UUID, action Action, resource Resource) {
+	t.Helper()
+
+	decider, err := engine.For(t.Context(), actor)
+	require.NoError(t, err)
+
+	can, err := decider.Can(action, resource)
+	require.NoError(t, err)
+	assert.Equal(t, want, can)
+}
+
+func identityResource(id uuid.UUID, groups ...uuid.UUID) Resource {
+	return Resource{Type: IdentityType, ID: id, Groups: groups}
+}
+
+func TestEngine_SeededPolicies(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	engine := New(db)
+	administrator := insertIdentity(t, db)
+	addMembers(t, db, administratorsGroup, administrator)
+	ada := insertIdentity(t, db)
+	grace := insertIdentity(t, db)
+	otherAction := NewAction("identity:delete")
+
+	tests := []struct {
+		name     string
+		actor    uuid.UUID
+		action   Action
+		resource Resource
+		want     bool
+	}{
+		{"an administrator reads others", administrator, testAction, identityResource(ada), true},
+		{"an administrator does anything", administrator, otherAction, identityResource(ada), true},
+		{"an administrator can do anything to any type", administrator, otherAction, Resource{Type: "Other", ID: ada}, true},
+		{"an identity reads itself", ada, testAction, identityResource(ada), true},
+		{"an identity doesn't read others", ada, testAction, identityResource(grace), false},
+		{"an identity does nothing else to itself", ada, otherAction, identityResource(ada), false},
+		{"reading itself covers only identities", ada, testAction, Resource{Type: "Other", ID: ada}, false},
+		// Bootstrap gets its access from AllowAll, so that this actor is nobody special at runtime.
+		{"the system actor has no access", uuid.Nil(), testAction, identityResource(ada), false},
+		{"the system actor reads itself only", uuid.Nil(), testAction, identityResource(uuid.Nil()), true},
+		{"the system actor does nothing else", uuid.Nil(), otherAction, identityResource(uuid.Nil()), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assertCan(t, tt.want, engine, tt.actor, tt.action, tt.resource)
+		})
+	}
+}
+
+func TestEngine_NoPoliciesDeniesEverything(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	removeSeededPolicies(t, db)
+	ada := insertIdentity(t, db)
+
+	assertCan(t, false, New(db), ada, testAction, identityResource(ada))
+}
+
+func TestEngine_ActionGroups(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	removeSeededPolicies(t, db)
+	addPolicy(t, db, `permit (principal, action in Action::"read", resource);`)
+	engine := New(db)
+	ada := insertIdentity(t, db)
+	grace := insertIdentity(t, db)
+
+	assertCan(t, true, engine, ada, testAction, identityResource(grace))
+	assertCan(t, false, engine, ada, NewAction("identity:delete"), identityResource(grace))
+}
+
+func TestEngine_ForbidOnActionGroupOverridesPermit(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	removeSeededPolicies(t, db)
+	addPolicy(t, db, `
+		permit (principal, action, resource);
+		forbid (principal, action in Action::"read", resource);
+	`)
+	ada := insertIdentity(t, db)
+
+	assertCan(t, false, New(db), ada, testAction, identityResource(ada))
+}
+
+func TestEngine_GroupsOfPrincipal(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	member := insertIdentity(t, db)
+	outsider := insertIdentity(t, db)
+	readers := insertGroup(t, db, member)
+	removeSeededPolicies(t, db)
+	addPolicy(t, db, `permit (principal in Group::"`+readers.String()+`", action, resource);`)
+	engine := New(db)
+
+	assertCan(t, true, engine, member, testAction, identityResource(outsider))
+	assertCan(t, false, engine, outsider, testAction, identityResource(member))
+}
+
+func TestEngine_GroupsOfResource(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	ada := insertIdentity(t, db)
+	grace := insertIdentity(t, db)
+	visible := insertGroup(t, db)
+	secret := insertGroup(t, db)
+	removeSeededPolicies(t, db)
+	addPolicy(t, db, `
+		permit (principal, action, resource in Group::"`+visible.String()+`");
+		forbid (principal, action, resource in Group::"`+secret.String()+`");
+	`)
+	engine := New(db)
+
+	assertCan(t, true, engine, ada, testAction, identityResource(grace, visible))
+	assertCan(t, false, engine, ada, testAction, identityResource(grace))
+	assertCan(t, false, engine, ada, testAction, identityResource(grace, visible, secret))
+}
+
+func TestEngine_EvaluationError(t *testing.T) {
+	t.Parallel()
+	// An attribute that the entity lacks fails the evaluation.
+	const failing = `when { resource.missing == principal };`
+	const failingPermit = `permit (principal, action, resource) ` + failing
+	const failingForbid = `forbid (principal, action, resource) ` + failing
+
+	tests := []struct {
+		name          string
+		source        string
+		wantStatement string
+	}{
+		{name: "permit", source: failingPermit, wantStatement: "#0"},
+		// Cedar skips the statement that fails, so that the permit alone would decide.
+		{
+			name:          "forbid beside a permit",
+			source:        `permit (principal, action, resource);` + failingForbid,
+			wantStatement: "#1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := databasetest.New(t)
+			removeSeededPolicies(t, db)
+			policy := addPolicy(t, db, tt.source)
+			ada := insertIdentity(t, db)
+
+			decider, err := New(db).For(t.Context(), ada)
+			require.NoError(t, err)
+
+			can, err := decider.Can(testAction, identityResource(ada))
+
+			assert.False(t, can, "a policy that fails to evaluate must never result in access")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), policy.String()+tt.wantStatement, "the error must name the policy")
+		})
+	}
+}
+
+// TestEngine_Revision checks that the policies are parsed once per revision and that a new revision
+// applies on the next request of every instance. A policy that was stored without a new revision shows
+// which policies an instance uses.
+func TestEngine_Revision(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	ada := insertIdentity(t, db)
+	grace := insertIdentity(t, db)
+	first, second := New(db), New(db)
+	assertCan(t, false, first, ada, testAction, identityResource(grace))
+	assertCan(t, false, second, ada, testAction, identityResource(grace))
+
+	insertPolicyRow(t, db, `permit (principal, action, resource);`)
+	assertCan(t, false, first, ada, testAction, identityResource(grace))
+	assertCan(t, false, second, ada, testAction, identityResource(grace))
+
+	bumpRevision(t, db)
+	assertCan(t, true, first, ada, testAction, identityResource(grace))
+	assertCan(t, true, second, ada, testAction, identityResource(grace))
+
+	// A removal applies the same way, so that access is revoked at once.
+	_, err := db.ExecContext(t.Context(), `DELETE FROM policies WHERE source = 'permit (principal, action, resource);'`)
+	require.NoError(t, err)
+	bumpRevision(t, db)
+	assertCan(t, false, first, ada, testAction, identityResource(grace))
+	assertCan(t, false, second, ada, testAction, identityResource(grace))
+}
+
+func TestEngine_GroupsAreReadPerRequest(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	engine := New(db)
+	ada := insertIdentity(t, db)
+	grace := insertIdentity(t, db)
+	assertCan(t, false, engine, ada, testAction, identityResource(grace))
+
+	addMembers(t, db, administratorsGroup, ada)
+
+	assertCan(t, true, engine, ada, testAction, identityResource(grace))
+}
+
+func TestEngine_UnparsablePolicy(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	policy := addPolicy(t, db, `permit (`)
+
+	_, err := New(db).For(t.Context(), uuid.NewV4())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), policy.String(), "the error must name the policy")
+}
+
+func TestEngine_DatabaseFails(t *testing.T) {
+	t.Parallel()
+	for _, table := range []string{"policy_revision", "policies", "group_members"} {
+		t.Run(table, func(t *testing.T) {
+			t.Parallel()
+			db := databasetest.New(t)
+			_, err := db.ExecContext(t.Context(), `DROP TABLE `+table)
+			require.NoError(t, err)
+
+			_, err = New(db).For(t.Context(), uuid.NewV4())
+
+			assert.Error(t, err)
+		})
+	}
+}
