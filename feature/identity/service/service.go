@@ -21,6 +21,16 @@ var (
 	updateFields = authz.NewFieldActions("identity:update", "username", "displayName")
 )
 
+// Declaration declares identities and the actions on them, for the schema that policies are validated
+// against.
+func Declaration() authz.Declaration {
+	return authz.Declaration{
+		Type:    authz.IdentityType,
+		Actions: []authz.Action{actionRead, actionDelete},
+		Fields:  []authz.FieldActions{createFields, updateFields},
+	}
+}
+
 // CreatableFields returns the names of the fields that creating an identity sets, each of which has an
 // identity:create:<field> action.
 func CreatableFields() []string {

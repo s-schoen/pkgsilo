@@ -29,6 +29,13 @@ packages:
   pkgsilo/feature/apikey/service:
     interfaces:
       APIKeyService: {}
+  pkgsilo/feature/policy/repository:
+    interfaces:
+      PolicyRepository: {}
+      PolicyWriter: {}
+  pkgsilo/feature/policy/service:
+    interfaces:
+      PolicyService: {}
   pkgsilo/feature/health/repository:
     interfaces:
       HealthRepository: {}

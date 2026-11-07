@@ -157,9 +157,18 @@ func TestIdentities_ListPages(t *testing.T) {
 	assert.Equal(t, envelope.Pagination{Offset: 2, Limit: 2}, last.Pagination)
 }
 
-// addPolicy stores a policy and announces it, like every policy write does. The policies can't be managed
-// through the API yet, so they're written directly.
-func addPolicy(t *testing.T, db *sqlx.DB, source string) {
+// addPolicy creates a policy with the given source, under a name of its own, through the client.
+func addPolicy(t *testing.T, api *apitest.Client, source string) {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]string{"name": uuid.NewV4().String(), "source": source})
+	require.NoError(t, err)
+	api.Post("/api/v1/policies", string(body)).AssertStatus(http.StatusCreated)
+}
+
+// insertPolicy stores a policy and announces it, like every policy write does. It's for a policy that the API
+// rejects, as a database changed by hand may hold it.
+func insertPolicy(t *testing.T, db *sqlx.DB, source string) {
 	t.Helper()
 
 	id := uuid.NewV4()
@@ -232,7 +241,7 @@ func TestIdentities_OwnIdentityOnly(t *testing.T) {
 //  6. Get three: 404 identity-not-found. Get four: 200.
 func TestIdentities_ListPagesWithHiddenRows(t *testing.T) {
 	t.Parallel()
-	api, db := apptest.NewWithDB(t)
+	api := apptest.New(t)
 
 	// 1. Create.
 	reader, asReader := apptest.NewIdentity(api, "reader")
@@ -252,7 +261,7 @@ func TestIdentities_ListPagesWithHiddenRows(t *testing.T) {
 		apitest.DecodeCollection[identity](asReader.Get(identitiesPath), http.StatusOK).Data)
 
 	// 3. Add the policy.
-	addPolicy(t, db, `permit (
+	addPolicy(t, api, `permit (
 		principal == Identity::"`+reader.ID.String()+`",
 		action in Action::"read",
 		resource in Group::"`+group.ID.String()+`"
@@ -285,7 +294,7 @@ func TestIdentities_FailingPolicy(t *testing.T) {
 	admin := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data[0]
 
 	// 1. Add the policy.
-	addPolicy(t, db, `forbid (principal, action, resource) when { resource.missing == principal };`)
+	insertPolicy(t, db, `forbid (principal, action, resource) when { resource.missing == principal };`)
 
 	// 2. Get and list.
 	api.Get(identitiesPath + "/" + admin.ID.String()).AssertInternalError()
@@ -376,14 +385,14 @@ func TestIdentities_WritesDeniedByDefault(t *testing.T) {
 //     username alone, and ada is unchanged.
 func TestIdentities_UpdateSelf(t *testing.T) {
 	t.Parallel()
-	api, db := apptest.NewWithDB(t)
+	api := apptest.New(t)
 
 	// 1. Create.
 	ada, asAda := apptest.NewIdentity(api, "ada")
 	adaPath := identitiesPath + "/" + ada.ID.String()
 
 	// 2. Add the update policy.
-	addPolicy(t, db, `permit (principal, action in Action::"identity:update", resource)
+	addPolicy(t, api, `permit (principal, action in Action::"identity:update", resource)
 		when { resource == principal };`)
 
 	// 3. Replace ada.
@@ -398,7 +407,7 @@ func TestIdentities_UpdateSelf(t *testing.T) {
 		"#/username", "#/displayName")
 
 	// 5. Add the forbid.
-	addPolicy(t, db, `forbid (principal, action == Action::"identity:update:username", resource);`)
+	addPolicy(t, api, `forbid (principal, action == Action::"identity:update:username", resource);`)
 
 	// 6. Replace ada again.
 	assertFieldsDenied(t, asAda.Put(adaPath, `{"username":"ada-lovelace","displayName":"Countess of Lovelace"}`),
@@ -416,13 +425,13 @@ func TestIdentities_UpdateSelf(t *testing.T) {
 //  5. As ada, delete carol: 204, and, as admin, get her: 404 identity-not-found.
 func TestIdentities_CreateAndDeleteByPolicy(t *testing.T) {
 	t.Parallel()
-	api, db := apptest.NewWithDB(t)
+	api := apptest.New(t)
 
 	// 1. Create.
 	ada, asAda := apptest.NewIdentity(api, "ada")
 
 	// 2. Add the policy.
-	addPolicy(t, db, `permit (
+	addPolicy(t, api, `permit (
 		principal == Identity::"`+ada.ID.String()+`",
 		action in [Action::"read", Action::"identity:create", Action::"identity:delete"],
 		resource is Identity

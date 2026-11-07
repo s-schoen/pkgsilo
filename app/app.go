@@ -23,6 +23,9 @@ import (
 	identityapi "pkgsilo/feature/identity/api"
 	identityrepo "pkgsilo/feature/identity/repository"
 	identityservice "pkgsilo/feature/identity/service"
+	policyapi "pkgsilo/feature/policy/api"
+	policyrepo "pkgsilo/feature/policy/repository"
+	policyservice "pkgsilo/feature/policy/service"
 )
 
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
@@ -34,6 +37,9 @@ func NewHandler(opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *s
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db), authorizer)
 	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db))
 	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), apiKeyPepper)
+	// Saved policies are validated against the resource types and actions that the features declare.
+	schema := authz.Schema(identityservice.Declaration(), policyservice.Declaration())
+	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema)
 
 	r := router.New(opts, logger)
 	r.Route("/api/v1", func(r chi.Router) {
@@ -43,6 +49,7 @@ func NewHandler(opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *s
 			r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
 			r.Mount("/identities/{identityID}/api-keys", apikeyapi.NewHandler(apiKeys, logger).Routes())
 			r.Mount("/groups", groupapi.NewHandler(groups, logger).Routes())
+			r.Mount("/policies", policyapi.NewHandler(policies, logger).Routes())
 		})
 	})
 
