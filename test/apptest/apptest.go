@@ -45,15 +45,30 @@ func NewWithDB(t *testing.T) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
 	db := databasetest.New(t)
-	log := logger.New(t.Output(), logger.Options{Level: slog.LevelInfo})
 
 	key, err := app.Bootstrap(t.Context(), db, []byte(apiKeyPepper))
 	require.NoError(t, err)
 
-	api := apitest.NewClient(t, app.NewHandler(router.Options{}, db, []byte(apiKeyPepper), log)).
-		WithHeader(apiKeyHeader, key)
+	api := apitest.NewClient(t, newHandler(t, db)).WithHeader(apiKeyHeader, key)
 
 	return api, db
+}
+
+// NewInstance returns a client for another instance of the application on db, which NewWithDB returned
+// together with api. The client authenticates like api. The instances share nothing but the database, like
+// the instances of a deployment.
+func NewInstance(t *testing.T, api *apitest.Client, db *sqlx.DB) *apitest.Client {
+	t.Helper()
+
+	return api.WithHandler(newHandler(t, db))
+}
+
+// newHandler returns the application, wired as cmd/main.go serves it, on db. It logs to the test's output.
+func newHandler(t *testing.T, db *sqlx.DB) http.Handler {
+	t.Helper()
+
+	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper),
+		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}))
 }
 
 // NewIdentity creates an identity with the given username and an API key of its own through the client
