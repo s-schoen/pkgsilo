@@ -29,11 +29,13 @@ import (
 const (
 	// IdentityType is the Cedar entity type of identities. Every decision's principal is one.
 	IdentityType = "Identity"
+	// GroupType is the Cedar entity type of groups, which identities are members of. A group as a resource
+	// is the same entity as a group of the principal, so that `principal in resource` matches its members.
+	GroupType = "Group"
 	// ActionGroupRead is the action group that bundles all reading actions, for policies such as a
 	// read-only audit group.
 	ActionGroupRead = "read"
 
-	groupType  types.EntityType = "Group"
 	actionType types.EntityType = "Action"
 )
 
