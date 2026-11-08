@@ -16,10 +16,13 @@ import (
 const policyType = "Policy"
 
 // The actions on policies. Each settable field has its own action for each kind of write, such as
-// policy:update:source, so that policies can limit writes to some fields.
+// policy:update:source, so that policies can limit writes to some fields. Each field but the ID has its own
+// action for reading it too, such as policy:read:source, on top of policy:read.
 var (
 	actionRead   = authz.NewAction("policy:read", authz.ActionGroupRead)
 	actionDelete = authz.NewAction("policy:delete")
+	readFields   = authz.NewReadFieldActions("policy",
+		"name", "source", "createdBy", "updatedBy", "createdAt", "updatedAt")
 	createFields = authz.NewFieldActions("policy:create", "name", "source")
 	updateFields = authz.NewFieldActions("policy:update", "name", "source")
 )
@@ -30,8 +33,14 @@ func Declaration() authz.Declaration {
 	return authz.Declaration{
 		Type:    policyType,
 		Actions: []authz.Action{actionRead, actionDelete},
-		Fields:  []authz.FieldActions{createFields, updateFields},
+		Fields:  []authz.FieldActions{readFields, createFields, updateFields},
 	}
+}
+
+// ReadableFields returns the names of the fields of a policy, besides its ID, each of which has a
+// policy:read:<field> action.
+func ReadableFields() []string {
+	return readFields.Fields()
 }
 
 // CreatableFields returns the names of the fields that creating a policy sets, each of which has a
@@ -54,9 +63,12 @@ func UpdatableFields() []string {
 // policies over 1,000 statements, if a statement doesn't match the schema or tests for an undeclared
 // attribute with has, or if it references a group that doesn't exist. The source is checked after the
 // actor was allowed to write, so that it reveals no groups to others.
+//
+// Every policy that it returns holds only the fields that the actor may read, and the ID.
 type PolicyService interface {
 	// Create stores a new policy with the given input. It returns an *authz.FieldsDeniedError, without
-	// storing anything, if the actor may not set any of its fields.
+	// storing anything, if the actor may not set any of its fields. A new policy that the actor may not
+	// read is returned with only its ID.
 	Create(ctx context.Context, actor uuid.UUID, in PolicyInput) (Policy, error)
 	// Get returns the policy with the given ID. A policy that the actor may not read is reported like a
 	// missing one.
@@ -114,6 +126,12 @@ func (s *policyService) Create(ctx context.Context, actor uuid.UUID, in PolicyIn
 		return Policy{}, fmt.Errorf("create policy: %w", err)
 	}
 
+	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
+	fields, err := readFields.ReadableIf(decider, actionRead, toResource(id))
+	if err != nil {
+		return Policy{}, fmt.Errorf("create policy: %w", err)
+	}
+
 	now := s.now()
 	var rec repository.PolicyRecord
 	err = s.repo.Write(ctx, func(w repository.PolicyWriter) error {
@@ -141,7 +159,7 @@ func (s *policyService) Create(ctx context.Context, actor uuid.UUID, in PolicyIn
 		return Policy{}, fmt.Errorf("create policy: %w", translateError(err))
 	}
 
-	return toPolicy(rec), nil
+	return toPolicy(rec, fields), nil
 }
 
 func (s *policyService) Get(ctx context.Context, actor, id uuid.UUID) (Policy, error) {
@@ -155,7 +173,12 @@ func (s *policyService) Get(ctx context.Context, actor, id uuid.UUID) (Policy, e
 		return Policy{}, fmt.Errorf("get policy: %w", err)
 	}
 
-	return toPolicy(rec), nil
+	fields, err := readFields.Readable(decider, toResource(id))
+	if err != nil {
+		return Policy{}, fmt.Errorf("get policy: %w", err)
+	}
+
+	return toPolicy(rec, fields), nil
 }
 
 func (s *policyService) List(ctx context.Context, actor uuid.UUID, offset, limit int) (pagination.Page[Policy], error) {
@@ -176,10 +199,15 @@ func (s *policyService) List(ctx context.Context, actor uuid.UUID, offset, limit
 		return pagination.Page[Policy]{}, fmt.Errorf("list policies: %w", err)
 	}
 
+	// Only the fields of the rows on the page are checked.
 	page := pagination.FromAll(readable, offset, limit)
 	policies := make([]Policy, len(page.Items))
 	for i, rec := range page.Items {
-		policies[i] = toPolicy(rec)
+		fields, err := readFields.Readable(decider, toResource(rec.ID))
+		if err != nil {
+			return pagination.Page[Policy]{}, fmt.Errorf("list policies: %w", err)
+		}
+		policies[i] = toPolicy(rec, fields)
 	}
 
 	return pagination.Page[Policy]{Items: policies, HasMore: page.HasMore}, nil
@@ -201,6 +229,12 @@ func (s *policyService) Replace(ctx context.Context, actor, id uuid.UUID, in Pol
 	}
 
 	source, err := s.checkSource(ctx, in.Source)
+	if err != nil {
+		return Policy{}, fmt.Errorf("replace policy: %w", err)
+	}
+
+	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
+	fields, err := readFields.Readable(decider, toResource(id))
 	if err != nil {
 		return Policy{}, fmt.Errorf("replace policy: %w", err)
 	}
@@ -229,7 +263,7 @@ func (s *policyService) Replace(ctx context.Context, actor, id uuid.UUID, in Pol
 		return Policy{}, fmt.Errorf("replace policy: %w", translateError(err))
 	}
 
-	return toPolicy(rec), nil
+	return toPolicy(rec, fields), nil
 }
 
 func (s *policyService) Delete(ctx context.Context, actor, id uuid.UUID) error {
@@ -340,14 +374,16 @@ func toResource(id uuid.UUID) authz.Resource {
 	return authz.Resource{Type: policyType, ID: id}
 }
 
-func toPolicy(rec repository.PolicyRecord) Policy {
+// toPolicy returns the policy of the record with its ID and the readable fields. Every other field stays
+// hidden, so that one that's missing here can't be revealed by mistake.
+func toPolicy(rec repository.PolicyRecord, fields authz.ReadableFields) Policy {
 	return Policy{
 		ID:        rec.ID,
-		Name:      rec.Name,
-		Source:    rec.Source,
-		CreatedBy: rec.CreatedBy,
-		UpdatedBy: rec.UpdatedBy,
-		CreatedAt: rec.CreatedAt,
-		UpdatedAt: rec.UpdatedAt,
+		Name:      authz.Reveal(fields, "name", rec.Name),
+		Source:    authz.Reveal(fields, "source", rec.Source),
+		CreatedBy: authz.Reveal(fields, "createdBy", rec.CreatedBy),
+		UpdatedBy: authz.Reveal(fields, "updatedBy", rec.UpdatedBy),
+		CreatedAt: authz.Reveal(fields, "createdAt", rec.CreatedAt),
+		UpdatedAt: authz.Reveal(fields, "updatedAt", rec.UpdatedAt),
 	}
 }
