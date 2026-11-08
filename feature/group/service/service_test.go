@@ -27,6 +27,7 @@ var (
 	now      = time.Date(2026, time.November, 2, 12, 0, 0, 0, time.UTC)
 	actor    = uuid.MustParse("6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b")
 	input    = GroupInput{Name: "Maintainers"}
+	patch    = GroupPatch{Name: new("Maintainers")}
 	identity = uuid.MustParse("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f")
 
 	// stored is a record as the repository returns it, with a distinct value in every field.
@@ -472,6 +473,57 @@ func TestGroupService_Replace_FieldsDenied(t *testing.T) {
 	assert.Equal(t, []string{"name"}, denied.Fields)
 }
 
+func TestGroupService_Patch(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectAllowed(repo, decider, authz.NewAction("group:update:name", "group:update"))
+	servicetest.ExpectReadableFields(decider, readFields, storedResource, "name")
+	repo.EXPECT().Patch(mock.Anything, repository.GroupPatch{
+		ID:        stored.ID,
+		Name:      new("Maintainers"),
+		UpdatedBy: actor,
+		UpdatedAt: now,
+	}).Return(stored, nil)
+
+	got, err := svc.Patch(t.Context(), actor, stored.ID, patch)
+	require.NoError(t, err)
+
+	// The response to a write is masked like a read.
+	assert.Equal(t, Group{ID: stored.ID, Name: authz.Visible("Reviewers")}, got)
+}
+
+// TestGroupService_Patch_Empty checks that a patch that sets no field returns the group as it is, with no
+// write and no write decision, so that its update time doesn't change.
+func TestGroupService_Patch_Empty(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The mocks fail the test on a write decision or a write.
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	expectAllFieldsReadable(decider, storedResource)
+
+	got, err := svc.Patch(t.Context(), actor, stored.ID, GroupPatch{})
+	require.NoError(t, err)
+
+	assert.Equal(t, storedGroup, got)
+}
+
+func TestGroupService_Patch_FieldsDenied(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The mock fails the test if the repository patches anything.
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	decider.EXPECT().Can(authz.NewAction("group:update:name", "group:update"), storedResource).Return(false, nil)
+
+	_, err := svc.Patch(t.Context(), actor, stored.ID, patch)
+
+	var denied *authz.FieldsDeniedError
+	require.ErrorAs(t, err, &denied)
+	assert.Equal(t, []string{"name"}, denied.Fields)
+}
+
 func TestGroupService_Delete(t *testing.T) {
 	t.Parallel()
 	authorizer, decider := newDeciding(t)
@@ -583,6 +635,10 @@ func calls(t *testing.T) map[string]func(*groupService) error {
 			_, err := svc.Replace(t.Context(), actor, stored.ID, input)
 			return err
 		},
+		"patch": func(svc *groupService) error {
+			_, err := svc.Patch(t.Context(), actor, stored.ID, patch)
+			return err
+		},
 		"delete": func(svc *groupService) error {
 			return svc.Delete(t.Context(), actor, stored.ID)
 		},
@@ -682,6 +738,17 @@ func TestGroupService_TranslatesRepositoryErrors(t *testing.T) {
 		_, err := svc.Replace(ctx, actor, stored.ID, input)
 		return err
 	}
+	patchGet := func(ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.GroupRecord{}, repoErr)
+		_, err := svc.Patch(ctx, actor, stored.ID, patch)
+		return err
+	}
+	patchCall := func(ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+		repo.EXPECT().Patch(mock.Anything, mock.Anything).Return(repository.GroupRecord{}, repoErr)
+		_, err := svc.Patch(ctx, actor, stored.ID, patch)
+		return err
+	}
 	delGet := func(ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error) error {
 		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.GroupRecord{}, repoErr)
 		return svc.Delete(ctx, actor, stored.ID)
@@ -751,6 +818,11 @@ func TestGroupService_TranslatesRepositoryErrors(t *testing.T) {
 		{name: "replace not found", call: replace, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},
 		{name: "replace name taken", call: replace, repoErr: repository.ErrDuplicateName, wantErr: ErrGroupNameTaken},
 		{name: "replace unexpected", call: replace, repoErr: errDB, wantErr: errDB},
+		{name: "patch get not found", call: patchGet, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},
+		{name: "patch get unexpected", call: patchGet, repoErr: errDB, wantErr: errDB},
+		{name: "patch not found", call: patchCall, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},
+		{name: "patch name taken", call: patchCall, repoErr: repository.ErrDuplicateName, wantErr: ErrGroupNameTaken},
+		{name: "patch unexpected", call: patchCall, repoErr: errDB, wantErr: errDB},
 		{name: "delete get not found", call: delGet, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},
 		{name: "delete get unexpected", call: delGet, repoErr: errDB, wantErr: errDB},
 		{name: "delete not found", call: del, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},
@@ -861,7 +933,7 @@ func TestGroupService_AuthorizationFails(t *testing.T) {
 
 	// The field read decisions, after every other decision allowed the request. They come before any write,
 	// so that a failed one can't fail a request whose write succeeded.
-	for _, name := range []string{"create", "get", "list", "replace"} {
+	for _, name := range []string{"create", "get", "list", "replace", "patch"} {
 		t.Run(name+" no field decision", func(t *testing.T) {
 			t.Parallel()
 			authorizer, decider := newDeciding(t)

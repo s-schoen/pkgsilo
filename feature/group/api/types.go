@@ -51,6 +51,23 @@ func (r ReplaceGroupRequest) toInput() service.GroupInput {
 	return service.GroupInput{Name: r.Name}
 }
 
+// PatchGroupRequest is the body of a request that changes some settable fields of a group, a JSON Merge
+// Patch: a member that it leaves out stays unchanged.
+type PatchGroupRequest struct {
+	Name request.Optional[string] `json:"name"`
+}
+
+// Validate reports the invalid members of r as validation.Errors.
+func (r PatchGroupRequest) Validate() error {
+	return validation.ValidateStruct(&r,
+		validation.Field(&r.Name, request.IfSet(nameRules...)),
+	)
+}
+
+func (r PatchGroupRequest) toPatch() service.GroupPatch {
+	return service.GroupPatch{Name: r.Name.Pointer()}
+}
+
 // GroupResponse is the representation of a group in responses. A field that the caller may not read is
 // absent.
 type GroupResponse struct {

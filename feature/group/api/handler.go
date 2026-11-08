@@ -34,6 +34,7 @@ func (h *Handler) Routes() chi.Router {
 	r.Post("/", h.create)
 	r.Get("/{id}", h.get)
 	r.Put("/{id}", h.replace)
+	r.Patch("/{id}", h.patch)
 	r.Delete("/{id}", h.delete)
 	r.Get("/{id}/members", h.listMembers)
 	r.Put("/{id}/members/{identityID}", h.addMember)
@@ -104,6 +105,26 @@ func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	group, err := h.service.Replace(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, body.toInput())
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+
+	envelope.WriteResource(w, toGroupResponse(group))
+}
+
+func (h *Handler) patch(w http.ResponseWriter, r *http.Request) {
+	id, ok := groupID(w, r)
+	if !ok {
+		return
+	}
+
+	var body PatchGroupRequest
+	if !request.DecodeMergePatch(w, r, &body) {
+		return
+	}
+
+	group, err := h.service.Patch(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, body.toPatch())
 	if err != nil {
 		h.writeError(w, r, err)
 		return

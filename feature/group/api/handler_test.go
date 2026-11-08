@@ -157,6 +157,50 @@ func TestHandler_Replace(t *testing.T) {
 	api.Put(maintainersPath, maintainersBody).AssertResource(maintainersJSON)
 }
 
+func TestHandler_Patch(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		body  string
+		patch service.GroupPatch
+	}{
+		{name: "name", body: maintainersBody, patch: service.GroupPatch{Name: new("Maintainers")}},
+		{name: "none", body: `{}`, patch: service.GroupPatch{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			api, svc := newTestClient(t, loggertest.Discard())
+			svc.EXPECT().Patch(mock.Anything, apitest.Actor, maintainers.ID, tt.patch).Return(maintainers, nil)
+
+			api.Patch(maintainersPath, tt.body).AssertResource(maintainersJSON)
+		})
+	}
+}
+
+// TestHandler_Patch_InvalidBody checks that the name may be left out of a patch, but not set to null or to an
+// invalid value.
+func TestHandler_Patch_InvalidBody(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		body   string
+		detail string
+	}{
+		{body: `{"name":null}`, detail: "cannot be null"},
+		{body: `{"name":" "}`, detail: "cannot be blank"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.body, func(t *testing.T) {
+			t.Parallel()
+			// The mock fails the test if the service is called.
+			api, _ := newTestClient(t, loggertest.Discard())
+
+			api.Patch(maintainersPath, tt.body).
+				AssertInvalidBody(envelope.ValidationError{Pointer: "#/name", Detail: tt.detail})
+		})
+	}
+}
+
 func TestHandler_Delete(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
@@ -264,6 +308,7 @@ func TestHandler_SettableMembersHaveActions(t *testing.T) {
 	}{
 		{name: "create", body: reflect.TypeFor[CreateGroupRequest](), actions: service.CreatableFields()},
 		{name: "replace", body: reflect.TypeFor[ReplaceGroupRequest](), actions: service.UpdatableFields()},
+		{name: "patch", body: reflect.TypeFor[PatchGroupRequest](), actions: service.UpdatableFields()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -288,6 +333,7 @@ func TestHandler_InvalidID(t *testing.T) {
 	}{
 		{method: http.MethodGet, target: badGroup},
 		{method: http.MethodPut, target: badGroup},
+		{method: http.MethodPatch, target: badGroup},
 		{method: http.MethodDelete, target: badGroup},
 		{method: http.MethodGet, target: badGroup + "/members"},
 		{method: http.MethodPut, target: badGroup + "/members/" + adaID},
@@ -376,6 +422,12 @@ func TestHandler_ServiceErrors(t *testing.T) {
 				svc.EXPECT().Replace(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(service.Group{}, err)
 			},
 		}
+		patch = endpoint{
+			method: http.MethodPatch, target: maintainersPath, body: maintainersBody,
+			expect: func(svc *mocks.MockGroupService, err error) {
+				svc.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(service.Group{}, err)
+			},
+		}
 		del = endpoint{
 			method: http.MethodDelete, target: maintainersPath,
 			expect: func(svc *mocks.MockGroupService, err error) {
@@ -430,6 +482,10 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		{name: "replace name taken", endpoint: replace, err: nameTakenErr, want: groupNameTakenProblem},
 		{name: "replace fields denied", endpoint: replace, err: fieldsDeniedErr, want: fieldsDenied},
 		{name: "replace unexpected", endpoint: replace, err: unexpectedErr, want: internal},
+		{name: "patch not found", endpoint: patch, err: groupNotFoundErr, want: groupNotFoundProblem},
+		{name: "patch name taken", endpoint: patch, err: nameTakenErr, want: groupNameTakenProblem},
+		{name: "patch fields denied", endpoint: patch, err: fieldsDeniedErr, want: fieldsDenied},
+		{name: "patch unexpected", endpoint: patch, err: unexpectedErr, want: internal},
 		{name: "delete not found", endpoint: del, err: groupNotFoundErr, want: groupNotFoundProblem},
 		{name: "delete denied", endpoint: del, err: deniedErr, want: forbiddenProblem},
 		{name: "delete unexpected", endpoint: del, err: unexpectedErr, want: internal},

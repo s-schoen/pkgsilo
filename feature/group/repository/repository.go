@@ -22,6 +22,9 @@ type GroupRepository interface {
 	// Update overwrites the name, UpdatedBy and UpdatedAt of the record with rec.ID and returns it
 	// as stored. CreatedBy and CreatedAt are immutable and ignored.
 	Update(ctx context.Context, rec GroupRecord) (GroupRecord, error)
+	// Patch overwrites the fields that patch sets, UpdatedBy and UpdatedAt of the record with patch.ID and
+	// returns it as stored. It writes no other column, so that concurrent patches of other fields are kept.
+	Patch(ctx context.Context, patch GroupPatch) (GroupRecord, error)
 	// Delete removes the record with the given ID and its member records.
 	Delete(ctx context.Context, id uuid.UUID) error
 	// InsertMember stores a new member record. If the group already has a member record for the
@@ -115,6 +118,26 @@ func (r *PostgresGroupRepository) Update(ctx context.Context, rec GroupRecord) (
 	)
 	if err != nil {
 		return GroupRecord{}, fmt.Errorf("update group: %w", translateError(err))
+	}
+
+	return stored, nil
+}
+
+// Patch overwrites the fields that patch sets, UpdatedBy and UpdatedAt of the record with patch.ID and
+// returns it as stored. It writes no other column, so that concurrent patches of other fields are kept.
+func (r *PostgresGroupRepository) Patch(ctx context.Context, patch GroupPatch) (GroupRecord, error) {
+	var stored GroupRecord
+	// COALESCE keeps a column whose field is nil, which only works while the columns are NOT NULL: a
+	// nullable one needs to tell "unchanged" from "set to NULL" with a parameter of its own.
+	err := r.db.GetContext(ctx, &stored, `
+		UPDATE groups
+		SET name = COALESCE($2::text, name), updated_by = $3, updated_at = $4
+		WHERE id = $1
+		RETURNING `+groupColumns,
+		patch.ID, patch.Name, patch.UpdatedBy, patch.UpdatedAt,
+	)
+	if err != nil {
+		return GroupRecord{}, fmt.Errorf("patch group: %w", translateError(err))
 	}
 
 	return stored, nil

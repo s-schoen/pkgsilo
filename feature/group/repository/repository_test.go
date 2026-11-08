@@ -210,6 +210,57 @@ func TestPostgresGroupRepository_Update_DuplicateName(t *testing.T) {
 	assert.ErrorIs(t, err, ErrDuplicateName)
 }
 
+func TestPostgresGroupRepository_Patch(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		patch    *string
+		wantName string
+	}{
+		{name: "name", patch: new("Core maintainers"), wantName: "Core maintainers"},
+		{name: "none", wantName: "Maintainers"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo, _ := newTestRepo(t)
+			rec := insertGroup(t, repo, "Maintainers")
+
+			patch := GroupPatch{ID: rec.ID, Name: tt.patch, UpdatedBy: uuid.NewV4(), UpdatedAt: baseTime.Add(time.Hour)}
+			want := rec
+			want.Name, want.UpdatedBy, want.UpdatedAt = tt.wantName, patch.UpdatedBy, patch.UpdatedAt
+
+			stored, err := repo.Patch(t.Context(), patch)
+			require.NoError(t, err)
+			assert.Equal(t, want, stored)
+
+			got, err := repo.Get(t.Context(), rec.ID)
+			require.NoError(t, err)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+func TestPostgresGroupRepository_Patch_NotFound(t *testing.T) {
+	t.Parallel()
+	repo, _ := newTestRepo(t)
+
+	_, err := repo.Patch(t.Context(), GroupPatch{ID: uuid.NewV4(), Name: new("Maintainers")})
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresGroupRepository_Patch_DuplicateName(t *testing.T) {
+	t.Parallel()
+	repo, _ := newTestRepo(t)
+	insertGroup(t, repo, "Maintainers")
+	reviewers := insertGroup(t, repo, "Reviewers")
+
+	_, err := repo.Patch(t.Context(), GroupPatch{ID: reviewers.ID, Name: new("Maintainers")})
+
+	assert.ErrorIs(t, err, ErrDuplicateName)
+}
+
 func TestPostgresGroupRepository_Delete(t *testing.T) {
 	t.Parallel()
 	repo, _ := newTestRepo(t)

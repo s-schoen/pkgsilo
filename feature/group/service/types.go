@@ -25,6 +25,21 @@ type GroupInput struct {
 	Name string
 }
 
+// GroupPatch holds the group fields that a caller changes when patching a group. A nil field stays as it is.
+type GroupPatch struct {
+	Name *string
+}
+
+// fields returns the names of the fields that p sets.
+func (p GroupPatch) fields() []string {
+	var fields []string
+	if p.Name != nil {
+		fields = append(fields, "name")
+	}
+
+	return fields
+}
+
 // Member is the membership of an identity in a group.
 type Member struct {
 	IdentityID uuid.UUID

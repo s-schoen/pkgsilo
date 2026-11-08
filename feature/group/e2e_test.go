@@ -28,6 +28,7 @@ var (
 	identityNotFound = envelope.DefineProblemType("identity-not-found", "Identity not found", http.StatusNotFound)
 	memberNotFound   = envelope.DefineProblemType("member-not-found", "Member not found", http.StatusNotFound)
 	fieldsDenied     = envelope.DefineProblemType("fields-denied", "Fields denied", http.StatusForbidden)
+	invalidBody      = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
 	forbidden        = envelope.ProblemType{Type: "about:blank", Title: "Forbidden", Status: http.StatusForbidden}
 )
 
@@ -625,4 +626,77 @@ func TestGroups_RemoveLastAdministrator(t *testing.T) {
 	assert.Empty(t, listGroups(api))
 	api.Get(administratorsPath).AssertProblemType(groupNotFound)
 	api.Put(administratorsPath+"/members/"+admin.String(), "").AssertProblemType(groupNotFound)
+}
+
+// TestGroups_Patch changes a group with JSON Merge Patches, as admin:
+//
+//  1. Create maintainers and reviewers: 201 for each.
+//  2. Patch maintainers' name: 200 with the new name and the update time advanced.
+//  3. Patch it with an empty object: 200 with maintainers as step 2 left it, the update time included.
+//  4. Patch its name to null: 422 invalid-body pointing to name. To reviewers: 409 group-name-taken, the
+//     same as replacing it. Get it: as step 2 left it.
+//  5. Patch a group that doesn't exist: 404 group-not-found.
+func TestGroups_Patch(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	maintainers, maintainersPath := createGroup(api, "Maintainers")
+	createGroup(api, "Reviewers")
+
+	// 2. Patch the name.
+	patched := apitest.DecodeResource[group](api.Patch(maintainersPath, `{"name":"Core maintainers"}`), http.StatusOK)
+	assert.Equal(t, envelope.Visible("Core maintainers"), patched.Name)
+	assert.True(t, patched.UpdatedAt.Value.After(maintainers.UpdatedAt.Value), "the update time must advance")
+
+	// 3. Patch nothing.
+	assert.Equal(t, patched, apitest.DecodeResource[group](api.Patch(maintainersPath, `{}`), http.StatusOK))
+
+	// 4. Patch with invalid names.
+	resp := api.Patch(maintainersPath, `{"name":null}`)
+	resp.AssertProblemType(invalidBody)
+	assert.Contains(t, resp.Body.String(), `"pointer":"#/name"`)
+	api.Patch(maintainersPath, `{"name":"Reviewers"}`).AssertProblemType(groupNameTaken)
+	assert.Equal(t, patched, apitest.DecodeResource[group](api.Get(maintainersPath), http.StatusOK))
+
+	// 5. Patch a missing group.
+	api.Patch(groupsPath+"/"+uuid.NewV4().String(), `{}`).AssertProblemType(groupNotFound)
+}
+
+// TestGroups_PatchByPolicy checks that patching a group needs only the actions of the fields that the patch
+// sets, after reading the group:
+//
+//  1. Create ada with an API key, and the groups maintainers and hidden: 201 for each.
+//  2. Add a policy that lets ada read maintainers: 201.
+//  3. As ada, patch maintainers with an empty object: 200 with maintainers, since the patch sets no field.
+//     Patch its name: 403 fields-denied pointing to name, and, as admin, maintainers is unchanged.
+//  4. As ada, patch hidden, with a name and with an empty object: the same 404 group-not-found, to the byte,
+//     as for a group that doesn't exist.
+func TestGroups_PatchByPolicy(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	maintainers, maintainersPath := createGroup(api, "Maintainers")
+	_, hiddenPath := createGroup(api, "Hidden")
+	missingPath := groupsPath + "/" + uuid.NewV4().String()
+
+	// 2. Add the policy.
+	addPolicy(t, api, `permit (
+		principal == Identity::"`+ada.ID.String()+`",
+		action in [Action::"group:read", Action::"group:readFields"],
+		resource == Group::"`+maintainers.ID.String()+`"
+	);`)
+
+	// 3. Patch maintainers.
+	assert.Equal(t, maintainers, apitest.DecodeResource[group](asAda.Patch(maintainersPath, `{}`), http.StatusOK))
+	assertFieldsDenied(t, asAda.Patch(maintainersPath, `{"name":"Mine"}`), "#/name")
+	assert.Equal(t, maintainers, apitest.DecodeResource[group](api.Get(maintainersPath), http.StatusOK))
+
+	// 4. Patch hidden.
+	for _, body := range []string{`{"name":"Mine"}`, `{}`} {
+		assertLikeMissing(t, func(target string) *apitest.Response { return asAda.Patch(target, body) },
+			hiddenPath, missingPath, groupNotFound)
+	}
 }

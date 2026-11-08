@@ -15,6 +15,14 @@ type GroupRecord struct {
 	UpdatedAt time.Time `db:"updated_at"`
 }
 
+// GroupPatch changes some fields of a group record: a nil field stays as it is.
+type GroupPatch struct {
+	ID        uuid.UUID
+	Name      *string
+	UpdatedBy uuid.UUID
+	UpdatedAt time.Time
+}
+
 // MemberRecord is the stored membership of an identity in a group, one row of the group_members table.
 type MemberRecord struct {
 	GroupID    uuid.UUID `db:"group_id"`
