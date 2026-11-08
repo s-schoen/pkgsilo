@@ -79,6 +79,8 @@ func TestClient_Send(t *testing.T) {
 		`{"method":"POST","contentType":"application/json","body":"{\"a\":1}"}`)
 	api.Put("/items/echo", `{"a":1}`).AssertJSON(http.StatusOK,
 		`{"method":"PUT","contentType":"application/json","body":"{\"a\":1}"}`)
+	api.Patch("/items/echo", `{"a":1}`).AssertJSON(http.StatusOK,
+		`{"method":"PATCH","contentType":"application/merge-patch+json","body":"{\"a\":1}"}`)
 	// Without a body, no content type is claimed.
 	api.Get("/items/echo").AssertJSON(http.StatusOK, `{"method":"GET","contentType":"","body":""}`)
 	api.Delete("/items/echo").AssertJSON(http.StatusOK, `{"method":"DELETE","contentType":"","body":""}`)
