@@ -30,6 +30,9 @@ type PolicyRepository interface {
 
 // PolicyWriter reads and writes policy records in the transaction of PolicyRepository.Write.
 type PolicyWriter interface {
+	// Get returns the record with the given ID, like PolicyRepository.Get. Since Write serializes policy
+	// writes, no other write changes it until the commit.
+	Get(ctx context.Context, id uuid.UUID) (PolicyRecord, error)
 	// ListAll returns all records, like PolicyRepository.ListAll.
 	ListAll(ctx context.Context) ([]PolicyRecord, error)
 	// Insert stores a new record and returns it as stored.
@@ -37,6 +40,9 @@ type PolicyWriter interface {
 	// Update overwrites the name, source, UpdatedBy and UpdatedAt of the record with rec.ID and returns
 	// it as stored. CreatedBy and CreatedAt are immutable and ignored.
 	Update(ctx context.Context, rec PolicyRecord) (PolicyRecord, error)
+	// Patch overwrites the fields that patch sets, UpdatedBy and UpdatedAt of the record with patch.ID and
+	// returns it as stored. It writes no other column.
+	Patch(ctx context.Context, patch PolicyPatch) (PolicyRecord, error)
 	// Delete removes the record with the given ID.
 	Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -58,13 +64,7 @@ func NewPostgresPolicyRepository(db *sqlx.DB) *PostgresPolicyRepository {
 
 // Get returns the record with the given ID.
 func (r *PostgresPolicyRepository) Get(ctx context.Context, id uuid.UUID) (PolicyRecord, error) {
-	var rec PolicyRecord
-	err := r.db.GetContext(ctx, &rec, `SELECT `+policyColumns+` FROM policies WHERE id = $1`, id)
-	if err != nil {
-		return PolicyRecord{}, fmt.Errorf("get policy: %w", translateError(err))
-	}
-
-	return rec, nil
+	return get(ctx, r.db, id)
 }
 
 // ListAll returns all records, ordered by creation time. It returns an error wrapping ErrTooManyRows if
@@ -116,6 +116,11 @@ type postgresPolicyWriter struct {
 
 var _ PolicyWriter = postgresPolicyWriter{}
 
+// Get returns the record with the given ID.
+func (w postgresPolicyWriter) Get(ctx context.Context, id uuid.UUID) (PolicyRecord, error) {
+	return get(ctx, w.q, id)
+}
+
 // ListAll returns all records, ordered by creation time.
 func (w postgresPolicyWriter) ListAll(ctx context.Context) ([]PolicyRecord, error) {
 	return listAll(ctx, w.q)
@@ -155,6 +160,28 @@ func (w postgresPolicyWriter) Update(ctx context.Context, rec PolicyRecord) (Pol
 	return stored, nil
 }
 
+// Patch overwrites the fields that patch sets, UpdatedBy and UpdatedAt of the record with patch.ID and
+// returns it as stored. It writes no other column.
+func (w postgresPolicyWriter) Patch(ctx context.Context, patch PolicyPatch) (PolicyRecord, error) {
+	var stored PolicyRecord
+	// COALESCE keeps a column whose field is nil, which only works while the columns are NOT NULL: a
+	// nullable one needs to tell "unchanged" from "set to NULL" with a parameter of its own.
+	err := w.q.GetContext(ctx, &stored, `
+		UPDATE policies
+		SET name = COALESCE($2::text, name),
+			source = COALESCE($3::text, source),
+			updated_by = $4, updated_at = $5
+		WHERE id = $1
+		RETURNING `+policyColumns,
+		patch.ID, patch.Name, patch.Source, patch.UpdatedBy, patch.UpdatedAt,
+	)
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("patch policy: %w", translateError(err))
+	}
+
+	return stored, nil
+}
+
 // Delete removes the record with the given ID.
 func (w postgresPolicyWriter) Delete(ctx context.Context, id uuid.UUID) error {
 	res, err := w.q.ExecContext(ctx, `DELETE FROM policies WHERE id = $1`, id)
@@ -171,6 +198,17 @@ func (w postgresPolicyWriter) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// get returns the record with the given ID that q finds.
+func get(ctx context.Context, q database.Querier, id uuid.UUID) (PolicyRecord, error) {
+	var rec PolicyRecord
+	err := q.GetContext(ctx, &rec, `SELECT `+policyColumns+` FROM policies WHERE id = $1`, id)
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy: %w", translateError(err))
+	}
+
+	return rec, nil
 }
 
 // listAll returns all records that q finds, ordered by creation time. It returns an error wrapping

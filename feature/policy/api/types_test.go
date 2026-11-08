@@ -8,6 +8,8 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"pkgsilo/core/request"
 )
 
 func TestPolicyRequests_Validate(t *testing.T) {
@@ -33,6 +35,10 @@ func TestPolicyRequests_Validate(t *testing.T) {
 			requests := map[string]validation.Validatable{
 				"create":  CreatePolicyRequest{Name: tt.policyName, Source: tt.source},
 				"replace": ReplacePolicyRequest{Name: tt.policyName, Source: tt.source},
+				"patch": PatchPolicyRequest{
+					Name:   request.Optional[string]{Value: tt.policyName, Set: true},
+					Source: request.Optional[string]{Value: tt.source, Set: true},
+				},
 			}
 			for kind, req := range requests {
 				err := req.Validate()

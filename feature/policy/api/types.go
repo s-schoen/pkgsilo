@@ -61,6 +61,25 @@ func (r ReplacePolicyRequest) toInput() service.PolicyInput {
 	return service.PolicyInput{Name: r.Name, Source: r.Source}
 }
 
+// PatchPolicyRequest is the body of a request that changes some settable fields of a policy, a JSON Merge
+// Patch: a member that it leaves out stays unchanged.
+type PatchPolicyRequest struct {
+	Name   request.Optional[string] `json:"name"`
+	Source request.Optional[string] `json:"source"`
+}
+
+// Validate reports the invalid members of r as validation.Errors.
+func (r PatchPolicyRequest) Validate() error {
+	return validation.ValidateStruct(&r,
+		validation.Field(&r.Name, request.IfSet(nameRules...)),
+		validation.Field(&r.Source, request.IfSet(sourceRules...)),
+	)
+}
+
+func (r PatchPolicyRequest) toPatch() service.PolicyPatch {
+	return service.PolicyPatch{Name: r.Name.Pointer(), Source: r.Source.Pointer()}
+}
+
 // PolicyResponse is the representation of a policy in responses. A field that the caller may not read is
 // absent.
 type PolicyResponse struct {

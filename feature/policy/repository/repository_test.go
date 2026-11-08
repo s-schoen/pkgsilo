@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -261,6 +262,143 @@ func TestPostgresPolicyRepository_Update_Errors(t *testing.T) {
 				_, err := w.Update(t.Context(), tt.rec)
 				return err
 			})
+
+			assert.ErrorIs(t, err, tt.wantErr)
+		})
+	}
+}
+
+// patch patches a record in a write of its own and returns it as stored.
+func patch(t *testing.T, repo *PostgresPolicyRepository, p PolicyPatch) (PolicyRecord, error) {
+	t.Helper()
+
+	var stored PolicyRecord
+	err := repo.Write(t.Context(), func(w PolicyWriter) error {
+		var err error
+		stored, err = w.Patch(t.Context(), p)
+		return err
+	})
+
+	return stored, err
+}
+
+func TestPostgresPolicyRepository_Writer_Get(t *testing.T) {
+	t.Parallel()
+	repo, _ := newTestRepo(t)
+	rec := newRecord("everything", baseTime)
+	insert(t, repo, rec)
+
+	var got PolicyRecord
+	var missingErr error
+	err := repo.Write(t.Context(), func(w PolicyWriter) error {
+		var err error
+		got, err = w.Get(t.Context(), rec.ID)
+		_, missingErr = w.Get(t.Context(), uuid.NewV4())
+		return err
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, rec, got)
+	assert.ErrorIs(t, missingErr, ErrNotFound)
+}
+
+func TestPostgresPolicyRepository_Patch(t *testing.T) {
+	t.Parallel()
+	const nothing = `forbid (principal, action, resource);`
+	tests := []struct {
+		name  string
+		patch func(p *PolicyPatch)
+		want  func(rec *PolicyRecord)
+	}{
+		{
+			name:  "name",
+			patch: func(p *PolicyPatch) { p.Name = new("nothing") },
+			want:  func(rec *PolicyRecord) { rec.Name = "nothing" },
+		},
+		{
+			name:  "source",
+			patch: func(p *PolicyPatch) { p.Source = new(nothing) },
+			want:  func(rec *PolicyRecord) { rec.Source = nothing },
+		},
+		{
+			name:  "both",
+			patch: func(p *PolicyPatch) { p.Name, p.Source = new("nothing"), new(nothing) },
+			want:  func(rec *PolicyRecord) { rec.Name, rec.Source = "nothing", nothing },
+		},
+		{name: "none", patch: func(*PolicyPatch) {}, want: func(*PolicyRecord) {}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo, _ := newTestRepo(t)
+			rec := newRecord("everything", baseTime)
+			insert(t, repo, rec)
+
+			p := PolicyPatch{ID: rec.ID, UpdatedBy: uuid.NewV4(), UpdatedAt: baseTime.Add(time.Hour)}
+			tt.patch(&p)
+			want := rec
+			want.UpdatedBy, want.UpdatedAt = p.UpdatedBy, p.UpdatedAt
+			tt.want(&want)
+
+			stored, err := patch(t, repo, p)
+			require.NoError(t, err)
+			assert.Equal(t, want, stored)
+
+			got, err := repo.Get(t.Context(), rec.ID)
+			require.NoError(t, err)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+// TestPostgresPolicyRepository_Patch_Concurrent checks that concurrent patches of different fields both
+// survive.
+func TestPostgresPolicyRepository_Patch_Concurrent(t *testing.T) {
+	t.Parallel()
+	repo, _ := newTestRepo(t)
+	rec := newRecord("everything", baseTime)
+	insert(t, repo, rec)
+	const nothing = `forbid (principal, action, resource);`
+
+	patches := []PolicyPatch{
+		{ID: rec.ID, Name: new("nothing"), UpdatedBy: uuid.NewV4(), UpdatedAt: baseTime},
+		{ID: rec.ID, Source: new(nothing), UpdatedBy: uuid.NewV4(), UpdatedAt: baseTime},
+	}
+	var wg sync.WaitGroup
+	errs := make([]error, len(patches))
+	for i, p := range patches {
+		wg.Go(func() { _, errs[i] = patch(t, repo, p) })
+	}
+	wg.Wait()
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+
+	got, err := repo.Get(t.Context(), rec.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "nothing", got.Name)
+	assert.Equal(t, nothing, got.Source)
+}
+
+func TestPostgresPolicyRepository_Patch_Errors(t *testing.T) {
+	t.Parallel()
+	repo, _ := newTestRepo(t)
+	insert(t, repo, newRecord("everything", baseTime))
+	nothing := newRecord("nothing", baseTime)
+	insert(t, repo, nothing)
+
+	tests := []struct {
+		name    string
+		patch   PolicyPatch
+		wantErr error
+	}{
+		{name: "not found", patch: PolicyPatch{ID: uuid.NewV4(), Name: new("missing")}, wantErr: ErrNotFound},
+		{name: "duplicate name", patch: PolicyPatch{ID: nothing.ID, Name: new("everything")}, wantErr: ErrDuplicateName},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := patch(t, repo, tt.patch)
 
 			assert.ErrorIs(t, err, tt.wantErr)
 		})

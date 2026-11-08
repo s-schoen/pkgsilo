@@ -49,8 +49,8 @@ func CreatableFields() []string {
 	return createFields.Fields()
 }
 
-// UpdatableFields returns the names of the fields that replacing a policy sets, each of which has a
-// policy:update:<field> action.
+// UpdatableFields returns the names of the fields that replacing a policy sets, and patching it may set,
+// each of which has a policy:update:<field> action.
 func UpdatableFields() []string {
 	return updateFields.Fields()
 }
@@ -80,6 +80,13 @@ type PolicyService interface {
 	// not read is reported like a missing one. It returns an *authz.FieldsDeniedError, without writing
 	// anything, if the actor may not set any of the fields, even to their current values.
 	Replace(ctx context.Context, actor, id uuid.UUID, in PolicyInput) (Policy, error)
+	// Patch overwrites the fields that the patch sets of the policy with the given ID, and keeps the others,
+	// even if they change concurrently. A policy that the actor may not read is reported like a missing one.
+	// It returns an *authz.FieldsDeniedError, without writing anything, if the actor may not set any of the
+	// fields that the patch sets. The source that results from the patch is checked like a saved one, even
+	// if the patch keeps it. A patch that sets no field writes nothing, so that the policy is returned as it
+	// is.
+	Patch(ctx context.Context, actor, id uuid.UUID, patch PolicyPatch) (Policy, error)
 	// Delete removes the policy with the given ID. A policy that the actor may not read is reported like a
 	// missing one, and one that it may read but not delete with authz.ErrDenied.
 	Delete(ctx context.Context, actor, id uuid.UUID) error
@@ -266,6 +273,58 @@ func (s *policyService) Replace(ctx context.Context, actor, id uuid.UUID, in Pol
 	return toPolicy(rec, fields), nil
 }
 
+func (s *policyService) Patch(ctx context.Context, actor, id uuid.UUID, patch PolicyPatch) (Policy, error) {
+	decider, err := s.authorizer.For(ctx, actor)
+	if err != nil {
+		return Policy{}, fmt.Errorf("patch policy: %w", err)
+	}
+
+	rec, err := s.getReadable(ctx, decider, id)
+	if err != nil {
+		return Policy{}, fmt.Errorf("patch policy: %w", err)
+	}
+
+	// Patching sets only the fields in the patch, so only those are checked.
+	if err := updateFields.Only(patch.fields()...).Check(decider, toResource(id)); err != nil {
+		return Policy{}, fmt.Errorf("patch policy: %w", err)
+	}
+
+	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
+	fields, err := readFields.Readable(decider, toResource(id))
+	if err != nil {
+		return Policy{}, fmt.Errorf("patch policy: %w", err)
+	}
+
+	if len(patch.fields()) == 0 {
+		return toPolicy(rec, fields), nil
+	}
+
+	err = s.repo.Write(ctx, func(w repository.PolicyWriter) error {
+		if err := s.checkPatched(ctx, w, id, patch); err != nil {
+			return err
+		}
+
+		stored, err := w.Patch(ctx, repository.PolicyPatch{
+			ID:        id,
+			Name:      patch.Name,
+			Source:    patch.Source,
+			UpdatedBy: actor,
+			UpdatedAt: s.now(),
+		})
+		if err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+		rec = stored
+
+		return nil
+	})
+	if err != nil {
+		return Policy{}, fmt.Errorf("patch policy: %w", translateError(err))
+	}
+
+	return toPolicy(rec, fields), nil
+}
+
 func (s *policyService) Delete(ctx context.Context, actor, id uuid.UUID) error {
 	decider, err := s.authorizer.For(ctx, actor)
 	if err != nil {
@@ -338,6 +397,29 @@ func (s *policyService) checkSource(ctx context.Context, source string) (checked
 	}
 
 	return checked, nil
+}
+
+// checkPatched runs the checks of a saved policy on the source of the policy with the given ID that results
+// from the patch, even if the patch keeps it. It runs in the write, which holds every other policy write until
+// the commit, so that the source it reads is the one that's stored.
+func (s *policyService) checkPatched(
+	ctx context.Context, w repository.PolicyWriter, id uuid.UUID, patch PolicyPatch,
+) error {
+	current, err := w.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("load: %w", err)
+	}
+	source := current.Source
+	if patch.Source != nil {
+		source = *patch.Source
+	}
+
+	checked, err := s.checkSource(ctx, source)
+	if err != nil {
+		return err
+	}
+
+	return checkTotal(ctx, w, id, checked.statements)
 }
 
 // checkTotal checks that the policies, with the policy with the given ID holding the given number of

@@ -34,6 +34,7 @@ var (
 	now   = time.Date(2026, time.November, 7, 12, 0, 0, 0, time.UTC)
 	actor = uuid.MustParse("6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b")
 	input = PolicyInput{Name: "read-identities", Source: readSource}
+	patch = PolicyPatch{Name: new("read-identities"), Source: new(readSource)}
 
 	// stored is a record as the repository returns it, with a distinct value in every field.
 	stored = repository.PolicyRecord{
@@ -477,6 +478,13 @@ func TestPolicyService_StatementLimit(t *testing.T) {
 		return err
 	}
 
+	patchCall := func(svc *policyService, writer *mocks.MockPolicyWriter, statements int) error {
+		writer.EXPECT().Get(mock.Anything, stored.ID).Return(replaced, nil)
+		writer.EXPECT().Patch(mock.Anything, mock.Anything).Return(stored, nil).Maybe()
+		_, err := svc.Patch(t.Context(), actor, stored.ID, PolicyPatch{Source: new(strings.Repeat(statement, statements))})
+		return err
+	}
+
 	tests := []struct {
 		name       string
 		call       call
@@ -489,6 +497,8 @@ func TestPolicyService_StatementLimit(t *testing.T) {
 		// 400 + 300, without the 299 of the policy to replace.
 		{name: "replace at the limit", call: replace, statements: 300},
 		{name: "replace over the limit", call: replace, statements: 301, wantReason: tooMany},
+		{name: "patch at the limit", call: patchCall, statements: 300},
+		{name: "patch over the limit", call: patchCall, statements: 301, wantReason: tooMany},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -507,6 +517,7 @@ func TestPolicyService_StatementLimit(t *testing.T) {
 			assertInvalid(t, err, tt.wantReason)
 			writer.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
 			writer.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+			writer.AssertNotCalled(t, "Patch", mock.Anything, mock.Anything)
 		})
 	}
 }
@@ -698,6 +709,126 @@ func TestPolicyService_Replace_FieldsDenied(t *testing.T) {
 	assert.Equal(t, []string{"source"}, denied.Fields)
 }
 
+func TestPolicyService_Patch(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		patch PolicyPatch
+		// fields are the fields that the patch sets, each of which must be checked.
+		fields []string
+	}{
+		{name: "name", patch: PolicyPatch{Name: new("read-identities")}, fields: []string{"name"}},
+		{name: "source", patch: PolicyPatch{Source: new(readSource)}, fields: []string{"source"}},
+		{name: "both", patch: patch, fields: []string{"name", "source"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			svc, repo, writer := newTestServiceWith(t, authorizer)
+			expectReadable(repo, decider)
+			// The mock fails the test if a field that the patch doesn't set is checked.
+			for _, field := range tt.fields {
+				decider.EXPECT().Can(authz.NewAction("policy:update:"+field, "policy:update"), storedResource).
+					Return(true, nil).Once()
+			}
+			servicetest.ExpectReadableFields(decider, readFields, storedResource, "name")
+			expectWrite(repo, writer)
+			writer.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+			writer.EXPECT().ListAll(mock.Anything).Return([]repository.PolicyRecord{stored}, nil)
+			writer.EXPECT().Patch(mock.Anything, repository.PolicyPatch{
+				ID:        stored.ID,
+				Name:      tt.patch.Name,
+				Source:    tt.patch.Source,
+				UpdatedBy: actor,
+				UpdatedAt: now,
+			}).Return(stored, nil)
+
+			got, err := svc.Patch(t.Context(), actor, stored.ID, tt.patch)
+			require.NoError(t, err)
+
+			// The response to a write is masked like a read.
+			assert.Equal(t, Policy{ID: stored.ID, Name: authz.Visible("everything")}, got)
+		})
+	}
+}
+
+// TestPolicyService_Patch_Empty checks that a patch that sets no field returns the policy as it is, with no
+// write, which would advance the revision, and no write decision.
+func TestPolicyService_Patch_Empty(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The mocks fail the test on a write decision or a write.
+	svc, repo, _ := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	expectAllFieldsReadable(decider, storedResource)
+
+	got, err := svc.Patch(t.Context(), actor, stored.ID, PolicyPatch{})
+	require.NoError(t, err)
+
+	assert.Equal(t, storedPolicy, got)
+}
+
+// TestPolicyService_Patch_FieldsDenied checks that a denial lists every denied field of the patch, before the
+// source is checked, and writes nothing.
+func TestPolicyService_Patch_FieldsDenied(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The mocks fail the test if the repository writes anything.
+	svc, repo, _ := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	decider.EXPECT().Can(authz.NewAction("policy:update:name", "policy:update"), storedResource).Return(true, nil)
+	decider.EXPECT().Can(authz.NewAction("policy:update:source", "policy:update"), storedResource).Return(false, nil)
+
+	_, err := svc.Patch(t.Context(), actor, stored.ID, PolicyPatch{Name: new("x"), Source: new("not cedar")})
+
+	var denied *authz.FieldsDeniedError
+	require.ErrorAs(t, err, &denied)
+	assert.Equal(t, []string{"source"}, denied.Fields)
+}
+
+// TestPolicyService_Patch_ChecksMergedSource checks that the source that results from a patch is checked like
+// a saved one, even if the patch keeps it, and that it's the source read in the write, which no other policy
+// write can change until the commit.
+func TestPolicyService_Patch_ChecksMergedSource(t *testing.T) {
+	t.Parallel()
+	missingGroup := `permit (principal in Group::"` + maintainers.String() + `", action, resource);`
+	tests := []struct {
+		name string
+		// current is the source that the write reads.
+		current string
+		patch   PolicyPatch
+		reason  string
+	}{
+		{
+			name: "new source", current: stored.Source, patch: PolicyPatch{Source: new("permit (")},
+			reason: "the source can't be parsed",
+		},
+		{name: "kept source", current: "not cedar", patch: PolicyPatch{Name: new("x")}, reason: "the source can't be parsed"},
+		{
+			name: "kept source with a deleted group", current: missingGroup, patch: PolicyPatch{Name: new("x")},
+			reason: `the group "` + maintainers.String() + `" does not exist`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// The mocks fail the test if the writer patches anything.
+			svc, repo, writer := newTestService(t)
+			repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+			repo.EXPECT().ListExistingGroups(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+			expectWrite(repo, writer)
+			current := stored
+			current.Source = tt.current
+			writer.EXPECT().Get(mock.Anything, stored.ID).Return(current, nil)
+
+			_, err := svc.Patch(t.Context(), actor, stored.ID, tt.patch)
+
+			assertInvalid(t, err, tt.reason)
+		})
+	}
+}
+
 func TestPolicyService_Delete(t *testing.T) {
 	t.Parallel()
 	authorizer, decider := newDeciding(t)
@@ -732,6 +863,10 @@ func TestPolicyService_Writes_Hidden(t *testing.T) {
 	calls := map[string]func(*policyService) error{
 		"replace": func(svc *policyService) error {
 			_, err := svc.Replace(t.Context(), actor, stored.ID, PolicyInput{Name: "x", Source: "not cedar"})
+			return err
+		},
+		"patch": func(svc *policyService) error {
+			_, err := svc.Patch(t.Context(), actor, stored.ID, PolicyPatch{Source: new("not cedar")})
 			return err
 		},
 		"delete": func(svc *policyService) error {
@@ -818,6 +953,27 @@ func repoCalls() map[string]repoCall {
 			_, err := svc.Replace(ctx, actor, stored.ID, input)
 			return err
 		},
+		"patch get": func(ctx context.Context, svc *policyService, repo *mockRepo, _ *mockWriter, repoErr error) error {
+			repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.PolicyRecord{}, repoErr)
+			_, err := svc.Patch(ctx, actor, stored.ID, patch)
+			return err
+		},
+		"patch load": func(ctx context.Context, svc *policyService, repo *mockRepo, w *mockWriter, repoErr error) error {
+			readable(repo)
+			expectWrite(repo, w)
+			w.EXPECT().Get(mock.Anything, stored.ID).Return(repository.PolicyRecord{}, repoErr)
+			_, err := svc.Patch(ctx, actor, stored.ID, patch)
+			return err
+		},
+		"patch": func(ctx context.Context, svc *policyService, repo *mockRepo, w *mockWriter, repoErr error) error {
+			readable(repo)
+			expectWrite(repo, w)
+			w.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+			w.EXPECT().ListAll(mock.Anything).Return(nil, nil)
+			w.EXPECT().Patch(mock.Anything, mock.Anything).Return(repository.PolicyRecord{}, repoErr)
+			_, err := svc.Patch(ctx, actor, stored.ID, patch)
+			return err
+		},
 		"delete get": func(ctx context.Context, svc *policyService, repo *mockRepo, _ *mockWriter, repoErr error) error {
 			repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.PolicyRecord{}, repoErr)
 			return svc.Delete(ctx, actor, stored.ID)
@@ -855,6 +1011,14 @@ func TestPolicyService_TranslatesRepositoryErrors(t *testing.T) {
 		{call: "replace", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
 		{call: "replace", repoErr: repository.ErrDuplicateName, wantErr: ErrPolicyNameTaken},
 		{call: "replace", repoErr: errDB, wantErr: errDB},
+		{call: "patch get", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
+		{call: "patch get", repoErr: errDB, wantErr: errDB},
+		// The policy was deleted after it was read.
+		{call: "patch load", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
+		{call: "patch load", repoErr: errDB, wantErr: errDB},
+		{call: "patch", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
+		{call: "patch", repoErr: repository.ErrDuplicateName, wantErr: ErrPolicyNameTaken},
+		{call: "patch", repoErr: errDB, wantErr: errDB},
 		{call: "delete get", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
 		{call: "delete get", repoErr: errDB, wantErr: errDB},
 		{call: "delete", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
@@ -893,6 +1057,10 @@ func TestPolicyService_AuthorizationFails(t *testing.T) {
 		},
 		"replace": func(svc *policyService) error {
 			_, err := svc.Replace(t.Context(), actor, stored.ID, input)
+			return err
+		},
+		"patch": func(svc *policyService) error {
+			_, err := svc.Patch(t.Context(), actor, stored.ID, patch)
 			return err
 		},
 		"delete": func(svc *policyService) error {
@@ -948,7 +1116,7 @@ func TestPolicyService_AuthorizationFails(t *testing.T) {
 			})
 		}
 		// The write decisions, after the actor was allowed to read the policy.
-		if name == "replace" || name == "delete" {
+		if name == "replace" || name == "patch" || name == "delete" {
 			t.Run(name+" no write decision", func(t *testing.T) {
 				t.Parallel()
 				authorizer, decider := newDeciding(t)

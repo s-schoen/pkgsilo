@@ -11,6 +11,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -30,6 +31,7 @@ var (
 	invalidPolicy    = envelope.DefineProblemType("invalid-policy", "Invalid policy", http.StatusUnprocessableEntity)
 	identityNotFound = envelope.DefineProblemType("identity-not-found", "Identity not found", http.StatusNotFound)
 	fieldsDenied     = envelope.DefineProblemType("fields-denied", "Fields denied", http.StatusForbidden)
+	invalidBody      = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
 	forbidden        = envelope.ProblemType{Type: "about:blank", Title: "Forbidden", Status: http.StatusForbidden}
 )
 
@@ -623,4 +625,118 @@ func TestPolicies_DeleteAdministrators(t *testing.T) {
 	assert.Equal(t, envelope.Visible("admin"), identities[0].Username)
 	assertFieldsDenied(t, api.Post(policiesPath, policyBody(t, "administrators", administrators.Source.Value)),
 		"#/name", "#/source")
+}
+
+// revision returns the current policy revision, which every policy write advances.
+func revision(t *testing.T, db *sqlx.DB) int64 {
+	t.Helper()
+
+	var rev int64
+	require.NoError(t, db.GetContext(t.Context(), &rev, `SELECT revision FROM policy_revision`))
+
+	return rev
+}
+
+// TestPolicies_Patch changes a policy with JSON Merge Patches, as admin, each patch checked like a saved
+// policy:
+//
+//  1. Create the group maintainers, and a policy that references it: 201 for both.
+//  2. Patch the policy's name: 200 with the new name, its source kept and the update time advanced. The
+//     revision advanced.
+//  3. Patch it with an empty object: 200 with the policy as step 2 left it, the update time included. The
+//     revision didn't change.
+//  4. Patch its source with a typo in an action: 422 invalid-policy naming the action. Patch its name to null:
+//     422 invalid-body pointing to name. To administrators: 409 policy-name-taken, the same as replacing it.
+//     Get it: as step 2 left it.
+//  5. Delete maintainers: 204. Patch the policy's name: 422 invalid-policy, since the source that the patch
+//     keeps references a group that no longer exists.
+//  6. Patch a policy that doesn't exist: 404 policy-not-found.
+func TestPolicies_Patch(t *testing.T) {
+	t.Parallel()
+	api, db := apptest.NewWithDB(t)
+
+	// 1. Create.
+	maintainers := addGroup(api, "maintainers")
+	created := addPolicy(t, api, "maintainers",
+		`permit (principal in Group::"`+maintainers+`", action in Action::"read", resource);`)
+	createdPath := policiesPath + "/" + created.ID.String()
+
+	// 2. Patch the name.
+	before := revision(t, db)
+	patched := apitest.DecodeResource[policy](api.Patch(createdPath, `{"name":"maintainers-read"}`), http.StatusOK)
+	assert.Equal(t, envelope.Visible("maintainers-read"), patched.Name)
+	assert.Equal(t, created.Source, patched.Source, "a member that the patch leaves out must not change")
+	assert.True(t, patched.UpdatedAt.Value.After(created.UpdatedAt.Value), "the update time must advance")
+	assert.Equal(t, before+1, revision(t, db), "a policy write must advance the revision")
+
+	// 3. Patch nothing.
+	assert.Equal(t, patched, apitest.DecodeResource[policy](api.Patch(createdPath, `{}`), http.StatusOK))
+	assert.Equal(t, before+1, revision(t, db), "a patch that sets nothing writes nothing")
+
+	// 4. Patch with invalid bodies.
+	assertInvalidPolicy(t, api.Patch(createdPath, policyPatch(t, "source",
+		`permit (principal, action == Action::"policy:raed", resource);`)), "policy:raed")
+	resp := api.Patch(createdPath, `{"name":null}`)
+	resp.AssertProblemType(invalidBody)
+	assert.Contains(t, resp.Body.String(), `"pointer":"#/name"`)
+	api.Patch(createdPath, `{"name":"administrators"}`).AssertProblemType(policyNameTaken)
+	assert.Equal(t, patched, apitest.DecodeResource[policy](api.Get(createdPath), http.StatusOK))
+
+	// 5. Patch after deleting the group.
+	api.Delete(groupsPath + "/" + maintainers).AssertNoContent()
+	assertInvalidPolicy(t, api.Patch(createdPath, `{"name":"renamed"}`), `the group "`+maintainers+`" does not exist`)
+
+	// 6. Patch a missing policy.
+	api.Patch(policiesPath+"/"+uuid.NewV4().String(), `{}`).AssertProblemType(policyNotFound)
+}
+
+// policyPatch returns the JSON Merge Patch that sets the member to value.
+func policyPatch(t *testing.T, member, value string) string {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]string{member: value})
+	require.NoError(t, err)
+
+	return string(body)
+}
+
+// TestPolicies_PatchFieldDenials checks that a caller who may set the name of policies but not their source
+// can patch the name, but not the source, and still can't replace a policy:
+//
+//  1. Create ada with an API key, and the policy target: 201 for both.
+//  2. Add a policy that lets ada read policies and update their names: 201.
+//  3. As ada, patch target's name: 200 with the new name.
+//  4. As ada, patch its source, and its name and source: 403 fields-denied pointing to source alone for
+//     both. Replace it with its current source: 403 fields-denied pointing to source.
+//  5. As admin, get target: as step 3 left it, so nothing else was written.
+func TestPolicies_PatchFieldDenials(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	const source = `permit (principal, action == Action::"identity:read", resource) when { false };`
+	target := addPolicy(t, api, "target", source)
+	targetPath := policiesPath + "/" + target.ID.String()
+
+	// 2. Add the policy.
+	addPolicy(t, api, "rename-policies", `permit (
+		principal == Identity::"`+ada.ID.String()+`",
+		action in [Action::"policy:read", Action::"policy:readFields", Action::"policy:update:name"],
+		resource
+	);`)
+
+	// 3. Patch the name.
+	patched := apitest.DecodeResource[policy](asAda.Patch(targetPath, `{"name":"renamed"}`), http.StatusOK)
+	assert.Equal(t, envelope.Visible("renamed"), patched.Name)
+	assert.Equal(t, envelope.Visible(source), patched.Source)
+
+	// 4. Patch and replace the source.
+	const other = `permit (principal, action == Action::"identity:read", resource);`
+	assertFieldsDenied(t, asAda.Patch(targetPath, policyPatch(t, "source", other)), "#/source")
+	assertFieldsDenied(t, asAda.Patch(targetPath, policyBody(t, "again", other)), "#/source")
+	assertFieldsDenied(t, asAda.Put(targetPath, policyBody(t, "again", source)), "#/source")
+
+	// 5. Nothing else written.
+	assert.Equal(t, patched, apitest.DecodeResource[policy](api.Get(targetPath), http.StatusOK))
 }

@@ -334,6 +334,84 @@ func (_c *MockPolicyService_List_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
+// Patch provides a mock function for the type MockPolicyService
+func (_mock *MockPolicyService) Patch(ctx context.Context, actor uuid.UUID, id uuid.UUID, patch service.PolicyPatch) (service.Policy, error) {
+	ret := _mock.Called(ctx, actor, id, patch)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Patch")
+	}
+
+	var r0 service.Policy
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, service.PolicyPatch) (service.Policy, error)); ok {
+		return returnFunc(ctx, actor, id, patch)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, service.PolicyPatch) service.Policy); ok {
+		r0 = returnFunc(ctx, actor, id, patch)
+	} else {
+		r0 = ret.Get(0).(service.Policy)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID, service.PolicyPatch) error); ok {
+		r1 = returnFunc(ctx, actor, id, patch)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPolicyService_Patch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Patch'
+type MockPolicyService_Patch_Call struct {
+	*mock.Call
+}
+
+// Patch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - actor uuid.UUID
+//   - id uuid.UUID
+//   - patch service.PolicyPatch
+func (_e *MockPolicyService_Expecter) Patch(ctx any, actor any, id any, patch any) *MockPolicyService_Patch_Call {
+	return &MockPolicyService_Patch_Call{Call: _e.mock.On("Patch", ctx, actor, id, patch)}
+}
+
+func (_c *MockPolicyService_Patch_Call) Run(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID, patch service.PolicyPatch)) *MockPolicyService_Patch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
+		var arg3 service.PolicyPatch
+		if args[3] != nil {
+			arg3 = args[3].(service.PolicyPatch)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPolicyService_Patch_Call) Return(policy service.Policy, err error) *MockPolicyService_Patch_Call {
+	_c.Call.Return(policy, err)
+	return _c
+}
+
+func (_c *MockPolicyService_Patch_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID, patch service.PolicyPatch) (service.Policy, error)) *MockPolicyService_Patch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Replace provides a mock function for the type MockPolicyService
 func (_mock *MockPolicyService) Replace(ctx context.Context, actor uuid.UUID, id uuid.UUID, in service.PolicyInput) (service.Policy, error) {
 	ret := _mock.Called(ctx, actor, id, in)
