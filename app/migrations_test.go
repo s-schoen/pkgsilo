@@ -129,3 +129,38 @@ func TestCreatePoliciesMigration_ExistingGroup(t *testing.T) {
 	assertCanRead(t, true, db, admin, ada)
 	assertCanRead(t, false, db, ada, admin)
 }
+
+// TestManageOwnAPIKeysMigration checks that the migration lets every identity manage its own API keys and
+// nobody else's, and that every instance applies it and its reversal on its next request.
+func TestManageOwnAPIKeysMigration(t *testing.T) {
+	t.Parallel()
+	const (
+		up   = "20261107213000_create_manage_own_api_keys_policy.up.sql"
+		down = "20261107213000_create_manage_own_api_keys_policy.down.sql"
+	)
+	db := databasetest.New(t)
+	engine := authz.New(db)
+	ada := insertIdentityRow(t, db, "ada", uuid.NewV4())
+	grace := insertIdentityRow(t, db, "grace", uuid.NewV4())
+	deleteKey := authz.NewAction("apikey:delete")
+	keyOf := func(owner uuid.UUID) authz.Resource {
+		return authz.Resource{Type: "APIKey", ID: uuid.NewV4(), Owner: &authz.Owner{ID: owner}}
+	}
+	assertCanDelete := func(want bool, resource authz.Resource) {
+		t.Helper()
+		decider, err := engine.For(t.Context(), ada)
+		require.NoError(t, err)
+		can, err := decider.Can(deleteKey, resource)
+		require.NoError(t, err)
+		assert.Equal(t, want, can)
+	}
+
+	assertCanDelete(true, keyOf(ada))
+	assertCanDelete(false, keyOf(grace))
+
+	databasetest.RunMigration(t, db, down)
+	assertCanDelete(false, keyOf(ada))
+
+	databasetest.RunMigration(t, db, up)
+	assertCanDelete(true, keyOf(ada))
+}
