@@ -2,15 +2,24 @@ package envelope
 
 import (
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 )
 
+// errHiddenFieldEncoded is the error of a hidden field that's encoded instead of left out.
+var errHiddenFieldEncoded = errors.New("envelope: hidden field encoded outside a Resource or Collection")
+
 // Field is a member of a resource representation that the caller may not be allowed to see. A hidden
-// field is absent from the response, while a visible one is its value, even if that's null. Use it with
-// the omitzero option, such as `json:"expiresAt,omitzero"`: without it, a hidden field would be null.
+// field is absent from the response, while a visible one is its value, even if that's null. Resource and
+// Collection leave hidden fields out, so a member needs no omitzero option. Every member of their
+// representations but the id is a Field, even one that's never hidden: they leave out every zero member,
+// and a Field is zero only while it's hidden. Encoding a hidden field any other way fails, instead of
+// answering with null.
 //
-// The zero Field is hidden. Its members have no JSON names of their own, since MarshalJSON encodes the value
-// alone.
+// The zero Field is hidden. Its members have no JSON names of their own, since MarshalJSONTo encodes the
+// value alone.
 type Field[T any] struct {
 	Value   T    `json:"-"`
 	Visible bool `json:"-"`
@@ -31,19 +40,24 @@ func Visible[T any](value T) Field[T] {
 	return Field[T]{Value: value, Visible: true}
 }
 
-// IsZero reports whether the field is hidden, so that omitzero leaves it out.
+func (Field[T]) isField() {}
+
+// IsZero reports whether the field is hidden, so that Resource and Collection leave it out.
 func (f Field[T]) IsZero() bool {
 	return !f.Visible
 }
 
-// MarshalJSON encodes the field's value.
-func (f Field[T]) MarshalJSON() ([]byte, error) {
-	b, err := json.Marshal(f.Value)
-	if err != nil {
-		return nil, fmt.Errorf("encode field: %w", err)
+// MarshalJSONTo encodes the field's value. The value keeps its zero members, even inside a Resource or
+// Collection, which leave out only the zero members of the body itself.
+func (f Field[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	if !f.Visible {
+		return errHiddenFieldEncoded
+	}
+	if err := jsonv2.MarshalEncode(enc, f.Value, jsonv2.OmitZeroStructFields(false)); err != nil {
+		return fmt.Errorf("encode field: %w", err)
 	}
 
-	return b, nil
+	return nil
 }
 
 // UnmarshalJSON decodes a member that's present as a visible field. A member that's absent leaves the

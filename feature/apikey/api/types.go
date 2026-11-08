@@ -42,24 +42,24 @@ func (r CreateKeyRequest) toInput() service.APIKeyInput {
 // absent.
 type KeyResponse struct {
 	ID         uuid.UUID                 `json:"id"`
-	IdentityID envelope.Field[uuid.UUID] `json:"identityId,omitzero"`
-	Name       envelope.Field[string]    `json:"name,omitzero"`
+	IdentityID envelope.Field[uuid.UUID] `json:"identityId"`
+	Name       envelope.Field[string]    `json:"name"`
 	// KeySuffix is the key's last characters, which tell the holder of a key which API key it is.
-	KeySuffix envelope.Field[string] `json:"keySuffix,omitzero"`
+	KeySuffix envelope.Field[string] `json:"keySuffix"`
 	// ExpiresAt is null for an API key that never expires, and absent if it's hidden.
-	ExpiresAt envelope.Field[*time.Time] `json:"expiresAt,omitzero"`
+	ExpiresAt envelope.Field[*time.Time] `json:"expiresAt"`
 	// LastUsedAt is null for an API key that has not been used yet, and absent if it's hidden.
-	LastUsedAt envelope.Field[*time.Time] `json:"lastUsedAt,omitzero"`
-	CreatedBy  envelope.Field[uuid.UUID]  `json:"createdBy,omitzero"`
-	CreatedAt  envelope.Field[time.Time]  `json:"createdAt,omitzero"`
+	LastUsedAt envelope.Field[*time.Time] `json:"lastUsedAt"`
+	CreatedBy  envelope.Field[uuid.UUID]  `json:"createdBy"`
+	CreatedAt  envelope.Field[time.Time]  `json:"createdAt"`
 }
 
 // CreatedKeyResponse is the representation of a new API key: the only one that holds its key, which is
-// never hidden.
+// never hidden, but an envelope.Field because every member of a representation is.
 type CreatedKeyResponse struct {
 	KeyResponse
 
-	Key string `json:"key"`
+	Key envelope.Field[string] `json:"key"`
 }
 
 func toKeyResponse(k service.APIKey) KeyResponse {
@@ -76,5 +76,5 @@ func toKeyResponse(k service.APIKey) KeyResponse {
 }
 
 func toCreatedKeyResponse(k service.CreatedAPIKey) CreatedKeyResponse {
-	return CreatedKeyResponse{KeyResponse: toKeyResponse(k.APIKey), Key: k.Key}
+	return CreatedKeyResponse{KeyResponse: toKeyResponse(k.APIKey), Key: envelope.Visible(k.Key)}
 }

@@ -1,6 +1,10 @@
 package envelope
 
-import "net/http"
+import (
+	"encoding/json/jsontext"
+	"net/http"
+	"reflect"
+)
 
 // Pagination describes a page of a collection and how to continue through it.
 type Pagination struct {
@@ -18,6 +22,12 @@ type Pagination struct {
 type Collection[T any] struct {
 	Data       []T        `json:"data"`
 	Pagination Pagination `json:"pagination"`
+}
+
+// MarshalJSONTo encodes the collection and leaves out the hidden fields of each representation (see
+// Field). The pagination keeps its zero members.
+func (c Collection[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return encodeEnvelope(enc, reflect.TypeFor[T](), c.Data, member{name: "pagination", value: c.Pagination})
 }
 
 // NewCollection wraps a page of resource representations and its pagination metadata.

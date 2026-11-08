@@ -11,7 +11,7 @@ import (
 func TestNewCollection(t *testing.T) {
 	t.Parallel()
 	next, total := 2, 3
-	c := NewCollection([]user{{ID: "user-42", Name: "Ada"}, {ID: "user-43", Name: "Grace"}}, Pagination{
+	c := NewCollection([]user{{ID: "user-42", Name: Visible("Ada")}, {ID: "user-43", Name: Visible("Grace")}}, Pagination{
 		Offset: 0, Limit: 2, NextOffset: &next, Total: &total,
 	})
 
@@ -37,7 +37,7 @@ func TestNewUnpaginatedCollection(t *testing.T) {
 	}{
 		{
 			name: "resources",
-			data: []user{{ID: "user-42", Name: "Ada"}, {ID: "user-43", Name: "Grace"}},
+			data: []user{{ID: "user-42", Name: Visible("Ada")}, {ID: "user-43", Name: Visible("Grace")}},
 			want: `{
 				"data": [{"id":"user-42","name":"Ada"},{"id":"user-43","name":"Grace"}],
 				"pagination": {"offset":0,"limit":2,"nextOffset":null,"total":2}

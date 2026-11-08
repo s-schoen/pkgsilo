@@ -27,6 +27,15 @@ func (i item) Validate() error {
 	return validation.ValidateStruct(&i, validation.Field(&i.Name, validation.Required))
 }
 
+// itemResponse is the representation of an item that the routes write, which decodes as an item.
+type itemResponse struct {
+	Name envelope.Field[string] `json:"name"`
+}
+
+func (i item) response() itemResponse {
+	return itemResponse{Name: envelope.Visible(i.Name)}
+}
+
 var (
 	ada     = item{Name: "ada"}
 	adaJSON = `{"name":"ada"}`
@@ -44,16 +53,17 @@ func newTestClient(t *testing.T) *Client {
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		page, ok := request.ParsePagination(w, req)
 		if ok {
-			envelope.WriteCollection(w, envelope.NewPagedCollection([]item{ada}, page.Offset, page.Limit, true))
+			data := []itemResponse{ada.response()}
+			envelope.WriteCollection(w, envelope.NewPagedCollection(data, page.Offset, page.Limit, true))
 		}
 	})
 	r.Post("/", func(w http.ResponseWriter, req *http.Request) {
 		var body item
 		if request.DecodeJSON(w, req, &body) {
-			envelope.WriteCreated(w, "/items/"+body.Name, body)
+			envelope.WriteCreated(w, "/items/"+body.Name, body.response())
 		}
 	})
-	r.Get("/ada", func(w http.ResponseWriter, _ *http.Request) { envelope.WriteResource(w, ada) })
+	r.Get("/ada", func(w http.ResponseWriter, _ *http.Request) { envelope.WriteResource(w, ada.response()) })
 	r.Delete("/ada", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	r.Get("/gone", func(w http.ResponseWriter, _ *http.Request) { envelope.WriteProblem(w, itemGoneProblem) })
 	r.Get("/status", func(w http.ResponseWriter, _ *http.Request) {

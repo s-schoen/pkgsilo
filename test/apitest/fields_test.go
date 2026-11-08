@@ -14,15 +14,11 @@ func TestAssertReadableMembers(t *testing.T) {
 	t.Parallel()
 	type masked struct {
 		ID   string                 `json:"id"`
-		Name envelope.Field[string] `json:"name,omitzero"`
+		Name envelope.Field[string] `json:"name"`
 	}
 	type plain struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
-	}
-	type withoutOmitzero struct {
-		ID   string                 `json:"id"`
-		Name envelope.Field[string] `json:"name"`
 	}
 	tests := []struct {
 		name        string
@@ -34,10 +30,6 @@ func TestAssertReadableMembers(t *testing.T) {
 		{
 			name: "plain member", body: reflect.TypeFor[plain](), readable: []string{"name"},
 			wantMessage: "not an envelope.Field",
-		},
-		{
-			name: "without omitzero", body: reflect.TypeFor[withoutOmitzero](), readable: []string{"name"},
-			wantMessage: "lacks the omitzero option",
 		},
 		{name: "member without action", body: reflect.TypeFor[masked](), wantMessage: "must be the readable fields"},
 		{

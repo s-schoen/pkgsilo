@@ -1,10 +1,19 @@
 package envelope
 
-import "net/http"
+import (
+	"encoding/json/jsontext"
+	"net/http"
+	"reflect"
+)
 
 // Resource is a successful response containing one resource representation.
 type Resource[T any] struct {
 	Data T `json:"data"`
+}
+
+// MarshalJSONTo encodes the resource and leaves out the hidden fields of its representation (see Field).
+func (r Resource[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return encodeEnvelope(enc, reflect.TypeFor[T](), r.Data)
 }
 
 // NewResource wraps one resource representation in a response envelope.

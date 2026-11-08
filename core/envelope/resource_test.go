@@ -11,8 +11,8 @@ import (
 )
 
 type user struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   string        `json:"id"`
+	Name Field[string] `json:"name"`
 }
 
 // encode returns the JSON encoding of v.
@@ -27,7 +27,7 @@ func encode(t *testing.T, v any) string {
 
 func TestNewResource(t *testing.T) {
 	t.Parallel()
-	r := NewResource(user{ID: "user-42", Name: "Ada"})
+	r := NewResource(user{ID: "user-42", Name: Visible("Ada")})
 
 	assert.JSONEq(t, `{"data":{"id":"user-42","name":"Ada"}}`, encode(t, r))
 }
@@ -35,7 +35,7 @@ func TestNewResource(t *testing.T) {
 func TestWriteResource(t *testing.T) {
 	t.Parallel()
 	rec := httptest.NewRecorder()
-	WriteResource(rec, user{ID: "user-42", Name: "Ada"})
+	WriteResource(rec, user{ID: "user-42", Name: Visible("Ada")})
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
@@ -45,7 +45,7 @@ func TestWriteResource(t *testing.T) {
 func TestWriteCreated(t *testing.T) {
 	t.Parallel()
 	rec := httptest.NewRecorder()
-	WriteCreated(rec, "/users/user-42", user{ID: "user-42", Name: "Ada"})
+	WriteCreated(rec, "/users/user-42", user{ID: "user-42", Name: Visible("Ada")})
 
 	assert.Equal(t, http.StatusCreated, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))

@@ -84,7 +84,7 @@ func NewIdentity(admin *apitest.Client, username string) (identityapi.IdentityRe
 	key := apitest.DecodeResource[apikeyapi.CreatedKeyResponse](
 		admin.Post(identitiesPath+"/"+created.ID.String()+"/api-keys", `{"name":"test"}`), http.StatusCreated)
 
-	return created, admin.WithHeader(apiKeyHeader, key.Key)
+	return created, admin.WithHeader(apiKeyHeader, key.Key.Value)
 }
 
 // AdministratorsGroup returns the ID of the group administrators, which the first start created with admin
