@@ -131,10 +131,10 @@ func TestPolicies_Lifecycle(t *testing.T) {
 	readIdentities := apitest.DecodeResource[policy](created, http.StatusCreated)
 	location := policiesPath + "/" + readIdentities.ID.String()
 	assert.Equal(t, location, created.Header().Get("Location"))
-	assert.Equal(t, "read-identities", readIdentities.Name)
-	assert.Equal(t, source, readIdentities.Source)
+	assert.Equal(t, envelope.Visible("read-identities"), readIdentities.Name)
+	assert.Equal(t, envelope.Visible(source), readIdentities.Source)
 	assert.Equal(t, readIdentities.CreatedBy, readIdentities.UpdatedBy)
-	assert.WithinDuration(t, time.Now(), readIdentities.CreatedAt, time.Minute)
+	assert.WithinDuration(t, time.Now(), readIdentities.CreatedAt.Value, time.Minute)
 	assert.Equal(t, readIdentities.CreatedAt, readIdentities.UpdatedAt)
 
 	// 2. Get.
@@ -143,9 +143,9 @@ func TestPolicies_Lifecycle(t *testing.T) {
 	// 3. List.
 	listed := listPolicies(api)
 	require.Len(t, listed, 4)
-	assert.Equal(t, "administrators", listed[0].Name)
-	assert.Equal(t, "read-own-identity", listed[1].Name)
-	assert.Equal(t, "manage-own-api-keys", listed[2].Name)
+	assert.Equal(t, envelope.Visible("administrators"), listed[0].Name)
+	assert.Equal(t, envelope.Visible("read-own-identity"), listed[1].Name)
+	assert.Equal(t, envelope.Visible("manage-own-api-keys"), listed[2].Name)
 	assert.Equal(t, readIdentities, listed[3])
 
 	// 4. Replace.
@@ -153,10 +153,10 @@ func TestPolicies_Lifecycle(t *testing.T) {
 	replaced := apitest.DecodeResource[policy](
 		api.Put(location, policyBody(t, "read-everything", replacedSource)), http.StatusOK)
 	assert.Equal(t, readIdentities.ID, replaced.ID)
-	assert.Equal(t, "read-everything", replaced.Name)
-	assert.Equal(t, replacedSource, replaced.Source)
+	assert.Equal(t, envelope.Visible("read-everything"), replaced.Name)
+	assert.Equal(t, envelope.Visible(replacedSource), replaced.Source)
 	assert.Equal(t, readIdentities.CreatedAt, replaced.CreatedAt, "the creation time is immutable")
-	assert.True(t, replaced.UpdatedAt.After(readIdentities.UpdatedAt), "the update time must advance")
+	assert.True(t, replaced.UpdatedAt.Value.After(readIdentities.UpdatedAt.Value), "the update time must advance")
 
 	// 5. Get again.
 	assert.Equal(t, replaced, apitest.DecodeResource[policy](api.Get(location), http.StatusOK))
@@ -186,7 +186,7 @@ func TestPolicies_NameTaken(t *testing.T) {
 	// 2. Create and rename.
 	api.Post(policiesPath, policyBody(t, "one", source)).AssertProblemType(policyNameTaken)
 	readOwn := listPolicies(api)[1]
-	api.Put(policiesPath+"/"+readOwn.ID.String(), policyBody(t, "one", readOwn.Source)).
+	api.Put(policiesPath+"/"+readOwn.ID.String(), policyBody(t, "one", readOwn.Source.Value)).
 		AssertProblemType(policyNameTaken)
 }
 
@@ -287,7 +287,7 @@ func TestPolicies_Invalid(t *testing.T) {
 			// 4. Nothing written.
 			assert.Equal(t, valid, apitest.DecodeResource[policy](api.Get(validPath), http.StatusOK))
 			for _, p := range listPolicies(api) {
-				assert.NotEqual(t, tt.name, p.Name)
+				assert.NotEqual(t, tt.name, p.Name.Value)
 			}
 		})
 	}
@@ -344,7 +344,7 @@ func TestPolicies_SeededPassChecks(t *testing.T) {
 
 	// 2. Replace.
 	for _, p := range seeded {
-		api.Put(policiesPath+"/"+p.ID.String(), policyBody(t, p.Name, p.Source)).AssertStatus(http.StatusOK)
+		api.Put(policiesPath+"/"+p.ID.String(), policyBody(t, p.Name.Value, p.Source.Value)).AssertStatus(http.StatusOK)
 	}
 }
 
@@ -371,7 +371,7 @@ func TestPolicies_ProtectedByPolicies(t *testing.T) {
 	assert.Empty(t, listPolicies(asAda))
 
 	// 3. Get, replace and delete.
-	body := policyBody(t, "administrators", administrators.Source)
+	body := policyBody(t, "administrators", administrators.Source.Value)
 	for _, send := range []func(target string) *apitest.Response{
 		asAda.Get,
 		func(target string) *apitest.Response { return asAda.Put(target, body) },
@@ -416,7 +416,7 @@ func TestPolicies_SecondInstance(t *testing.T) {
 	// 3. Create the policy.
 	readGrace := addPolicy(t, api, "ada-reads-grace", `permit (
 		principal == Identity::"`+ada.ID.String()+`",
-		action == Action::"identity:read",
+		action in [Action::"identity:read", Action::"identity:readFields"],
 		resource == Identity::"`+grace.ID.String()+`"
 	);`)
 
@@ -473,7 +473,8 @@ func TestPolicies_IdentitiesButNotOtherTypes(t *testing.T) {
 //
 //  1. Create ada with an API key, grace, and the group auditors with ada as a member: 201 and 204.
 //  2. Add a policy that lets auditors read everything: 201.
-//  3. As ada, list the identities and the policies: all of them. Get grace and the new policy: 200.
+//  3. As ada, list the identities and the policies: all of them, the same as admin, with every field. Get
+//     grace and the new policy: 200 with every field.
 //  4. As ada, create an identity and a policy: 403 fields-denied for both. Replace grace and the new
 //     policy: 403 fields-denied for both. Delete grace and the new policy: 403 Forbidden for both.
 //  5. As admin, list the identities and the policies: nothing was written.
@@ -503,10 +504,10 @@ func TestPolicies_ReadOnlyAudit(t *testing.T) {
 	// 4. Write.
 	assertFieldsDenied(t, asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`),
 		"#/username", "#/displayName")
-	assertFieldsDenied(t, asAda.Post(policiesPath, policyBody(t, "more", audit.Source)), "#/name", "#/source")
+	assertFieldsDenied(t, asAda.Post(policiesPath, policyBody(t, "more", audit.Source.Value)), "#/name", "#/source")
 	assertFieldsDenied(t, asAda.Put(gracePath, `{"username":"grace","displayName":"Grace"}`),
 		"#/username", "#/displayName")
-	assertFieldsDenied(t, asAda.Put(auditPath, policyBody(t, "auditors", audit.Source)), "#/name", "#/source")
+	assertFieldsDenied(t, asAda.Put(auditPath, policyBody(t, "auditors", audit.Source.Value)), "#/name", "#/source")
 	asAda.Delete(gracePath).AssertProblemType(forbidden)
 	asAda.Delete(auditPath).AssertProblemType(forbidden)
 
@@ -525,7 +526,8 @@ func TestPolicies_ReadOnlyAudit(t *testing.T) {
 //  3. With ada in display-name-editors, replace grace: 403 fields-denied pointing to username alone, and
 //     grace is unchanged.
 //  4. With ada in editors instead, replace grace: the same 403, since the forbid overrides the grant.
-//  5. Delete the second policy's forbid: 200. Replace grace: 200 with the new values.
+//  5. Delete the second policy's forbid: 200. Replace grace: 200 without her username, since the policy
+//     doesn't let ada read it. As admin, get grace: her new username.
 func TestPolicies_FieldDenials(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
@@ -565,7 +567,9 @@ func TestPolicies_FieldDenials(t *testing.T) {
 	// 5. Without the forbid.
 	api.Put(policiesPath+"/"+editorsPolicy.ID.String(), policyBody(t, "editors", grant)).AssertStatus(http.StatusOK)
 	replaced := apitest.DecodeResource[identity](asAda.Put(gracePath, body), http.StatusOK)
-	assert.Equal(t, "grace-hopper", replaced.Username)
+	assert.Equal(t, identity{ID: grace.ID}, replaced, "the response to a write is masked like a read")
+	assert.Equal(t, envelope.Visible("grace-hopper"),
+		apitest.DecodeResource[identity](api.Get(gracePath), http.StatusOK).Username)
 }
 
 // TestPolicies_DeleteReferencedGroup checks that a group stays deletable while a policy references it:
@@ -589,7 +593,7 @@ func TestPolicies_DeleteReferencedGroup(t *testing.T) {
 
 	// 3. The policy.
 	assert.Equal(t, referencing, apitest.DecodeResource[policy](api.Get(referencingPath), http.StatusOK))
-	assertInvalidPolicy(t, api.Put(referencingPath, policyBody(t, referencing.Name, referencing.Source)),
+	assertInvalidPolicy(t, api.Put(referencingPath, policyBody(t, referencing.Name.Value, referencing.Source.Value)),
 		`the group "`+maintainers+`" does not exist`)
 }
 
@@ -606,8 +610,8 @@ func TestPolicies_DeleteAdministrators(t *testing.T) {
 
 	// 1. Get.
 	administrators := listPolicies(api)[0]
-	assert.Equal(t, "administrators", administrators.Name)
-	assert.Contains(t, administrators.Source, `Group::"`+administratorsGroup+`"`)
+	assert.Equal(t, envelope.Visible("administrators"), administrators.Name)
+	assert.Contains(t, administrators.Source.Value, `Group::"`+administratorsGroup+`"`)
 
 	// 2. Delete.
 	api.Delete(policiesPath + "/" + administrators.ID.String()).AssertNoContent()
@@ -616,7 +620,7 @@ func TestPolicies_DeleteAdministrators(t *testing.T) {
 	assert.Empty(t, listPolicies(api))
 	identities := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data
 	require.Len(t, identities, 1)
-	assert.Equal(t, "admin", identities[0].Username)
-	assertFieldsDenied(t, api.Post(policiesPath, policyBody(t, "administrators", administrators.Source)),
+	assert.Equal(t, envelope.Visible("admin"), identities[0].Username)
+	assertFieldsDenied(t, api.Post(policiesPath, policyBody(t, "administrators", administrators.Source.Value)),
 		"#/name", "#/source")
 }

@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
+	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/feature/policy/service"
 )
@@ -60,25 +61,26 @@ func (r ReplacePolicyRequest) toInput() service.PolicyInput {
 	return service.PolicyInput{Name: r.Name, Source: r.Source}
 }
 
-// PolicyResponse is the representation of a policy in responses.
+// PolicyResponse is the representation of a policy in responses. A field that the caller may not read is
+// absent.
 type PolicyResponse struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	Source    string    `json:"source"`
-	CreatedBy uuid.UUID `json:"createdBy"`
-	UpdatedBy uuid.UUID `json:"updatedBy"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID        uuid.UUID                 `json:"id"`
+	Name      envelope.Field[string]    `json:"name,omitzero"`
+	Source    envelope.Field[string]    `json:"source,omitzero"`
+	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy,omitzero"`
+	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy,omitzero"`
+	CreatedAt envelope.Field[time.Time] `json:"createdAt,omitzero"`
+	UpdatedAt envelope.Field[time.Time] `json:"updatedAt,omitzero"`
 }
 
 func toPolicyResponse(p service.Policy) PolicyResponse {
 	return PolicyResponse{
 		ID:        p.ID,
-		Name:      p.Name,
-		Source:    p.Source,
-		CreatedBy: p.CreatedBy,
-		UpdatedBy: p.UpdatedBy,
-		CreatedAt: p.CreatedAt,
-		UpdatedAt: p.UpdatedAt,
+		Name:      envelope.NewField(p.Name.Get()),
+		Source:    envelope.NewField(p.Source.Get()),
+		CreatedBy: envelope.NewField(p.CreatedBy.Get()),
+		UpdatedBy: envelope.NewField(p.UpdatedBy.Get()),
+		CreatedAt: envelope.NewField(p.CreatedAt.Get()),
+		UpdatedAt: envelope.NewField(p.UpdatedAt.Get()),
 	}
 }

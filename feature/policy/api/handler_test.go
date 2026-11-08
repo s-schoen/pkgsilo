@@ -29,12 +29,12 @@ import (
 var (
 	everything = service.Policy{
 		ID:        uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
-		Name:      "everything",
-		Source:    `permit (principal, action, resource);`,
-		CreatedBy: audit.SystemActor(),
-		UpdatedBy: uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
-		CreatedAt: time.Date(2026, time.November, 7, 10, 0, 0, 0, time.UTC),
-		UpdatedAt: time.Date(2026, time.November, 7, 11, 30, 0, 123456000, time.UTC),
+		Name:      authz.Visible("everything"),
+		Source:    authz.Visible(`permit (principal, action, resource);`),
+		CreatedBy: authz.Visible(audit.SystemActor()),
+		UpdatedBy: authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
+		CreatedAt: authz.Visible(time.Date(2026, time.November, 7, 10, 0, 0, 0, time.UTC)),
+		UpdatedAt: authz.Visible(time.Date(2026, time.November, 7, 11, 30, 0, 123456000, time.UTC)),
 	}
 	everythingJSON = `{
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
@@ -102,6 +102,35 @@ func TestHandler_Get(t *testing.T) {
 	svc.EXPECT().Get(mock.Anything, apitest.Actor, everything.ID).Return(everything, nil)
 
 	api.Get(everythingPath).AssertResource(everythingJSON)
+}
+
+// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response.
+func TestHandler_Get_HiddenFields(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, everything.ID).
+		Return(service.Policy{ID: everything.ID, Name: everything.Name}, nil)
+
+	api.Get(everythingPath).AssertResource(`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"everything"}`)
+}
+
+// TestHandler_Create_Unreadable checks that a new policy that the caller may not read is answered with only
+// its ID and Location.
+func TestHandler_Create_Unreadable(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, everythingInput).Return(service.Policy{ID: everything.ID}, nil)
+
+	api.Post("/policies", everythingBody).
+		AssertCreated(everythingPath, `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"}`)
+}
+
+// TestHandler_ReadableMembers checks that every member of the response but the ID can be hidden and has
+// an action for reading it.
+func TestHandler_ReadableMembers(t *testing.T) {
+	t.Parallel()
+
+	apitest.AssertReadableMembers(t, reflect.TypeFor[PolicyResponse](), service.ReadableFields())
 }
 
 func TestHandler_Replace(t *testing.T) {

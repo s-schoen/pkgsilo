@@ -5,18 +5,21 @@ package service
 import (
 	"time"
 	"uuid"
+
+	"pkgsilo/core/authz"
 )
 
-// Policy is a named document of one or more Cedar statements.
+// Policy is a named document of one or more Cedar statements, as an actor sees it: every field but the ID
+// is hidden unless the actor may read it.
 type Policy struct {
 	ID     uuid.UUID
-	Name   string
-	Source string
+	Name   authz.Field[string]
+	Source authz.Field[string]
 	// CreatedBy and UpdatedBy are the identities, or audit.SystemActor, that made the changes.
-	CreatedBy uuid.UUID
-	UpdatedBy uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedBy authz.Field[uuid.UUID]
+	UpdatedBy authz.Field[uuid.UUID]
+	CreatedAt authz.Field[time.Time]
+	UpdatedAt authz.Field[time.Time]
 }
 
 // PolicyInput holds the policy fields set by callers when creating or replacing a policy.
