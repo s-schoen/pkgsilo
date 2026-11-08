@@ -6,18 +6,10 @@
 // have read actions of their own, and a service reveals only those that the actor may read, as a Field,
 // with a Mapper from the object's record. Everything that no policy permits is denied.
 //
-// # Accepted risks
-//
-//   - Timing: a list checks all rows of its type, so its response time reveals a rough total row count of
-//     that type, though not where the hidden rows sit. Likewise, a hidden object takes slightly longer to
-//     answer than a missing one, which only helps a caller who already holds its ID. Never add a filter or
-//     search parameter on a field the caller can't read: it turns this into "does this exact value exist?",
-//     which has been attacked remotely against row-level security
-//     (https://doi.org/10.1145/3588943).
-//   - Uniqueness conflicts: a taken unique value, such as a username, reveals that it exists even if the
-//     caller can't see the object.
-//   - Lockout: a bad policy, or removing the last administrator, can lock everyone out. There's no bypass,
-//     last-member guard or dry run. Recovery means fixing the data directly in the database.
+// Its model has two types of its own: Identity, the principal of every decision and the owner of owned
+// resources, and Group, which identities and other resources are members of. Their features declare their
+// actions like any other, but core names the types, since every decision and the schema use them. Every
+// other resource type is a feature's own and never appears here.
 package authz
 
 import (
@@ -29,10 +21,13 @@ import (
 )
 
 const (
-	// IdentityType is the Cedar entity type of identities. Every decision's principal is one.
+	// IdentityType is the Cedar entity type of identities. Every decision's principal is one. The identity
+	// feature declares its actions with DeclareType, and stored policies use the name, so it can't change.
 	IdentityType = "Identity"
 	// GroupType is the Cedar entity type of groups, which identities are members of. A group as a resource
 	// is the same entity as a group of the principal, so that `principal in resource` matches its members.
+	// The group feature declares its actions with DeclareType, and stored policies use the name, so it
+	// can't change.
 	GroupType = "Group"
 	// ActionGroupRead is the action group that bundles all reading actions, for policies such as a
 	// read-only audit group.
