@@ -59,7 +59,7 @@ func TestBootstrap_FirstStart(t *testing.T) {
 	assert.Equal(t, audit.SystemActor(), admin.CreatedBy)
 	assert.Equal(t, []uuid.UUID{admin.ID}, groupMembers(t, db, administratorsGroupID))
 
-	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), testPepper)
+	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authz.AllowAll(), testPepper)
 	apiKey, err := apiKeys.Authenticate(t.Context(), key)
 	require.NoError(t, err, "the returned key must authenticate")
 	assert.Equal(t, admin.ID, apiKey.IdentityID)

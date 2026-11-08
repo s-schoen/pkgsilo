@@ -7,9 +7,11 @@ import (
 )
 
 var (
-	// ErrAPIKeyNotFound is returned when the identity has no API key with the requested ID.
+	// ErrAPIKeyNotFound is returned when the identity has no API key with the requested ID, or the actor
+	// may not read it.
 	ErrAPIKeyNotFound = errors.New("api key not found")
-	// ErrIdentityNotFound is returned when the identity of an API key doesn't exist.
+	// ErrIdentityNotFound is returned when the identity of an API key doesn't exist, or the actor may not
+	// read it.
 	ErrIdentityNotFound = errors.New("identity not found")
 	// ErrMalformedKey is returned when a presented key doesn't have the format of a key.
 	ErrMalformedKey = errors.New("malformed key")

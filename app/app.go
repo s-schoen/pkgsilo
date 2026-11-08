@@ -36,9 +36,10 @@ func NewHandler(opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *s
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db), authorizer)
 	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db), authorizer)
-	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), apiKeyPepper)
+	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authorizer, apiKeyPepper)
 	// Saved policies are validated against the resource types and actions that the features declare.
-	schema := authz.Schema(identityservice.Declaration(), groupservice.Declaration(), policyservice.Declaration())
+	schema := authz.Schema(identityservice.Declaration(), groupservice.Declaration(), apikeyservice.Declaration(),
+		policyservice.Declaration())
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema)
 
 	r := router.New(opts, logger)

@@ -68,7 +68,7 @@ func Bootstrap(ctx context.Context, db *sqlx.DB, apiKeyPepper []byte) (string, e
 		return "", fmt.Errorf("add admin to administrators: %w", err)
 	}
 
-	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(tx), apiKeyPepper)
+	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(tx), authz.AllowAll(), apiKeyPepper)
 	apiKey, err := apiKeys.Create(ctx, audit.SystemActor(), admin.ID, apikeyservice.APIKeyInput{Name: bootstrapKeyName})
 	if err != nil {
 		return "", fmt.Errorf("create admin api key: %w", err)

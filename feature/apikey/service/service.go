@@ -13,8 +13,10 @@ import (
 	"time"
 	"uuid"
 
+	"pkgsilo/core/authz"
 	"pkgsilo/core/pagination"
 	"pkgsilo/feature/apikey/repository"
+	identityservice "pkgsilo/feature/identity/service"
 )
 
 const (
@@ -29,46 +31,102 @@ const (
 	lastUsedInterval = time.Minute
 )
 
+// The actions on API keys. API keys can't be changed, so creating is the only write with field actions. An
+// API key belongs to its identity, which policies refer to as resource.owner.
+var (
+	actionRead   = authz.NewAction("apikey:read", authz.ActionGroupRead)
+	actionDelete = authz.NewAction("apikey:delete")
+	createFields = authz.NewFieldActions("apikey:create", "name", "expiresAt")
+)
+
+// resourceType is the Cedar entity type of API keys. Its key hash isn't an attribute, nor is anything
+// else of it that's secret.
+const resourceType = "APIKey"
+
+// Declaration declares API keys, owned by their identities, and the actions on them, for the schema that
+// policies are validated against.
+func Declaration() authz.Declaration {
+	return authz.Declaration{
+		Type:    resourceType,
+		Owned:   true,
+		Actions: []authz.Action{actionRead, actionDelete},
+		Fields:  []authz.FieldActions{createFields},
+	}
+}
+
+// CreatableFields returns the names of the fields that creating an API key can set, each of which has an
+// apikey:create:<field> action.
+func CreatableFields() []string {
+	return createFields.Fields()
+}
+
 // APIKeyService manages API keys and authenticates their keys. Changes are attributed to the given
 // actor.
+//
+// Every method but Authenticate first checks that the actor may read the API keys' identity, and reports
+// one that it may not like a missing one, with ErrIdentityNotFound. An API key that the actor may not read
+// is reported like a missing one too, with ErrAPIKeyNotFound.
 type APIKeyService interface {
-	// Create stores a new API key of the identity with the given input and returns it with its key.
+	// Create stores a new API key of the identity with the given input and returns it with its key, which
+	// is returned even if the actor may not read the API key, since it can't be retrieved later. It returns
+	// an *authz.FieldsDeniedError, without storing anything, if the actor may not set any of the fields
+	// that the input sets. Leaving out the expiry needs no access to it.
 	Create(ctx context.Context, actor, identityID uuid.UUID, in APIKeyInput) (CreatedAPIKey, error)
 	// Get returns the API key with the given ID of the identity.
-	Get(ctx context.Context, identityID, id uuid.UUID) (APIKey, error)
-	// List returns the page of up to limit API keys of the identity that skips the first offset,
-	// ordered by creation time.
-	List(ctx context.Context, identityID uuid.UUID, offset, limit int) (pagination.Page[APIKey], error)
-	// Delete removes the API key with the given ID of the identity. Its key stops working at once.
-	Delete(ctx context.Context, identityID, id uuid.UUID) error
+	Get(ctx context.Context, actor, identityID, id uuid.UUID) (APIKey, error)
+	// List returns the page of up to limit API keys of the identity that skips the first offset, out of
+	// those that the actor may read, ordered by creation time. Only the last page can be short.
+	List(ctx context.Context, actor, identityID uuid.UUID, offset, limit int) (pagination.Page[APIKey], error)
+	// Delete removes the API key with the given ID of the identity. Its key stops working at once. An API
+	// key that the actor may read but not delete is reported with authz.ErrDenied.
+	Delete(ctx context.Context, actor, identityID, id uuid.UUID) error
 	// Authenticate returns the API key that the presented key belongs to and records its use. It
 	// returns an error wrapping ErrMalformedKey, ErrUnknownKey or ErrExpiredKey if the key is not
-	// accepted. Its errors never hold the key.
+	// accepted. Its errors never hold the key. It isn't authorized, since a request has no actor before
+	// it's authenticated.
 	Authenticate(ctx context.Context, key string) (APIKey, error)
 }
 
 type apiKeyService struct {
-	repo   repository.APIKeyRepository
-	pepper []byte
-	now    func() time.Time
+	repo       repository.APIKeyRepository
+	authorizer authz.Authorizer
+	pepper     []byte
+	now        func() time.Time
 }
 
 // NewAPIKeyService returns an APIKeyService that stores API keys in repo, with their keys hashed under
-// the secret pepper.
-func NewAPIKeyService(repo repository.APIKeyRepository, pepper []byte) APIKeyService {
-	return newAPIKeyService(repo, pepper, time.Now)
+// the secret pepper, and asks authorizer what an actor may do.
+func NewAPIKeyService(repo repository.APIKeyRepository, authorizer authz.Authorizer, pepper []byte) APIKeyService {
+	return newAPIKeyService(repo, authorizer, pepper, time.Now)
 }
 
-func newAPIKeyService(repo repository.APIKeyRepository, pepper []byte, now func() time.Time) *apiKeyService {
-	return &apiKeyService{repo: repo, pepper: pepper, now: now}
+func newAPIKeyService(
+	repo repository.APIKeyRepository, authorizer authz.Authorizer, pepper []byte, now func() time.Time,
+) *apiKeyService {
+	return &apiKeyService{repo: repo, authorizer: authorizer, pepper: pepper, now: now}
 }
 
 func (s *apiKeyService) Create(
 	ctx context.Context, actor, identityID uuid.UUID, in APIKeyInput,
 ) (CreatedAPIKey, error) {
+	decider, err := s.authorizer.For(ctx, actor)
+	if err != nil {
+		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
+	}
+
+	owner, err := s.readableOwner(ctx, decider, identityID)
+	if err != nil {
+		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
+	}
+
+	id := uuid.NewV4()
+	if err := createFields.Only(setFields(in)...).Check(decider, toResource(id, owner)); err != nil {
+		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
+	}
+
 	key := generateKey()
 	rec, err := s.repo.Insert(ctx, repository.APIKeyRecord{
-		ID:         uuid.NewV4(),
+		ID:         id,
 		IdentityID: identityID,
 		Name:       in.Name,
 		KeyHash:    s.hash(key),
@@ -84,46 +142,83 @@ func (s *apiKeyService) Create(
 	return CreatedAPIKey{APIKey: toAPIKey(rec), Key: key}, nil
 }
 
-func (s *apiKeyService) Get(ctx context.Context, identityID, id uuid.UUID) (APIKey, error) {
-	rec, err := s.repo.Get(ctx, identityID, id)
-	if errors.Is(err, repository.ErrNotFound) {
-		err = s.notFoundCause(ctx, identityID, err)
-	}
+func (s *apiKeyService) Get(ctx context.Context, actor, identityID, id uuid.UUID) (APIKey, error) {
+	decider, err := s.authorizer.For(ctx, actor)
 	if err != nil {
-		return APIKey{}, fmt.Errorf("get api key: %w", translateError(err))
+		return APIKey{}, fmt.Errorf("get api key: %w", err)
+	}
+
+	owner, err := s.readableOwner(ctx, decider, identityID)
+	if err != nil {
+		return APIKey{}, fmt.Errorf("get api key: %w", err)
+	}
+
+	rec, err := s.getReadable(ctx, decider, owner, id)
+	if err != nil {
+		return APIKey{}, fmt.Errorf("get api key: %w", err)
 	}
 
 	return toAPIKey(rec), nil
 }
 
 func (s *apiKeyService) List(
-	ctx context.Context, identityID uuid.UUID, offset, limit int,
+	ctx context.Context, actor, identityID uuid.UUID, offset, limit int,
 ) (pagination.Page[APIKey], error) {
-	// One record more than requested reveals whether further API keys follow.
-	recs, err := s.repo.List(ctx, identityID, offset, limit+1)
+	decider, err := s.authorizer.For(ctx, actor)
 	if err != nil {
 		return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
 	}
-	if len(recs) == 0 {
-		if err := s.notFoundCause(ctx, identityID, nil); err != nil {
-			return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", translateError(err))
-		}
+
+	owner, err := s.readableOwner(ctx, decider, identityID)
+	if err != nil {
+		return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
 	}
 
-	keys := make([]APIKey, len(recs))
-	for i, rec := range recs {
+	recs, err := s.repo.ListAll(ctx, identityID)
+	if err != nil {
+		return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
+	}
+
+	readable, err := authz.Filter(ctx, decider, actionRead, recs, func(rec repository.APIKeyRecord) authz.Resource {
+		return toResource(rec.ID, owner)
+	})
+	if err != nil {
+		return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
+	}
+
+	page := pagination.FromAll(readable, offset, limit)
+	keys := make([]APIKey, len(page.Items))
+	for i, rec := range page.Items {
 		keys[i] = toAPIKey(rec)
 	}
 
-	return pagination.FromLookahead(keys, limit), nil
+	return pagination.Page[APIKey]{Items: keys, HasMore: page.HasMore}, nil
 }
 
-func (s *apiKeyService) Delete(ctx context.Context, identityID, id uuid.UUID) error {
-	err := s.repo.Delete(ctx, identityID, id)
-	if errors.Is(err, repository.ErrNotFound) {
-		err = s.notFoundCause(ctx, identityID, err)
-	}
+func (s *apiKeyService) Delete(ctx context.Context, actor, identityID, id uuid.UUID) error {
+	decider, err := s.authorizer.For(ctx, actor)
 	if err != nil {
+		return fmt.Errorf("delete api key: %w", err)
+	}
+
+	owner, err := s.readableOwner(ctx, decider, identityID)
+	if err != nil {
+		return fmt.Errorf("delete api key: %w", err)
+	}
+
+	if _, err := s.getReadable(ctx, decider, owner, id); err != nil {
+		return fmt.Errorf("delete api key: %w", err)
+	}
+
+	can, err := decider.Can(actionDelete, toResource(id, owner))
+	if err != nil {
+		return fmt.Errorf("delete api key: check action: %w", err)
+	}
+	if !can {
+		return fmt.Errorf("delete api key: %w", authz.ErrDenied)
+	}
+
+	if err := s.repo.Delete(ctx, identityID, id); err != nil {
 		return fmt.Errorf("delete api key: %w", translateError(err))
 	}
 
@@ -158,20 +253,64 @@ func (s *apiKeyService) Authenticate(ctx context.Context, key string) (APIKey, e
 	return toAPIKey(rec), nil
 }
 
-// notFoundCause returns the error for an API key or list of API keys that wasn't found: err, or
-// repository.ErrIdentityNotFound if the identity doesn't exist. A missing identity has no API keys
-// either, so it's told apart by looking it up. Only afterwards, so that an identity deleted in between
-// is reported as missing.
-func (s *apiKeyService) notFoundCause(ctx context.Context, identityID uuid.UUID, err error) error {
-	exists, existsErr := s.repo.IdentityExists(ctx, identityID)
-	switch {
-	case existsErr != nil:
-		return fmt.Errorf("look up identity: %w", existsErr)
-	case !exists:
-		return repository.ErrIdentityNotFound
-	default:
-		return err
+// readableOwner returns the identity with the given ID as the owner of its API keys, with its groups. It
+// reports an identity that the decider doesn't allow to read like a missing one, with ErrIdentityNotFound,
+// so that no endpoint of its API keys reveals whether it exists.
+func (s *apiKeyService) readableOwner(
+	ctx context.Context, decider authz.Decider, identityID uuid.UUID,
+) (*authz.Owner, error) {
+	groups, err := s.repo.IdentityGroups(ctx, identityID)
+	if err != nil {
+		return nil, translateError(err)
 	}
+
+	can, err := decider.Can(identityservice.ReadAction(),
+		authz.Resource{Type: authz.IdentityType, ID: identityID, Groups: groups})
+	if err != nil {
+		return nil, fmt.Errorf("check identity read: %w", err)
+	}
+	if !can {
+		return nil, ErrIdentityNotFound
+	}
+
+	return &authz.Owner{ID: identityID, Groups: groups}, nil
+}
+
+// getReadable returns the record of the API key with the given ID of the owner. It reports an API key that
+// the decider doesn't allow to read like a missing one.
+func (s *apiKeyService) getReadable(
+	ctx context.Context, decider authz.Decider, owner *authz.Owner, id uuid.UUID,
+) (repository.APIKeyRecord, error) {
+	rec, err := s.repo.Get(ctx, owner.ID, id)
+	if err != nil {
+		return repository.APIKeyRecord{}, translateError(err)
+	}
+
+	can, err := decider.Can(actionRead, toResource(id, owner))
+	if err != nil {
+		return repository.APIKeyRecord{}, fmt.Errorf("check read: %w", err)
+	}
+	if !can {
+		return repository.APIKeyRecord{}, ErrAPIKeyNotFound
+	}
+
+	return rec, nil
+}
+
+// setFields returns the names of the fields that creating an API key with the input sets. An API key
+// without an expiry never expires, so leaving it out sets nothing.
+func setFields(in APIKeyInput) []string {
+	fields := []string{"name"}
+	if in.ExpiresAt != nil {
+		fields = append(fields, "expiresAt")
+	}
+
+	return fields
+}
+
+// toResource returns the API key with the given ID of the owner as a resource of a decision.
+func toResource(id uuid.UUID, owner *authz.Owner) authz.Resource {
+	return authz.Resource{Type: resourceType, ID: id, Owner: owner}
 }
 
 // hash returns the keyed hash of key that's stored and looked up. It's deterministic, so that a key

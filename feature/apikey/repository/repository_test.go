@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/pagination"
 	"pkgsilo/test/databasetest"
 )
 
@@ -160,7 +161,7 @@ func TestPostgresAPIKeyRepository_GetByHash_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestPostgresAPIKeyRepository_List(t *testing.T) {
+func TestPostgresAPIKeyRepository_ListAll(t *testing.T) {
 	t.Parallel()
 	repo, db := newTestRepo(t)
 	identityID := insertIdentity(t, db)
@@ -174,26 +175,51 @@ func TestPostgresAPIKeyRepository_List(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	tests := []struct {
-		name   string
-		offset int
-		limit  int
-		want   []APIKeyRecord
-	}{
-		{name: "all", offset: 0, limit: 10, want: []APIKeyRecord{first, second, third}},
-		{name: "limited", offset: 0, limit: 2, want: []APIKeyRecord{first, second}},
-		{name: "offset", offset: 1, limit: 1, want: []APIKeyRecord{second}},
-		{name: "past the end", offset: 3, limit: 10, want: nil},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	got, err := repo.ListAll(t.Context(), identityID)
+	require.NoError(t, err)
+
+	assert.Equal(t, []APIKeyRecord{first, second, third}, got)
+}
+
+func TestPostgresAPIKeyRepository_ListAll_None(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+
+	for name, id := range map[string]uuid.UUID{"no keys": insertIdentity(t, db), "missing": uuid.NewV4()} {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, err := repo.List(t.Context(), identityID, tt.offset, tt.limit)
+			got, err := repo.ListAll(t.Context(), id)
 			require.NoError(t, err)
 
-			assert.Equal(t, tt.want, got)
+			assert.Empty(t, got)
 		})
 	}
+}
+
+func TestPostgresAPIKeyRepository_ListAll_Ceiling(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+	identityID := insertIdentity(t, db)
+
+	insertKeys := func(count int) {
+		_, err := db.ExecContext(t.Context(), `
+			INSERT INTO api_keys (id, identity_id, name, key_hash, key_suffix, created_by, created_at)
+			SELECT gen_random_uuid(), $1, 'ci', gen_random_uuid()::text::bytea, 'WXYZ', $1, $2
+			FROM generate_series(1, $3::int)`,
+			identityID, baseTime, count,
+		)
+		require.NoError(t, err)
+	}
+
+	insertKeys(pagination.MaxAllRows)
+	got, err := repo.ListAll(t.Context(), identityID)
+	require.NoError(t, err)
+	assert.Len(t, got, pagination.MaxAllRows)
+
+	insertKeys(1)
+	got, err = repo.ListAll(t.Context(), identityID)
+	require.ErrorIs(t, err, ErrTooManyRows)
+	assert.Nil(t, got)
 }
 
 func TestPostgresAPIKeyRepository_UpdateLastUsed(t *testing.T) {
@@ -255,18 +281,61 @@ func TestPostgresAPIKeyRepository_Delete_NotFound(t *testing.T) {
 	assert.NoError(t, err, "the key must survive a delete through another identity")
 }
 
-func TestPostgresAPIKeyRepository_IdentityExists(t *testing.T) {
+// insertGroup stores a group row with the identities as members and returns its ID. The tables belong to
+// the group feature, so the rows are written directly.
+func insertGroup(t *testing.T, db *sqlx.DB, members ...uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	id := uuid.NewV4()
+	_, err := db.ExecContext(t.Context(), `
+		INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
+		VALUES ($1, $2, $1, $1, $3, $3)`,
+		id, "group-"+id.String(), baseTime,
+	)
+	require.NoError(t, err)
+	for _, member := range members {
+		_, err := db.ExecContext(t.Context(), `
+			INSERT INTO group_members (group_id, identity_id, created_by, created_at) VALUES ($1, $2, $2, $3)`,
+			id, member, baseTime,
+		)
+		require.NoError(t, err)
+	}
+
+	return id
+}
+
+func TestPostgresAPIKeyRepository_IdentityGroups(t *testing.T) {
 	t.Parallel()
 	repo, db := newTestRepo(t)
-	identityID := insertIdentity(t, db)
+	ada, grace := insertIdentity(t, db), insertIdentity(t, db)
+	maintainers, reviewers := insertGroup(t, db, ada), insertGroup(t, db, ada, grace)
+	// Another identity's group, which must not be listed.
+	insertGroup(t, db, grace)
 
-	exists, err := repo.IdentityExists(t.Context(), identityID)
+	got, err := repo.IdentityGroups(t.Context(), ada)
 	require.NoError(t, err)
-	assert.True(t, exists)
 
-	exists, err = repo.IdentityExists(t.Context(), uuid.NewV4())
+	assert.ElementsMatch(t, []uuid.UUID{maintainers, reviewers}, got)
+}
+
+func TestPostgresAPIKeyRepository_IdentityGroups_None(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+	insertGroup(t, db)
+
+	got, err := repo.IdentityGroups(t.Context(), insertIdentity(t, db))
 	require.NoError(t, err)
-	assert.False(t, exists)
+
+	assert.Empty(t, got)
+}
+
+func TestPostgresAPIKeyRepository_IdentityGroups_IdentityNotFound(t *testing.T) {
+	t.Parallel()
+	repo, _ := newTestRepo(t)
+
+	_, err := repo.IdentityGroups(t.Context(), uuid.NewV4())
+
+	assert.ErrorIs(t, err, ErrIdentityNotFound)
 }
 
 func TestPostgresAPIKeyRepository_DeletingIdentityDeletesItsKeys(t *testing.T) {

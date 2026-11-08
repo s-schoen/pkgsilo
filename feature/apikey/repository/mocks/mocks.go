@@ -250,23 +250,25 @@ func (_c *MockAPIKeyRepository_GetByHash_Call) RunAndReturn(run func(ctx context
 	return _c
 }
 
-// IdentityExists provides a mock function for the type MockAPIKeyRepository
-func (_mock *MockAPIKeyRepository) IdentityExists(ctx context.Context, identityID uuid.UUID) (bool, error) {
+// IdentityGroups provides a mock function for the type MockAPIKeyRepository
+func (_mock *MockAPIKeyRepository) IdentityGroups(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error) {
 	ret := _mock.Called(ctx, identityID)
 
 	if len(ret) == 0 {
-		panic("no return value specified for IdentityExists")
+		panic("no return value specified for IdentityGroups")
 	}
 
-	var r0 bool
+	var r0 []uuid.UUID
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) (bool, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) ([]uuid.UUID, error)); ok {
 		return returnFunc(ctx, identityID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) bool); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) []uuid.UUID); ok {
 		r0 = returnFunc(ctx, identityID)
 	} else {
-		r0 = ret.Get(0).(bool)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]uuid.UUID)
+		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
 		r1 = returnFunc(ctx, identityID)
@@ -276,19 +278,19 @@ func (_mock *MockAPIKeyRepository) IdentityExists(ctx context.Context, identityI
 	return r0, r1
 }
 
-// MockAPIKeyRepository_IdentityExists_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IdentityExists'
-type MockAPIKeyRepository_IdentityExists_Call struct {
+// MockAPIKeyRepository_IdentityGroups_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IdentityGroups'
+type MockAPIKeyRepository_IdentityGroups_Call struct {
 	*mock.Call
 }
 
-// IdentityExists is a helper method to define mock.On call
+// IdentityGroups is a helper method to define mock.On call
 //   - ctx context.Context
 //   - identityID uuid.UUID
-func (_e *MockAPIKeyRepository_Expecter) IdentityExists(ctx any, identityID any) *MockAPIKeyRepository_IdentityExists_Call {
-	return &MockAPIKeyRepository_IdentityExists_Call{Call: _e.mock.On("IdentityExists", ctx, identityID)}
+func (_e *MockAPIKeyRepository_Expecter) IdentityGroups(ctx any, identityID any) *MockAPIKeyRepository_IdentityGroups_Call {
+	return &MockAPIKeyRepository_IdentityGroups_Call{Call: _e.mock.On("IdentityGroups", ctx, identityID)}
 }
 
-func (_c *MockAPIKeyRepository_IdentityExists_Call) Run(run func(ctx context.Context, identityID uuid.UUID)) *MockAPIKeyRepository_IdentityExists_Call {
+func (_c *MockAPIKeyRepository_IdentityGroups_Call) Run(run func(ctx context.Context, identityID uuid.UUID)) *MockAPIKeyRepository_IdentityGroups_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -306,12 +308,12 @@ func (_c *MockAPIKeyRepository_IdentityExists_Call) Run(run func(ctx context.Con
 	return _c
 }
 
-func (_c *MockAPIKeyRepository_IdentityExists_Call) Return(b bool, err error) *MockAPIKeyRepository_IdentityExists_Call {
-	_c.Call.Return(b, err)
+func (_c *MockAPIKeyRepository_IdentityGroups_Call) Return(uUIDs []uuid.UUID, err error) *MockAPIKeyRepository_IdentityGroups_Call {
+	_c.Call.Return(uUIDs, err)
 	return _c
 }
 
-func (_c *MockAPIKeyRepository_IdentityExists_Call) RunAndReturn(run func(ctx context.Context, identityID uuid.UUID) (bool, error)) *MockAPIKeyRepository_IdentityExists_Call {
+func (_c *MockAPIKeyRepository_IdentityGroups_Call) RunAndReturn(run func(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error)) *MockAPIKeyRepository_IdentityGroups_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -382,49 +384,47 @@ func (_c *MockAPIKeyRepository_Insert_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
-// List provides a mock function for the type MockAPIKeyRepository
-func (_mock *MockAPIKeyRepository) List(ctx context.Context, identityID uuid.UUID, offset int, limit int) ([]repository.APIKeyRecord, error) {
-	ret := _mock.Called(ctx, identityID, offset, limit)
+// ListAll provides a mock function for the type MockAPIKeyRepository
+func (_mock *MockAPIKeyRepository) ListAll(ctx context.Context, identityID uuid.UUID) ([]repository.APIKeyRecord, error) {
+	ret := _mock.Called(ctx, identityID)
 
 	if len(ret) == 0 {
-		panic("no return value specified for List")
+		panic("no return value specified for ListAll")
 	}
 
 	var r0 []repository.APIKeyRecord
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, int, int) ([]repository.APIKeyRecord, error)); ok {
-		return returnFunc(ctx, identityID, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) ([]repository.APIKeyRecord, error)); ok {
+		return returnFunc(ctx, identityID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, int, int) []repository.APIKeyRecord); ok {
-		r0 = returnFunc(ctx, identityID, offset, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) []repository.APIKeyRecord); ok {
+		r0 = returnFunc(ctx, identityID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]repository.APIKeyRecord)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, int, int) error); ok {
-		r1 = returnFunc(ctx, identityID, offset, limit)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, identityID)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockAPIKeyRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
-type MockAPIKeyRepository_List_Call struct {
+// MockAPIKeyRepository_ListAll_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAll'
+type MockAPIKeyRepository_ListAll_Call struct {
 	*mock.Call
 }
 
-// List is a helper method to define mock.On call
+// ListAll is a helper method to define mock.On call
 //   - ctx context.Context
 //   - identityID uuid.UUID
-//   - offset int
-//   - limit int
-func (_e *MockAPIKeyRepository_Expecter) List(ctx any, identityID any, offset any, limit any) *MockAPIKeyRepository_List_Call {
-	return &MockAPIKeyRepository_List_Call{Call: _e.mock.On("List", ctx, identityID, offset, limit)}
+func (_e *MockAPIKeyRepository_Expecter) ListAll(ctx any, identityID any) *MockAPIKeyRepository_ListAll_Call {
+	return &MockAPIKeyRepository_ListAll_Call{Call: _e.mock.On("ListAll", ctx, identityID)}
 }
 
-func (_c *MockAPIKeyRepository_List_Call) Run(run func(ctx context.Context, identityID uuid.UUID, offset int, limit int)) *MockAPIKeyRepository_List_Call {
+func (_c *MockAPIKeyRepository_ListAll_Call) Run(run func(ctx context.Context, identityID uuid.UUID)) *MockAPIKeyRepository_ListAll_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -434,30 +434,20 @@ func (_c *MockAPIKeyRepository_List_Call) Run(run func(ctx context.Context, iden
 		if args[1] != nil {
 			arg1 = args[1].(uuid.UUID)
 		}
-		var arg2 int
-		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
-		var arg3 int
-		if args[3] != nil {
-			arg3 = args[3].(int)
-		}
 		run(
 			arg0,
 			arg1,
-			arg2,
-			arg3,
 		)
 	})
 	return _c
 }
 
-func (_c *MockAPIKeyRepository_List_Call) Return(aPIKeyRecords []repository.APIKeyRecord, err error) *MockAPIKeyRepository_List_Call {
+func (_c *MockAPIKeyRepository_ListAll_Call) Return(aPIKeyRecords []repository.APIKeyRecord, err error) *MockAPIKeyRepository_ListAll_Call {
 	_c.Call.Return(aPIKeyRecords, err)
 	return _c
 }
 
-func (_c *MockAPIKeyRepository_List_Call) RunAndReturn(run func(ctx context.Context, identityID uuid.UUID, offset int, limit int) ([]repository.APIKeyRecord, error)) *MockAPIKeyRepository_List_Call {
+func (_c *MockAPIKeyRepository_ListAll_Call) RunAndReturn(run func(ctx context.Context, identityID uuid.UUID) ([]repository.APIKeyRecord, error)) *MockAPIKeyRepository_ListAll_Call {
 	_c.Call.Return(run)
 	return _c
 }
