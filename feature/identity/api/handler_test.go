@@ -29,12 +29,12 @@ import (
 var (
 	ada = service.Identity{
 		ID:          uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
-		Username:    "ada",
-		DisplayName: "Ada Lovelace",
-		CreatedBy:   audit.SystemActor(),
-		UpdatedBy:   uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
-		CreatedAt:   time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC),
-		UpdatedAt:   time.Date(2026, time.October, 24, 11, 30, 0, 123456000, time.UTC),
+		Username:    authz.Visible("ada"),
+		DisplayName: authz.Visible("Ada Lovelace"),
+		CreatedBy:   authz.Visible(audit.SystemActor()),
+		UpdatedBy:   authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
+		CreatedAt:   authz.Visible(time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC)),
+		UpdatedAt:   authz.Visible(time.Date(2026, time.October, 24, 11, 30, 0, 123456000, time.UTC)),
 	}
 	adaJSON = `{
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
@@ -110,6 +110,34 @@ func TestHandler_Get(t *testing.T) {
 	svc.EXPECT().Get(mock.Anything, apitest.Actor, ada.ID).Return(ada, nil)
 
 	api.Get(adaPath).AssertResource(adaJSON)
+}
+
+// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response.
+func TestHandler_Get_HiddenFields(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, ada.ID).
+		Return(service.Identity{ID: ada.ID, DisplayName: ada.DisplayName}, nil)
+
+	api.Get(adaPath).AssertResource(`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","displayName":"Ada Lovelace"}`)
+}
+
+// TestHandler_Create_Unreadable checks that a new identity that the caller may not read is answered with
+// only its ID and Location.
+func TestHandler_Create_Unreadable(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, adaInput).Return(service.Identity{ID: ada.ID}, nil)
+
+	api.Post("/identities", adaBody).AssertCreated(adaPath, `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"}`)
+}
+
+// TestHandler_ReadableMembers checks that every member of the response but the ID can be hidden and has
+// an action for reading it.
+func TestHandler_ReadableMembers(t *testing.T) {
+	t.Parallel()
+
+	apitest.AssertReadableMembers(t, reflect.TypeFor[IdentityResponse](), service.ReadableFields())
 }
 
 func TestHandler_Replace(t *testing.T) {

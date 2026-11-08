@@ -7,6 +7,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
+	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/feature/identity/service"
 )
@@ -65,25 +66,26 @@ func (r ReplaceIdentityRequest) toInput() service.IdentityInput {
 	return service.IdentityInput{Username: r.Username, DisplayName: r.DisplayName}
 }
 
-// IdentityResponse is the representation of an identity in responses.
+// IdentityResponse is the representation of an identity in responses. A field that the caller may not
+// read is absent.
 type IdentityResponse struct {
-	ID          uuid.UUID `json:"id"`
-	Username    string    `json:"username"`
-	DisplayName string    `json:"displayName"`
-	CreatedBy   uuid.UUID `json:"createdBy"`
-	UpdatedBy   uuid.UUID `json:"updatedBy"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID          uuid.UUID                 `json:"id"`
+	Username    envelope.Field[string]    `json:"username,omitzero"`
+	DisplayName envelope.Field[string]    `json:"displayName,omitzero"`
+	CreatedBy   envelope.Field[uuid.UUID] `json:"createdBy,omitzero"`
+	UpdatedBy   envelope.Field[uuid.UUID] `json:"updatedBy,omitzero"`
+	CreatedAt   envelope.Field[time.Time] `json:"createdAt,omitzero"`
+	UpdatedAt   envelope.Field[time.Time] `json:"updatedAt,omitzero"`
 }
 
 func toIdentityResponse(i service.Identity) IdentityResponse {
 	return IdentityResponse{
 		ID:          i.ID,
-		Username:    i.Username,
-		DisplayName: i.DisplayName,
-		CreatedBy:   i.CreatedBy,
-		UpdatedBy:   i.UpdatedBy,
-		CreatedAt:   i.CreatedAt,
-		UpdatedAt:   i.UpdatedAt,
+		Username:    envelope.NewField(i.Username.Get()),
+		DisplayName: envelope.NewField(i.DisplayName.Get()),
+		CreatedBy:   envelope.NewField(i.CreatedBy.Get()),
+		UpdatedBy:   envelope.NewField(i.UpdatedBy.Get()),
+		CreatedAt:   envelope.NewField(i.CreatedAt.Get()),
+		UpdatedAt:   envelope.NewField(i.UpdatedAt.Get()),
 	}
 }

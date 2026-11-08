@@ -56,10 +56,10 @@ func TestIdentities_Lifecycle(t *testing.T) {
 	ada := apitest.DecodeResource[identity](created, http.StatusCreated)
 	location := identitiesPath + "/" + ada.ID.String()
 	assert.Equal(t, location, created.Header().Get("Location"))
-	assert.Equal(t, "ada", ada.Username)
-	assert.Equal(t, "Ada Lovelace", ada.DisplayName)
+	assert.Equal(t, envelope.Visible("ada"), ada.Username)
+	assert.Equal(t, envelope.Visible("Ada Lovelace"), ada.DisplayName)
 	assert.Equal(t, ada.CreatedBy, ada.UpdatedBy)
-	assert.WithinDuration(t, time.Now(), ada.CreatedAt, time.Minute)
+	assert.WithinDuration(t, time.Now(), ada.CreatedAt.Value, time.Minute)
 	assert.Equal(t, ada.CreatedAt, ada.UpdatedAt)
 
 	// 2. Get.
@@ -68,18 +68,18 @@ func TestIdentities_Lifecycle(t *testing.T) {
 	// 3. List.
 	listed := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data
 	require.Len(t, listed, 2)
-	assert.Equal(t, "admin", listed[0].Username)
+	assert.Equal(t, envelope.Visible("admin"), listed[0].Username)
 	assert.Equal(t, ada, listed[1])
-	assert.Equal(t, listed[0].ID, ada.CreatedBy)
+	assert.Equal(t, envelope.Visible(listed[0].ID), ada.CreatedBy)
 
 	// 4. Replace.
 	replaced := apitest.DecodeResource[identity](
 		api.Put(location, `{"username":"ada-lovelace","displayName":"Countess of Lovelace"}`), http.StatusOK)
 	assert.Equal(t, ada.ID, replaced.ID)
-	assert.Equal(t, "ada-lovelace", replaced.Username)
-	assert.Equal(t, "Countess of Lovelace", replaced.DisplayName)
+	assert.Equal(t, envelope.Visible("ada-lovelace"), replaced.Username)
+	assert.Equal(t, envelope.Visible("Countess of Lovelace"), replaced.DisplayName)
 	assert.Equal(t, ada.CreatedAt, replaced.CreatedAt, "the creation time is immutable")
-	assert.True(t, replaced.UpdatedAt.After(ada.UpdatedAt), "the update time must advance")
+	assert.True(t, replaced.UpdatedAt.Value.After(ada.UpdatedAt.Value), "the update time must advance")
 
 	// 5. Get again.
 	assert.Equal(t, replaced, apitest.DecodeResource[identity](api.Get(location), http.StatusOK))
@@ -147,7 +147,7 @@ func TestIdentities_ListPages(t *testing.T) {
 	// 2. List the first page.
 	first := apitest.DecodeCollection[identity](api.Get(identitiesPath+"?limit=2"), http.StatusOK)
 	require.Len(t, first.Data, 2)
-	assert.Equal(t, "admin", first.Data[0].Username, "identities are listed in creation order")
+	assert.Equal(t, envelope.Visible("admin"), first.Data[0].Username, "identities are listed in creation order")
 	assert.Equal(t, created[0], first.Data[1])
 	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, first.Pagination)
 
@@ -398,9 +398,9 @@ func TestIdentities_UpdateSelf(t *testing.T) {
 	// 3. Replace ada.
 	replaced := apitest.DecodeResource[identity](
 		asAda.Put(adaPath, `{"username":"ada-lovelace","displayName":"Ada Lovelace"}`), http.StatusOK)
-	assert.Equal(t, "ada-lovelace", replaced.Username)
-	assert.Equal(t, "Ada Lovelace", replaced.DisplayName)
-	assert.Equal(t, ada.ID, replaced.UpdatedBy)
+	assert.Equal(t, envelope.Visible("ada-lovelace"), replaced.Username)
+	assert.Equal(t, envelope.Visible("Ada Lovelace"), replaced.DisplayName)
+	assert.Equal(t, envelope.Visible(ada.ID), replaced.UpdatedBy)
 
 	// 4. Create carol.
 	assertFieldsDenied(t, asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`),
@@ -442,8 +442,8 @@ func TestIdentities_CreateAndDeleteByPolicy(t *testing.T) {
 	carol := apitest.DecodeResource[identity](created, http.StatusCreated)
 	carolPath := identitiesPath + "/" + carol.ID.String()
 	assert.Equal(t, carolPath, created.Header().Get("Location"))
-	assert.Equal(t, "carol", carol.Username)
-	assert.Equal(t, ada.ID, carol.CreatedBy)
+	assert.Equal(t, envelope.Visible("carol"), carol.Username)
+	assert.Equal(t, envelope.Visible(ada.ID), carol.CreatedBy)
 
 	// 4. Replace carol.
 	assertFieldsDenied(t, asAda.Put(carolPath, `{"username":"carol","displayName":"Carol"}`),
@@ -452,4 +452,112 @@ func TestIdentities_CreateAndDeleteByPolicy(t *testing.T) {
 	// 5. Delete carol.
 	asAda.Delete(carolPath).AssertNoContent()
 	api.Get(carolPath).AssertProblemType(identityNotFound)
+}
+
+// TestIdentities_DisplayNameOnly checks a policy that limits access by attribute: an identity that may
+// read the displayName of identities but nothing else of them sees their IDs and display names alone:
+//
+//  1. Create ada with an API key, and grace: 201 for each.
+//  2. Add a policy that lets ada read identities and their displayName: 201.
+//  3. As ada, get grace: 200 with her ID and display name, and no other member.
+//  4. As ada, list the identities: admin and grace with their IDs and display names alone, and ada with
+//     every field, which the seeded policy lets her read of herself.
+func TestIdentities_DisplayNameOnly(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	grace, _ := apptest.NewIdentity(api, "grace")
+	gracePath := identitiesPath + "/" + grace.ID.String()
+
+	// 2. Add the policy.
+	addPolicy(t, api, `permit (
+		principal == Identity::"`+ada.ID.String()+`",
+		action in [Action::"identity:read", Action::"identity:read:displayName"],
+		resource is Identity
+	);`)
+
+	// 3. Get grace.
+	asAda.Get(gracePath).AssertResource(`{"id":"` + grace.ID.String() + `","displayName":"grace"}`)
+
+	// 4. List.
+	listed := apitest.DecodeCollection[identity](asAda.Get(identitiesPath), http.StatusOK).Data
+	require.Len(t, listed, 3)
+	assert.Equal(t, identity{ID: listed[0].ID, DisplayName: envelope.Visible("Administrator")}, listed[0])
+	assert.Equal(t, []identity{ada, {ID: grace.ID, DisplayName: grace.DisplayName}}, listed[1:])
+}
+
+// TestIdentities_ForbidOneField checks that a forbid on reading one field hides it, even where another
+// policy grants it:
+//
+//  1. Create ada with an API key, grace, and the group auditors with ada as a member: 201 and 204.
+//  2. Add a policy that lets auditors read everything but forbids them to read usernames: 201.
+//  3. As ada, get grace: 200 with every field but her username.
+//  4. As ada, get ada: 200 with every field but her username, though the seeded policy lets her read
+//     herself, since the forbid overrides it.
+func TestIdentities_ForbidOneField(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	grace, _ := apptest.NewIdentity(api, "grace")
+	auditors := apitest.DecodeResource[groupapi.GroupResponse](
+		api.Post("/api/v1/groups", `{"name":"auditors"}`), http.StatusCreated)
+	api.Put("/api/v1/groups/"+auditors.ID.String()+"/members/"+ada.ID.String(), "").AssertNoContent()
+
+	// 2. Add the policy.
+	addPolicy(t, api, `permit (principal in Group::"`+auditors.ID.String()+`", action in Action::"read", resource);
+		forbid (
+			principal in Group::"`+auditors.ID.String()+`",
+			action == Action::"identity:read:username",
+			resource
+		);`)
+
+	// 3. Get grace.
+	withoutUsername := grace
+	withoutUsername.Username = envelope.Field[string]{}
+	assert.Equal(t, withoutUsername,
+		apitest.DecodeResource[identity](asAda.Get(identitiesPath+"/"+grace.ID.String()), http.StatusOK))
+
+	// 4. Get ada.
+	withoutUsername = ada
+	withoutUsername.Username = envelope.Field[string]{}
+	assert.Equal(t, withoutUsername,
+		apitest.DecodeResource[identity](asAda.Get(identitiesPath+"/"+ada.ID.String()), http.StatusOK))
+}
+
+// TestIdentities_CreateUnreadable checks that creating an identity that the caller may not read reveals
+// nothing about it but its ID:
+//
+//  1. Create ada with an API key: 201.
+//  2. Add a policy that lets ada create identities, but not read them: 201.
+//  3. As ada, create carol: 201 with her ID alone, at her Location.
+//  4. As ada, get carol: 404 identity-not-found. As admin, get her: 200 with every field.
+func TestIdentities_CreateUnreadable(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create ada.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+
+	// 2. Add the policy.
+	addPolicy(t, api, `permit (
+		principal == Identity::"`+ada.ID.String()+`",
+		action in Action::"identity:create",
+		resource
+	);`)
+
+	// 3. Create carol.
+	created := asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`)
+	carol := apitest.DecodeResource[identity](created, http.StatusCreated)
+	carolPath := identitiesPath + "/" + carol.ID.String()
+	created.AssertCreated(carolPath, `{"id":"`+carol.ID.String()+`"}`)
+
+	// 4. Get carol.
+	asAda.Get(carolPath).AssertProblemType(identityNotFound)
+	got := apitest.DecodeResource[identity](api.Get(carolPath), http.StatusOK)
+	assert.Equal(t, envelope.Visible("carol"), got.Username)
+	assert.Equal(t, envelope.Visible(ada.ID), got.CreatedBy)
 }
