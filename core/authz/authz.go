@@ -2,7 +2,8 @@
 //
 // It knows no features. Each feature declares its actions with NewAction, and enforces them in its
 // service: it gets a Decider for the request's actor from an Authorizer and asks it about each resource.
-// Everything that no policy permits is denied.
+// The fields of a readable object have read actions of their own, from NewReadFieldActions, and a service
+// reveals only those that the actor may read, as a Field. Everything that no policy permits is denied.
 //
 // # Accepted risks
 //

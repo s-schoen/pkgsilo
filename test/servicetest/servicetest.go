@@ -3,10 +3,14 @@ package servicetest
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"pkgsilo/core/authz"
+	authzmocks "pkgsilo/core/authz/mocks"
 )
 
 // AssertTranslated asserts that err, returned by a service after the layer below failed with cause,
@@ -31,4 +35,16 @@ func Capture[T any](dst *T) any {
 		*dst = v
 		return true
 	})
+}
+
+// ExpectReadableFields makes the decider allow reading the fields with the given names of the resource, and
+// deny reading its other fields out of fields, the read field actions of a service. Each field is expected
+// to be checked once, as when a service builds the visible object.
+func ExpectReadableFields(
+	decider *authzmocks.MockDecider, fields authz.FieldActions, resource authz.Resource, readable ...string,
+) {
+	names := fields.Fields()
+	for i, action := range fields.Actions() {
+		decider.EXPECT().Can(action, resource).Return(slices.Contains(readable, names[i]), nil).Once()
+	}
 }

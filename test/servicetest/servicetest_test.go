@@ -4,10 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"uuid"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/authz"
+	authzmocks "pkgsilo/core/authz/mocks"
 	"pkgsilo/test/tbtest"
 )
 
@@ -73,4 +77,18 @@ func TestCapture_MatchesOnlyT(t *testing.T) {
 	_, differences := mock.Arguments{Capture(&n)}.Diff([]any{"ada"})
 
 	assert.Equal(t, 1, differences)
+}
+
+func TestExpectReadableFields(t *testing.T) {
+	t.Parallel()
+	fields := authz.NewReadFieldActions("identity", "username", "displayName")
+	resource := authz.Resource{Type: authz.IdentityType, ID: uuid.NewV4()}
+	decider := authzmocks.NewMockDecider(t)
+
+	ExpectReadableFields(decider, fields, resource, "displayName")
+
+	readable, err := fields.Readable(decider, resource)
+	require.NoError(t, err)
+	assert.Equal(t, authz.Field[string]{}, authz.Reveal(readable, "username", "ada"))
+	assert.Equal(t, authz.Visible("Ada"), authz.Reveal(readable, "displayName", "Ada"))
 }
