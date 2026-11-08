@@ -37,9 +37,6 @@ const (
 	identitiesPath = "/api/v1/identities"
 )
 
-// administratorsPath is the path of the group that the seeded administrators policy grants everything.
-const administratorsPath = groupsPath + "/7c1d3e52-8a4f-4b6e-9f21-5d0c8e7a3b14"
-
 type (
 	group    = groupapi.GroupResponse
 	member   = groupapi.MemberResponse
@@ -82,7 +79,7 @@ func memberIDs(api *apitest.Client, groupPath string) []uuid.UUID {
 //  1. Create maintainers: 201 with the new group, its Location under /api/v1/groups, and its
 //     audit fields set by the server.
 //  2. Get it through the Location: the created group.
-//  3. List the groups: administrators, which the migrations seed, then maintainers.
+//  3. List the groups: administrators, which the first start created, then maintainers.
 //  4. Replace its name: 200 with the new name, the ID and creation time kept and the update time
 //     advanced.
 //  5. Get it again: the replaced group, so the change was stored.
@@ -166,7 +163,7 @@ func TestGroups_NameTaken(t *testing.T) {
 // TestGroups_ListPages pages through the groups, which are listed in creation order:
 //
 //  1. Create maintainers, reviewers and releasers, in that order: 201 for each.
-//  2. List the first page of 2: administrators, which the migrations seed before them, then maintainers,
+//  2. List the first page of 2: administrators, which the first start created before them, then maintainers,
 //     and a nextOffset of 2.
 //  3. List from offset 2: reviewers and releasers, on the last page, without a nextOffset.
 func TestGroups_ListPages(t *testing.T) {
@@ -615,6 +612,7 @@ func TestGroups_RemoveLastAdministrator(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
 	admin := adminID(api)
+	administratorsPath := groupsPath + "/" + apptest.AdministratorsGroup(t, api).String()
 
 	// 1. List the members.
 	assert.Equal(t, []uuid.UUID{admin}, memberIDs(api, administratorsPath))

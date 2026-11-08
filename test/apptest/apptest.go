@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"testing"
+	"uuid"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ import (
 	"pkgsilo/core/logger"
 	"pkgsilo/core/router"
 	apikeyapi "pkgsilo/feature/apikey/api"
+	groupapi "pkgsilo/feature/group/api"
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/test/apitest"
 	"pkgsilo/test/databasetest"
@@ -83,4 +85,21 @@ func NewIdentity(admin *apitest.Client, username string) (identityapi.IdentityRe
 		admin.Post(identitiesPath+"/"+created.ID.String()+"/api-keys", `{"name":"test"}`), http.StatusCreated)
 
 	return created, admin.WithHeader(apiKeyHeader, key.Key)
+}
+
+// AdministratorsGroup returns the ID of the group administrators, which the first start created with admin
+// as its member and a policy that grants it everything. It finds the group by its name through the client
+// admin.
+func AdministratorsGroup(t *testing.T, admin *apitest.Client) uuid.UUID {
+	t.Helper()
+
+	groups := apitest.DecodeCollection[groupapi.GroupResponse](admin.Get("/api/v1/groups"), http.StatusOK).Data
+	for _, group := range groups {
+		if group.Name.Value == "administrators" {
+			return group.ID
+		}
+	}
+	require.FailNow(t, "no group named administrators on the first page")
+
+	return uuid.Nil()
 }

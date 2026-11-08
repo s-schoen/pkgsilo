@@ -41,9 +41,6 @@ const (
 	groupsPath     = "/api/v1/groups"
 )
 
-// administratorsGroup is the ID of the group that the seeded administrators policy grants everything.
-const administratorsGroup = "7c1d3e52-8a4f-4b6e-9f21-5d0c8e7a3b14"
-
 type (
 	policy   = policyapi.PolicyResponse
 	identity = identityapi.IdentityResponse
@@ -82,6 +79,20 @@ func listPolicies(api *apitest.Client) []policy {
 	return apitest.DecodeCollection[policy](api.Get(policiesPath), http.StatusOK).Data
 }
 
+// policyNamed returns the policy with the given name, out of those that api lists.
+func policyNamed(t *testing.T, api *apitest.Client, name string) policy {
+	t.Helper()
+
+	for _, p := range listPolicies(api) {
+		if p.Name.Value == name {
+			return p
+		}
+	}
+	require.FailNow(t, "no policy named "+name)
+
+	return policy{}
+}
+
 // assertInvalidPolicy asserts an invalid-policy problem whose detail contains reason.
 func assertInvalidPolicy(t *testing.T, resp *apitest.Response, reason string) {
 	t.Helper()
@@ -116,8 +127,8 @@ func assertFieldsDenied(t *testing.T, resp *apitest.Response, pointers ...string
 //  1. Create a policy: 201 with the new policy, its Location under /api/v1/policies, and its audit
 //     fields set by the server.
 //  2. Get it through the Location: the created policy.
-//  3. List the policies: the seeded administrators, read-own-identity and manage-own-api-keys policies, then
-//     the new one.
+//  3. List the policies: read-own-identity and manage-own-api-keys, which the migrations seed, administrators,
+//     which the first start created, then the new one.
 //  4. Replace its name and source: 200 with the new values, the ID and creation time kept and the
 //     update time advanced.
 //  5. Get it again: the replaced policy, so the change was stored.
@@ -145,9 +156,9 @@ func TestPolicies_Lifecycle(t *testing.T) {
 	// 3. List.
 	listed := listPolicies(api)
 	require.Len(t, listed, 4)
-	assert.Equal(t, envelope.Visible("administrators"), listed[0].Name)
-	assert.Equal(t, envelope.Visible("read-own-identity"), listed[1].Name)
-	assert.Equal(t, envelope.Visible("manage-own-api-keys"), listed[2].Name)
+	assert.Equal(t, envelope.Visible("read-own-identity"), listed[0].Name)
+	assert.Equal(t, envelope.Visible("manage-own-api-keys"), listed[1].Name)
+	assert.Equal(t, envelope.Visible("administrators"), listed[2].Name)
 	assert.Equal(t, readIdentities, listed[3])
 
 	// 4. Replace.
@@ -187,7 +198,7 @@ func TestPolicies_NameTaken(t *testing.T) {
 
 	// 2. Create and rename.
 	api.Post(policiesPath, policyBody(t, "one", source)).AssertProblemType(policyNameTaken)
-	readOwn := listPolicies(api)[1]
+	readOwn := policyNamed(t, api, "read-own-identity")
 	api.Put(policiesPath+"/"+readOwn.ID.String(), policyBody(t, "one", readOwn.Source.Value)).
 		AssertProblemType(policyNameTaken)
 }
@@ -302,8 +313,8 @@ func statements(n int) string {
 
 // TestPolicies_StatementLimit checks that all policies together hold no more than 1,000 statements:
 //
-//  1. Create two policies of 360 statements each, and one of 277: 201 for each, since the seeded policies
-//     hold three, which makes 1,000.
+//  1. Create two policies of 360 statements each, and one of 277: 201 for each, since the policies of a
+//     new database hold three, which makes 1,000.
 //  2. Create a policy of one statement: 422 invalid-policy.
 //  3. Replace the policy of 277 statements with 278: 422 invalid-policy. Replace it with itself: 200, since
 //     its own statements are counted once.
@@ -332,9 +343,10 @@ func TestPolicies_StatementLimit(t *testing.T) {
 	addPolicy(t, api, "one", statements(1))
 }
 
-// TestPolicies_SeededPassChecks checks that the seeded policies pass the checks of a saved policy:
+// TestPolicies_SeededPassChecks checks that the policies of a new database pass the checks of a saved policy:
 //
-//  1. List the policies: the seeded administrators, read-own-identity and manage-own-api-keys policies.
+//  1. List the policies: read-own-identity and manage-own-api-keys, which the migrations seed, and
+//     administrators, which the first start created.
 //  2. Replace each with itself: 200.
 func TestPolicies_SeededPassChecks(t *testing.T) {
 	t.Parallel()
@@ -362,7 +374,7 @@ func TestPolicies_SeededPassChecks(t *testing.T) {
 func TestPolicies_ProtectedByPolicies(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
-	administrators := listPolicies(api)[0]
+	administrators := policyNamed(t, api, "administrators")
 	administratorsPath := policiesPath + "/" + administrators.ID.String()
 	missingPath := policiesPath + "/" + uuid.NewV4().String()
 
@@ -465,7 +477,7 @@ func TestPolicies_IdentitiesButNotOtherTypes(t *testing.T) {
 
 	// 4. Policies.
 	assert.Empty(t, listPolicies(asAda))
-	asAda.Get(policiesPath + "/" + listPolicies(api)[0].ID.String()).AssertProblemType(policyNotFound)
+	asAda.Get(policiesPath + "/" + policyNamed(t, api, "administrators").ID.String()).AssertProblemType(policyNotFound)
 	assertFieldsDenied(t, asAda.Post(policiesPath, policyBody(t, "ada", `permit (principal, action, resource);`)),
 		"#/name", "#/source")
 }
@@ -611,9 +623,9 @@ func TestPolicies_DeleteAdministrators(t *testing.T) {
 	api := apptest.New(t)
 
 	// 1. Get.
-	administrators := listPolicies(api)[0]
-	assert.Equal(t, envelope.Visible("administrators"), administrators.Name)
-	assert.Contains(t, administrators.Source.Value, `Group::"`+administratorsGroup+`"`)
+	administrators := policyNamed(t, api, "administrators")
+	assert.Equal(t, `permit (principal in Group::"`+apptest.AdministratorsGroup(t, api).String()+`", action, resource);`,
+		administrators.Source.Value)
 
 	// 2. Delete.
 	api.Delete(policiesPath + "/" + administrators.ID.String()).AssertNoContent()

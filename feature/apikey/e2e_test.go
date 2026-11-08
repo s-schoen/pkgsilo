@@ -35,10 +35,6 @@ const identitiesPath = "/api/v1/identities"
 
 const groupsPath = "/api/v1/groups"
 
-// administratorsPath is the path of the administrators group that the migrations seed, whose members the
-// seeded policy allows everything.
-const administratorsPath = groupsPath + "/7c1d3e52-8a4f-4b6e-9f21-5d0c8e7a3b14"
-
 type (
 	apiKey        = apikeyapi.KeyResponse
 	createdAPIKey = apikeyapi.CreatedKeyResponse
@@ -614,7 +610,8 @@ func TestAuthentication_KeyActsAsItsIdentity(t *testing.T) {
 
 	// 1. Create ada and her key.
 	ada, adaKeysPath := createIdentity(api, "ada")
-	api.Put(administratorsPath+"/members/"+ada.ID.String(), "").AssertNoContent()
+	api.Put(groupsPath+"/"+apptest.AdministratorsGroup(t, api).String()+"/members/"+ada.ID.String(), "").
+		AssertNoContent()
 	key := createKey(api, adaKeysPath, "ci")
 	assert.Equal(t, envelope.Visible[*time.Time](nil), key.LastUsedAt)
 	asAda := api.WithHeader("X-API-Key", key.Key)
