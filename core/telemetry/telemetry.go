@@ -78,6 +78,8 @@ func New(ctx context.Context, opts Options) (*Telemetry, error) {
 		sdkmetric.WithResource(res), sdkmetric.WithReader(exporter), sdkmetric.WithView(Views()...))
 
 	if err := runtime.Start(runtime.WithMeterProvider(provider)); err != nil {
+		// The error of the start is the one that matters, and the provider has recorded nothing yet.
+		_ = provider.Shutdown(context.WithoutCancel(ctx))
 		return nil, fmt.Errorf("start runtime metrics: %w", err)
 	}
 
