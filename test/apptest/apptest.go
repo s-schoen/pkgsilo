@@ -14,6 +14,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"pkgsilo/app"
 	"pkgsilo/core/logger"
@@ -33,14 +35,14 @@ const (
 	apiKeyHeader = "X-API-Key" //nolint:gosec // The name of a header, not a credential.
 )
 
-// New returns a client for the application, wired as cmd/main.go serves it, on a new database with
-// all migrations applied and the first start done. The client authenticates as its identity admin:
-// use its Anonymous method for requests without a credential. The application logs to the test's
-// output, which is shown for failed tests and with -v. New skips the test in short mode.
+// New returns a client for the application, wired as cmd/main.go serves it with metrics disabled, on a
+// new database with all migrations applied and the first start done. The client authenticates as its
+// identity admin: use its Anonymous method for requests without a credential. The application logs to
+// the test's output, which is shown for failed tests and with -v. New skips the test in short mode.
 func New(t *testing.T) *apitest.Client {
 	t.Helper()
 
-	api, _, _ := newApp(t)
+	api, _ := NewWithDB(t)
 
 	return api
 }
@@ -49,46 +51,42 @@ func New(t *testing.T) *apitest.Client {
 func NewWithDB(t *testing.T) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
-	api, _, db := newApp(t)
-
-	return api, db
+	return newApp(t, noop.NewMeterProvider())
 }
 
-// NewWithMetrics is like New and also returns a client for the application's metrics listener, which
-// serves the metrics that the application records, at telemetry.MetricsPath.
+// NewWithMetrics is like New, but with metrics enabled, and also returns a client for the application's
+// metrics listener, which serves the metrics that the application records, at telemetry.MetricsPath.
 func NewWithMetrics(t *testing.T) (api, metrics *apitest.Client) {
 	t.Helper()
 
-	api, metrics, _ = newApp(t)
+	tel := newTelemetry(t)
+	api, _ = newApp(t, tel.MeterProvider())
 
-	return api, metrics
+	return api, apitest.NewClient(t, tel.Handler())
 }
 
 // NewInstance returns a client for another instance of the application on db, which NewWithDB returned
 // together with api. The client authenticates like api. The instances share nothing but the database, like
-// the instances of a deployment. Unlike in a deployment, they also share db's connection pool, whose
-// metrics only the first instance records.
+// the instances of a deployment. Unlike in a deployment, they also share db's connection pool. The new
+// instance records no metrics.
 func NewInstance(t *testing.T, api *apitest.Client, db *sqlx.DB) *apitest.Client {
 	t.Helper()
 
-	return api.WithHandler(newHandler(t, db, newTelemetry(t)))
+	return api.WithHandler(newHandler(t, db, noop.NewMeterProvider()))
 }
 
-// newApp returns clients for the API and the metrics listener of the application on a new database with
-// all migrations applied and the first start done, and that database. The API client authenticates as admin.
-// As in cmd/main.go, the application and its database record their metrics with the same provider.
-func newApp(t *testing.T) (api, metrics *apitest.Client, db *sqlx.DB) {
+// newApp returns a client for the application on a new database with all migrations applied and the
+// first start done, and that database. The client authenticates as admin. As in cmd/main.go, the
+// application and its database record their metrics with the same provider.
+func newApp(t *testing.T, meterProvider metric.MeterProvider) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
-	tel := newTelemetry(t)
-	db = databasetest.NewWithMeterProvider(t, tel.MeterProvider())
+	db := databasetest.NewWithMeterProvider(t, meterProvider)
 
 	key, err := app.Bootstrap(t.Context(), db, []byte(apiKeyPepper))
 	require.NoError(t, err)
 
-	h := newHandler(t, db, tel)
-
-	return apitest.NewClient(t, h).WithHeader(apiKeyHeader, key), apitest.NewClient(t, tel.Handler()), db
+	return apitest.NewClient(t, newHandler(t, db, meterProvider)).WithHeader(apiKeyHeader, key), db
 }
 
 // newTelemetry returns the enabled telemetry of an application instance, which is shut down at the end of
@@ -107,12 +105,12 @@ func newTelemetry(t *testing.T) *telemetry.Telemetry {
 }
 
 // newHandler returns the application, wired as cmd/main.go serves it, on db, recording its metrics with
-// tel. It logs to the test's output.
-func newHandler(t *testing.T, db *sqlx.DB, tel *telemetry.Telemetry) http.Handler {
+// meterProvider. It logs to the test's output.
+func newHandler(t *testing.T, db *sqlx.DB, meterProvider metric.MeterProvider) http.Handler {
 	t.Helper()
 
 	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper),
-		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), tel.MeterProvider())
+		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), meterProvider)
 }
 
 // NewIdentity creates an identity with the given username and an API key of its own through the client
