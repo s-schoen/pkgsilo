@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 	"unicode"
@@ -43,16 +44,16 @@ var (
 		CreatedBy:  uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
 		CreatedAt:  now.Add(-time.Hour),
 	}
-	// storedKey is stored, translated to the domain model.
+	// storedKey is stored, translated to the domain model, with every field visible.
 	storedKey = APIKey{
 		ID:         stored.ID,
-		IdentityID: identityID,
-		Name:       "ci",
-		KeySuffix:  "WXYZ",
-		ExpiresAt:  &expiresAt,
-		LastUsedAt: &lastUsedAt,
-		CreatedBy:  stored.CreatedBy,
-		CreatedAt:  stored.CreatedAt,
+		IdentityID: authz.Visible(identityID),
+		Name:       authz.Visible("ci"),
+		KeySuffix:  authz.Visible("WXYZ"),
+		ExpiresAt:  authz.Visible(&expiresAt),
+		LastUsedAt: authz.Visible(&lastUsedAt),
+		CreatedBy:  authz.Visible(stored.CreatedBy),
+		CreatedAt:  authz.Visible(stored.CreatedAt),
 	}
 
 	// identityGroups are the groups that the identity of the API keys is a member of.
@@ -114,6 +115,18 @@ func expectReadable(repo *mocks.MockAPIKeyRepository, decider *authzmocks.MockDe
 	expectOwnerReadable(repo, decider)
 	repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(stored, nil)
 	decider.EXPECT().Can(actionRead, storedResource).Return(true, nil)
+}
+
+// expectAllFieldsReadable makes the decider allow reading every field of the resource, once each.
+func expectAllFieldsReadable(decider *authzmocks.MockDecider, resource authz.Resource) {
+	servicetest.ExpectReadableFields(decider, readFields, resource, readFields.Fields()...)
+}
+
+// isReadField reports whether the action is one of reading a field of an API key.
+func isReadField(action authz.Action) bool {
+	return slices.ContainsFunc(readFields.Actions(), func(a authz.Action) bool {
+		return assert.ObjectsAreEqual(a, action)
+	})
 }
 
 // newRecords returns stored records with the given IDs' last bytes, in order.
@@ -243,7 +256,14 @@ func TestAPIKeyService_Create_ChecksFields(t *testing.T) {
 			expectOwnerReadable(repo, decider)
 			checked, resources := expectFieldChecks(decider, tt.allowed)
 			var inserted repository.APIKeyRecord
+			var readResources []authz.Resource
 			if tt.wantDenied == nil {
+				decider.EXPECT().Can(mock.Anything, mock.Anything).RunAndReturn(
+					func(_ authz.Action, resource authz.Resource) (bool, error) {
+						readResources = append(readResources, resource)
+						return true, nil
+					},
+				)
 				repo.EXPECT().Insert(mock.Anything, servicetest.Capture(&inserted)).Return(stored, nil)
 			}
 
@@ -252,7 +272,7 @@ func TestAPIKeyService_Create_ChecksFields(t *testing.T) {
 			assert.Equal(t, tt.wantChecked, *checked)
 			if tt.wantDenied == nil {
 				require.NoError(t, err)
-				for _, resource := range *resources {
+				for _, resource := range append(*resources, readResources...) {
 					assert.Equal(t, authz.Resource{Type: "APIKey", ID: inserted.ID, Owner: owner}, resource,
 						"the check must be on the API key to be created, with its owner")
 				}
@@ -282,6 +302,68 @@ func TestAPIKeyService_FieldActions(t *testing.T) {
 		"an input that sets every field must check every field")
 }
 
+// TestAPIKeyService_Create_ReadableFields checks that the new API key is returned with the fields that the
+// actor may read, and with only its ID if it may not read the API key, but always with its key, which can't
+// be retrieved later.
+func TestAPIKeyService_Create_ReadableFields(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		canRead  bool
+		readable []string
+		want     APIKey
+	}{
+		{name: "all", canRead: true, readable: readFields.Fields(), want: storedKey},
+		{
+			name: "some", canRead: true, readable: []string{"name", "expiresAt"},
+			want: APIKey{ID: stored.ID, Name: authz.Visible("ci"), ExpiresAt: authz.Visible(&expiresAt)},
+		},
+		{name: "unreadable api key", canRead: false, want: APIKey{ID: stored.ID}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			svc, repo := newTestServiceWith(t, authorizer)
+			expectOwnerReadable(repo, decider)
+			// The service generates the ID, so the checks match any resource. That they're on the new API
+			// key is checked by TestAPIKeyService_Create_ChecksFields.
+			expectFieldChecks(decider, []string{"name"})
+			decider.EXPECT().Can(actionRead, mock.Anything).Return(tt.canRead, nil).Once()
+			if tt.canRead {
+				for i, action := range readFields.Actions() {
+					decider.EXPECT().Can(action, mock.Anything).
+						Return(slices.Contains(tt.readable, readFields.Fields()[i]), nil).Once()
+				}
+			}
+			repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(stored, nil)
+
+			got, err := svc.Create(t.Context(), actor, identityID, APIKeyInput{Name: "ci"})
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, got.APIKey)
+			assert.Regexp(t, `^psk_[A-Z2-7]{52}$`, got.Key)
+		})
+	}
+}
+
+// TestAPIKeyService_ReadFieldActions checks that every field of APIKey but the ID has an action for reading
+// it, named like its member in responses, so that no field is revealed unchecked or hidden from everyone.
+func TestAPIKeyService_ReadFieldActions(t *testing.T) {
+	t.Parallel()
+	var fields []string
+	for field := range reflect.TypeFor[APIKey]().Fields() {
+		if field.Name == "ID" {
+			continue
+		}
+		name := []rune(strings.Replace(field.Name, "ID", "Id", 1))
+		name[0] = unicode.ToLower(name[0])
+		fields = append(fields, string(name))
+	}
+
+	assert.ElementsMatch(t, fields, ReadableFields())
+}
+
 func TestAPIKeyService_Declaration(t *testing.T) {
 	t.Parallel()
 
@@ -296,11 +378,46 @@ func TestAPIKeyService_Get(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
+	expectAllFieldsReadable(decider, storedResource)
 
 	got, err := svc.Get(t.Context(), actor, identityID, stored.ID)
 	require.NoError(t, err)
 
 	assert.Equal(t, storedKey, got)
+}
+
+// TestAPIKeyService_Get_HiddenFields checks that only the fields that the actor may read are visible, and
+// the ID always: a hidden expiry differs from one that's visible and nil.
+func TestAPIKeyService_Get_HiddenFields(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	servicetest.ExpectReadableFields(decider, readFields, storedResource, "name", "keySuffix")
+
+	got, err := svc.Get(t.Context(), actor, identityID, stored.ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, APIKey{ID: stored.ID, Name: authz.Visible("ci"), KeySuffix: authz.Visible("WXYZ")}, got)
+}
+
+// TestAPIKeyService_Get_NeverExpires checks that a visible expiry of an API key that never expires is nil,
+// unlike a hidden one.
+func TestAPIKeyService_Get_NeverExpires(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectOwnerReadable(repo, decider)
+	rec := stored
+	rec.ExpiresAt = nil
+	repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(rec, nil)
+	decider.EXPECT().Can(actionRead, storedResource).Return(true, nil)
+	servicetest.ExpectReadableFields(decider, readFields, storedResource, "expiresAt")
+
+	got, err := svc.Get(t.Context(), actor, identityID, stored.ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, APIKey{ID: stored.ID, ExpiresAt: authz.Visible[*time.Time](nil)}, got)
 }
 
 // TestAPIKeyService_List_Pages cuts the pages out of what the actor may read, with hidden API keys between
@@ -333,14 +450,26 @@ func TestAPIKeyService_List_Pages(t *testing.T) {
 					assert.Equal(t, owner, resource.Owner)
 					return resource.ID[15]%2 == 0, nil
 				},
-			)
+			).Times(9)
+			fieldChecks := map[byte]int{}
+			decider.EXPECT().Can(mock.MatchedBy(isReadField), mock.Anything).RunAndReturn(
+				func(_ authz.Action, resource authz.Resource) (bool, error) {
+					assert.Equal(t, owner, resource.Owner)
+					fieldChecks[resource.ID[15]]++
+					return true, nil
+				},
+			).Maybe()
 
 			got, err := svc.List(t.Context(), actor, identityID, tt.offset, tt.limit)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.wantIDs, idsOf(got.Items))
 			assert.Equal(t, tt.wantHasMore, got.HasMore)
-			decider.AssertNumberOfCalls(t, "Can", 1+9)
+			wantFieldChecks := map[byte]int{}
+			for _, id := range tt.wantIDs {
+				wantFieldChecks[id] = len(readFields.Fields())
+			}
+			assert.Equal(t, wantFieldChecks, fieldChecks, "the fields of the rows on the page must be checked, and only those")
 		})
 	}
 }
@@ -650,6 +779,25 @@ func TestAPIKeyService_AuthorizationFails(t *testing.T) {
 		})
 	}
 
+	// The field read decisions, after every other decision allowed the request. They come before any write,
+	// so that a failed one can't fail a request whose write succeeded.
+	all := calls(t)
+	for _, name := range []string{"create", "get", "list"} {
+		t.Run(name+" no field decision", func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			// The mock fails the test if the repository writes anything.
+			svc, repo := newTestServiceWith(t, authorizer)
+			expectOwner(repo)
+			repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(stored, nil).Maybe()
+			repo.EXPECT().ListAll(mock.Anything, identityID).Return([]repository.APIKeyRecord{stored}, nil).Maybe()
+			decider.EXPECT().Can(mock.MatchedBy(isReadField), mock.Anything).Return(false, errDecision)
+			decider.EXPECT().Can(mock.Anything, mock.Anything).Return(true, nil).Maybe()
+
+			assertFailed(t, all[name](svc))
+		})
+	}
+
 	t.Run("delete no action decision", func(t *testing.T) {
 		t.Parallel()
 		authorizer, decider := newDeciding(t)
@@ -701,16 +849,15 @@ func TestAPIKeyService_Authenticate(t *testing.T) {
 			rec := stored
 			rec.ExpiresAt, rec.LastUsedAt = tt.expiresAt, tt.lastUsedAt
 			repo.EXPECT().GetByHash(mock.Anything, svc.hash(presentedKey)).Return(rec, nil)
-			want := toAPIKey(rec)
 			if tt.wantUpdate {
+				// The mock fails the test on an update that isn't expected.
 				repo.EXPECT().UpdateLastUsed(mock.Anything, stored.ID, now).Return(nil)
-				want.LastUsedAt = &now
 			}
 
 			got, err := svc.Authenticate(t.Context(), presentedKey)
 			require.NoError(t, err)
 
-			assert.Equal(t, want, got)
+			assert.Equal(t, AuthenticatedKey{ID: stored.ID, IdentityID: identityID}, got)
 		})
 	}
 }

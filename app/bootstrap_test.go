@@ -3,6 +3,7 @@ package app
 import (
 	"sync"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/jmoiron/sqlx"
@@ -54,18 +55,20 @@ func TestBootstrap_FirstStart(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Items, 1)
 	admin := page.Items[0]
-	assert.Equal(t, "admin", admin.Username)
-	assert.Equal(t, "Administrator", admin.DisplayName)
-	assert.Equal(t, audit.SystemActor(), admin.CreatedBy)
+	assert.Equal(t, authz.Visible("admin"), admin.Username)
+	assert.Equal(t, authz.Visible("Administrator"), admin.DisplayName)
+	assert.Equal(t, authz.Visible(audit.SystemActor()), admin.CreatedBy)
 	assert.Equal(t, []uuid.UUID{admin.ID}, groupMembers(t, db, administratorsGroupID))
 
 	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authz.AllowAll(), testPepper)
-	apiKey, err := apiKeys.Authenticate(t.Context(), key)
+	authenticated, err := apiKeys.Authenticate(t.Context(), key)
 	require.NoError(t, err, "the returned key must authenticate")
-	assert.Equal(t, admin.ID, apiKey.IdentityID)
-	assert.Equal(t, "bootstrap", apiKey.Name)
-	assert.Nil(t, apiKey.ExpiresAt, "the first key must never expire")
-	assert.Equal(t, audit.SystemActor(), apiKey.CreatedBy)
+	assert.Equal(t, admin.ID, authenticated.IdentityID)
+	apiKey, err := apiKeys.Get(t.Context(), audit.SystemActor(), admin.ID, authenticated.ID)
+	require.NoError(t, err)
+	assert.Equal(t, authz.Visible("bootstrap"), apiKey.Name)
+	assert.Equal(t, authz.Visible[*time.Time](nil), apiKey.ExpiresAt, "the first key must never expire")
+	assert.Equal(t, authz.Visible(audit.SystemActor()), apiKey.CreatedBy)
 }
 
 func TestBootstrap_AlreadyBootstrapped(t *testing.T) {
