@@ -5,9 +5,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
+
+	"go.opentelemetry.io/otel"
+	"golang.org/x/sync/errgroup"
 
 	"pkgsilo/app"
 	"pkgsilo/core/config"
@@ -15,7 +20,11 @@ import (
 	"pkgsilo/core/logger"
 	"pkgsilo/core/router"
 	"pkgsilo/core/server"
+	"pkgsilo/core/telemetry"
 )
+
+// telemetryShutdownTimeout bounds the shutdown of the telemetry once the servers have stopped.
+const telemetryShutdownTimeout = 5 * time.Second
 
 // version is set at build time with -ldflags "-X main.version=...".
 var version = "dev"
@@ -45,6 +54,13 @@ func run() error {
 
 	log.Info("starting pkgsilo", "version", version)
 
+	tel, err := telemetry.New(ctx, telemetry.Options{Enabled: cfg.MetricsEnabled(), ServiceVersion: version})
+	if err != nil {
+		return fmt.Errorf("set up telemetry: %w", err)
+	}
+	// Only for third-party code recording metrics: our own code uses the injected provider.
+	otel.SetMeterProvider(tel.MeterProvider())
+
 	db, err := database.Open(ctx, database.Options{URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns})
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -66,11 +82,39 @@ func run() error {
 			"api_key", apiKey)
 	}
 
-	h := app.NewHandler(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, db, cfg.APIKeyPepper, log)
+	h := app.NewHandler(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, db, cfg.APIKeyPepper, log,
+		tel.MeterProvider())
 
-	if err := server.Run(ctx, server.Options{Addr: cfg.HTTPAddr}, log, h); err != nil {
-		return fmt.Errorf("run server: %w", err)
+	return serve(ctx, cfg, log, h, tel)
+}
+
+// serve serves the API handler h and, if enabled, the metrics of tel, each on its own listener, until
+// ctx is canceled or one of them fails, which stops the other. Then it shuts tel down.
+func serve(ctx context.Context, cfg config.Config, log *slog.Logger, h http.Handler, tel *telemetry.Telemetry) error {
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		if err := server.Run(gctx, server.Options{Addr: cfg.HTTPAddr}, log.With("server", "api"), h); err != nil {
+			return fmt.Errorf("run api server: %w", err)
+		}
+		return nil
+	})
+	if cfg.MetricsEnabled() {
+		g.Go(func() error {
+			err := server.Run(gctx, server.Options{Addr: cfg.MetricsAddr}, log.With("server", "metrics"), tel.Handler())
+			if err != nil {
+				return fmt.Errorf("run metrics server: %w", err)
+			}
+			return nil
+		})
+	}
+	err := g.Wait()
+
+	// Both servers have stopped, so nothing records anymore. ctx may be canceled already.
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), telemetryShutdownTimeout)
+	defer cancel()
+	if shutdownErr := tel.Shutdown(shutdownCtx); shutdownErr != nil {
+		log.ErrorContext(shutdownCtx, "shut down telemetry", "error", shutdownErr)
 	}
 
-	return nil
+	return err //nolint:wrapcheck // Wrapped by the goroutines above.
 }

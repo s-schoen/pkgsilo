@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"os"
 	"slices"
 	"strings"
 
@@ -14,9 +15,12 @@ import (
 // Config holds the application configuration, loaded from environment variables.
 type Config struct {
 	// Env selects the runtime environment. "dev" enables human-friendly, colored logs.
-	Env      string     `env:"ENV"       envDefault:"prod"`
-	HTTPAddr string     `env:"HTTP_ADDR" envDefault:":8080"`
-	LogLevel slog.Level `env:"LOG_LEVEL" envDefault:"info"`
+	Env      string `env:"ENV"       envDefault:"prod"`
+	HTTPAddr string `env:"HTTP_ADDR" envDefault:":8080"`
+	// MetricsAddr is the address of the listener that serves the metrics, defaultMetricsAddr if
+	// METRICS_ADDR is unset. Empty turns metrics off.
+	MetricsAddr string     `env:"METRICS_ADDR"`
+	LogLevel    slog.Level `env:"LOG_LEVEL"    envDefault:"info"`
 	// TrustedProxies are the reverse proxies (IPs or CIDRs, comma-separated) whose
 	// X-Forwarded-For header is used to determine the client IP. Empty: the header is ignored.
 	TrustedProxies Prefixes `env:"TRUSTED_PROXIES"`
@@ -28,9 +32,27 @@ type Config struct {
 	APIKeyPepper Pepper `env:"API_KEY_PEPPER,notEmpty"`
 }
 
+// defaultMetricsAddr is the address of the metrics listener if METRICS_ADDR is unset.
+const defaultMetricsAddr = ":9090"
+
 // Load parses the configuration from the process environment.
 func Load() (Config, error) {
-	return env.ParseAs[Config]()
+	cfg, err := env.ParseAs[Config]()
+	if err != nil {
+		return Config{}, err
+	}
+
+	// Not an envDefault, which env also applies to an empty value, the one that turns metrics off.
+	if _, set := os.LookupEnv("METRICS_ADDR"); !set {
+		cfg.MetricsAddr = defaultMetricsAddr
+	}
+
+	return cfg, nil
+}
+
+// MetricsEnabled reports whether the application serves metrics.
+func (c Config) MetricsEnabled() bool {
+	return c.MetricsAddr != ""
 }
 
 // IsDev reports whether the application runs in the development environment.
