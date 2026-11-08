@@ -560,7 +560,8 @@ func TestGroups_MembersReadOwnGroup(t *testing.T) {
 //  4. As ada, add ada, whom the seeded policies let her read: 204.
 //  5. Add a policy that lets ada read the members of visible: 201. As ada, add grace: 204, and maintainers
 //     has ada and grace as members.
-//  6. As ada, remove grace: 403 Forbidden, since no policy lets her remove members.
+//  6. As ada, remove grace, and an ID that isn't a UUID: 403 Forbidden for both, since no policy lets her
+//     remove members.
 func TestGroups_AddHiddenIdentity(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
@@ -599,6 +600,48 @@ func TestGroups_AddHiddenIdentity(t *testing.T) {
 
 	// 6. Remove grace.
 	asAda.Delete(maintainersPath + "/members/" + grace.String()).AssertProblemType(forbidden)
+	asAda.Delete(maintainersPath + "/members/not-a-uuid").AssertProblemType(forbidden)
+}
+
+// TestGroups_RemoveHiddenMember checks that removing a member can't reveal whether an identity that the caller
+// can't read exists, or is a member:
+//
+//  1. Create ada with an API key, grace, and maintainers with grace as a member: 201 and 204.
+//  2. Add a policy that lets ada read maintainers and remove its members, but not read them: 201.
+//  3. As ada, remove grace from maintainers: the same 404 member-not-found, to the byte, as for an identity
+//     that doesn't exist. As admin, maintainers still has grace as a member.
+//  4. Add a policy that lets ada read grace: 201. As ada, remove grace: 204, and maintainers has no members.
+func TestGroups_RemoveHiddenMember(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	grace := createIdentity(api, "grace")
+	maintainers, maintainersPath := createGroup(api, "maintainers")
+	addMembers(api, maintainersPath, grace)
+
+	// 2. Add the policy.
+	addPolicy(t, api, `permit (
+		principal == Identity::"`+ada.ID.String()+`",
+		action in [Action::"group:read", Action::"group:removeMember"],
+		resource == Group::"`+maintainers.ID.String()+`"
+	);`)
+
+	// 3. Remove grace.
+	assertLikeMissing(t, asAda.Delete,
+		maintainersPath+"/members/"+grace.String(), maintainersPath+"/members/"+uuid.NewV4().String(),
+		memberNotFound)
+	assert.Equal(t, []uuid.UUID{grace}, memberIDs(api, maintainersPath))
+
+	// 4. Remove grace, readable.
+	addPolicy(t, api, `permit (
+		principal == Identity::"`+ada.ID.String()+`",
+		action == Action::"identity:read",
+		resource == Identity::"`+grace.String()+`"
+	);`)
+	asAda.Delete(maintainersPath + "/members/" + grace.String()).AssertNoContent()
+	assert.Empty(t, memberIDs(api, maintainersPath))
 }
 
 // TestGroups_RemoveLastAdministrator checks that the last member of the administrators group can be

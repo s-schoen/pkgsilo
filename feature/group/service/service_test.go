@@ -583,9 +583,30 @@ func TestGroupService_RemoveMember(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectAllowed(repo, decider, actionRemoveMember)
+	repo.EXPECT().ListIdentityGroups(mock.Anything, identity).Return([]uuid.UUID{identityGroup}, nil)
+	// The identity carries its groups, so that a policy on them applies.
+	decider.EXPECT().Can(readIdentity, identityResource).Return(true, nil)
 	repo.EXPECT().DeleteMember(mock.Anything, stored.ID, identity).Return(nil)
 
 	assert.NoError(t, svc.RemoveMember(t.Context(), actor, stored.ID, identity))
+}
+
+// TestGroupService_RemoveMember_HiddenIdentity checks that removing an identity that the actor may not read
+// is reported like removing one that isn't a member, as a missing identity is, without writing anything, so
+// that it can't reveal whether the identity exists or is a member.
+func TestGroupService_RemoveMember_HiddenIdentity(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The mock fails the test if the repository writes anything.
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectAllowed(repo, decider, actionRemoveMember)
+	repo.EXPECT().ListIdentityGroups(mock.Anything, identity).Return([]uuid.UUID{identityGroup}, nil)
+	decider.EXPECT().Can(readIdentity, identityResource).Return(false, nil)
+
+	err := svc.RemoveMember(t.Context(), actor, stored.ID, identity)
+
+	require.ErrorIs(t, err, ErrMemberNotFound)
+	assert.NotErrorIs(t, err, authz.ErrDenied)
 }
 
 // calls returns a call of each method on stored that checks reading it first, by name.
@@ -760,8 +781,16 @@ func TestGroupService_TranslatesRepositoryErrors(t *testing.T) {
 		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.GroupRecord{}, repoErr)
 		return svc.RemoveMember(ctx, actor, stored.ID, identity)
 	}
+	removeMemberGroups := func(
+		ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error,
+	) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+		repo.EXPECT().ListIdentityGroups(mock.Anything, identity).Return(nil, repoErr)
+		return svc.RemoveMember(ctx, actor, stored.ID, identity)
+	}
 	removeMember := func(ctx context.Context, svc *groupService, repo *mocks.MockGroupRepository, repoErr error) error {
 		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+		repo.EXPECT().ListIdentityGroups(mock.Anything, identity).Return(nil, nil)
 		repo.EXPECT().DeleteMember(mock.Anything, stored.ID, identity).Return(repoErr)
 		return svc.RemoveMember(ctx, actor, stored.ID, identity)
 	}
@@ -815,6 +844,7 @@ func TestGroupService_TranslatesRepositoryErrors(t *testing.T) {
 			repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound,
 		},
 		{name: "remove member get unexpected", call: removeMemberGet, repoErr: errDB, wantErr: errDB},
+		{name: "remove member identity groups unexpected", call: removeMemberGroups, repoErr: errDB, wantErr: errDB},
 		{
 			name: "remove member not found", call: removeMember,
 			repoErr: repository.ErrMemberNotFound, wantErr: ErrMemberNotFound,
@@ -853,6 +883,7 @@ func TestGroupService_AuthorizationFails(t *testing.T) {
 		require.ErrorIs(t, err, errDecision)
 		require.NotErrorIs(t, err, ErrGroupNotFound)
 		require.NotErrorIs(t, err, ErrIdentityNotFound)
+		require.NotErrorIs(t, err, ErrMemberNotFound)
 		assert.NotErrorIs(t, err, authz.ErrDenied)
 	}
 
@@ -912,15 +943,19 @@ func TestGroupService_AuthorizationFails(t *testing.T) {
 		})
 	}
 
-	t.Run("add member no identity decision", func(t *testing.T) {
-		t.Parallel()
-		authorizer, decider := newDeciding(t)
-		// The mock fails the test if the repository writes anything.
-		svc, repo := newTestServiceWith(t, authorizer)
-		expectAllowed(repo, decider, actionAddMember)
-		repo.EXPECT().ListIdentityGroups(mock.Anything, identity).Return(nil, nil)
-		decider.EXPECT().Can(readIdentity, mock.Anything).Return(false, errDecision)
+	// The decision on the identity, after the actor was allowed the action on the group.
+	memberActions := map[string]authz.Action{"add member": actionAddMember, "remove member": actionRemoveMember}
+	for name, action := range memberActions {
+		t.Run(name+" no identity decision", func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			// The mock fails the test if the repository writes anything.
+			svc, repo := newTestServiceWith(t, authorizer)
+			expectAllowed(repo, decider, action)
+			repo.EXPECT().ListIdentityGroups(mock.Anything, identity).Return(nil, nil)
+			decider.EXPECT().Can(readIdentity, mock.Anything).Return(false, errDecision)
 
-		assertFailed(t, svc.AddMember(t.Context(), actor, stored.ID, identity))
-	})
+			assertFailed(t, all[name](svc))
+		})
+	}
 }

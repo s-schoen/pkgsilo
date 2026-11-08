@@ -45,7 +45,9 @@ type GroupService interface {
 	// ordered by when they were added. Reading the members of a group covers all of them, so it includes
 	// identities that the actor may not read.
 	ListMembers(ctx context.Context, actor, groupID uuid.UUID, offset, limit int) (pagination.Page[Member], error)
-	// RemoveMember removes the identity from the members of the group.
+	// RemoveMember removes the identity from the members of the group. An identity that the actor may not
+	// read is reported like one that isn't a member, so that it reveals neither whether the identity exists
+	// nor its memberships.
 	RemoveMember(ctx context.Context, actor, groupID, identityID uuid.UUID) error
 }
 
@@ -251,7 +253,7 @@ func (s *groupService) AddMember(ctx context.Context, actor, groupID, identityID
 		return fmt.Errorf("add group member: %w", err)
 	}
 
-	if err := s.checkIdentityReadable(ctx, decider, identityID); err != nil {
+	if err := s.checkIdentityReadable(ctx, decider, identityID, ErrIdentityNotFound); err != nil {
 		return fmt.Errorf("add group member: %w", err)
 	}
 
@@ -301,7 +303,13 @@ func (s *groupService) RemoveMember(ctx context.Context, actor, groupID, identit
 		return fmt.Errorf("remove group member: %w", err)
 	}
 
+	// Like adding, the action on the group comes before the identity.
 	if err := s.checkAction(ctx, decider, groupID, actionRemoveMember); err != nil {
+		return fmt.Errorf("remove group member: %w", err)
+	}
+
+	// A missing identity is a member of no group, which the delete reports.
+	if err := s.checkIdentityReadable(ctx, decider, identityID, ErrMemberNotFound); err != nil {
 		return fmt.Errorf("remove group member: %w", err)
 	}
 
@@ -355,9 +363,12 @@ func (s *groupService) checkAction(
 }
 
 // checkIdentityReadable checks that the decider allows reading the identity with the given ID, with its
-// groups, and reports one that it doesn't allow like a missing one. Whether the identity exists is left to
-// the write that refers to it, which reports a missing identity in the same way.
-func (s *groupService) checkIdentityReadable(ctx context.Context, decider authz.Decider, id uuid.UUID) error {
+// groups, and reports one that it doesn't allow with missing, the error of a missing one. Whether the
+// identity exists is left to the write that refers to it, which reports a missing identity with the same
+// error.
+func (s *groupService) checkIdentityReadable(
+	ctx context.Context, decider authz.Decider, id uuid.UUID, missing error,
+) error {
 	groups, err := s.repo.ListIdentityGroups(ctx, id)
 	if err != nil {
 		return fmt.Errorf("load identity groups: %w", err)
@@ -369,7 +380,7 @@ func (s *groupService) checkIdentityReadable(ctx context.Context, decider authz.
 		return fmt.Errorf("check identity read: %w", err)
 	}
 	if !can {
-		return ErrIdentityNotFound
+		return missing
 	}
 
 	return nil

@@ -354,40 +354,50 @@ func TestHandler_InvalidID(t *testing.T) {
 	}
 }
 
-// TestHandler_InvalidMemberID checks that an identity ID that isn't a UUID is answered like an
-// unknown identity, once the group was found to exist.
+// TestHandler_InvalidMemberID checks that an identity ID that isn't a UUID reaches the service as the Nil
+// UUID, which no identity has, so that the service answers it like an unknown identity, in its order of
+// checks.
 func TestHandler_InvalidMemberID(t *testing.T) {
 	t.Parallel()
 	const badMember = membersPath + "/not-a-uuid"
-	groupNotFoundErr := fmt.Errorf("get group: %w", service.ErrGroupNotFound)
 	tests := []struct {
-		name     string
-		method   string
-		getErr   error
-		want     envelope.Problem
-		wantLogs int
+		name   string
+		method string
+		expect func(svc *mocks.MockGroupService)
+		want   envelope.Problem
 	}{
-		{name: "add", method: http.MethodPut, want: identityapi.IdentityNotFoundProblem},
-		{name: "remove", method: http.MethodDelete, want: memberNotFoundProblem},
-		{name: "add to missing group", method: http.MethodPut, getErr: groupNotFoundErr, want: groupNotFoundProblem},
 		{
-			name: "remove from missing group", method: http.MethodDelete,
-			getErr: groupNotFoundErr, want: groupNotFoundProblem,
+			name: "add", method: http.MethodPut,
+			expect: func(svc *mocks.MockGroupService) {
+				svc.EXPECT().AddMember(mock.Anything, apitest.Actor, maintainers.ID, uuid.Nil()).
+					Return(fmt.Errorf("add group member: %w", service.ErrIdentityNotFound))
+			},
+			want: identityapi.IdentityNotFoundProblem,
 		},
 		{
-			name: "group unexpected", method: http.MethodPut, getErr: errors.New("connection refused"),
-			want: envelope.InternalServerErrorProblem.New(envelope.Occurrence{}), wantLogs: 1,
+			name: "remove", method: http.MethodDelete,
+			expect: func(svc *mocks.MockGroupService) {
+				svc.EXPECT().RemoveMember(mock.Anything, apitest.Actor, maintainers.ID, uuid.Nil()).
+					Return(fmt.Errorf("remove group member: %w", service.ErrMemberNotFound))
+			},
+			want: memberNotFoundProblem,
+		},
+		{
+			name: "add denied", method: http.MethodPut,
+			expect: func(svc *mocks.MockGroupService) {
+				svc.EXPECT().AddMember(mock.Anything, apitest.Actor, maintainers.ID, uuid.Nil()).
+					Return(fmt.Errorf("add group member: %w", authz.ErrDenied))
+			},
+			want: forbiddenProblem,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			logger, buf := loggertest.NewJSON()
-			api, svc := newTestClient(t, logger)
-			svc.EXPECT().Get(mock.Anything, apitest.Actor, maintainers.ID).Return(maintainers, tt.getErr)
+			api, svc := newTestClient(t, loggertest.Discard())
+			tt.expect(svc)
 
 			api.Send(tt.method, badMember, "").AssertProblem(tt.want)
-			assert.Len(t, loggertest.Entries(t, buf), tt.wantLogs)
 		})
 	}
 }

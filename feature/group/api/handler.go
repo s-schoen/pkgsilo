@@ -13,7 +13,6 @@ import (
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/feature/group/service"
-	identityapi "pkgsilo/feature/identity/api"
 )
 
 // Handler serves the group endpoints.
@@ -179,10 +178,7 @@ func (h *Handler) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identityID, ok := h.memberID(w, r, id, identityapi.IdentityNotFoundProblem)
-	if !ok {
-		return
-	}
+	identityID := memberID(r)
 
 	if !request.EnsureEmptyBody(w, r) {
 		return
@@ -202,10 +198,7 @@ func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identityID, ok := h.memberID(w, r, id, memberNotFoundProblem)
-	if !ok {
-		return
-	}
+	identityID := memberID(r)
 
 	err := h.service.RemoveMember(r.Context(), authn.Actor(r), id, identityID)
 	if err != nil {
@@ -216,24 +209,16 @@ func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// memberID returns the identity ID from the path of a member of the group groupID. An ID that
-// isn't a UUID can't identify an identity, so it's answered with notFound like an unknown one, but
-// only after the group was found: like the service for unknown identities, it reports a missing or
-// hidden group first.
-func (h *Handler) memberID(
-	w http.ResponseWriter, r *http.Request, groupID uuid.UUID, notFound envelope.Problem,
-) (uuid.UUID, bool) {
-	if identityID, err := uuid.Parse(chi.URLParam(r, "identityID")); err == nil {
-		return identityID, true
+// memberID returns the identity ID from the path of a member. An ID that isn't a UUID can't identify an
+// identity, so it's the Nil UUID, which no identity has: the service then answers it like an unknown
+// identity, in the same order of checks.
+func memberID(r *http.Request) uuid.UUID {
+	identityID, err := uuid.Parse(chi.URLParam(r, "identityID"))
+	if err != nil {
+		return uuid.Nil()
 	}
 
-	if _, err := h.service.Get(r.Context(), authn.Actor(r), groupID); err != nil {
-		h.writeError(w, r, err)
-		return uuid.UUID{}, false
-	}
-	envelope.WriteProblem(w, notFound)
-
-	return uuid.UUID{}, false
+	return identityID
 }
 
 // groupID returns the group ID from the request path, answering one that isn't a UUID like an
