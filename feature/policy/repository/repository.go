@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"uuid"
 
-	"github.com/jmoiron/sqlx"
-
 	"pkgsilo/core/database"
 	"pkgsilo/core/pagination"
 )
@@ -24,7 +22,7 @@ type PolicyRepository interface {
 	ListExistingGroups(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	// Write runs fn in a transaction that first advances the policy revision. This serializes policy
 	// writes, and every instance loads the policies again on its first request after the commit. The
-	// transaction commits if fn returns nil. Otherwise, it rolls back and Write returns fn's error.
+	// transaction commits if fn returns nil. Otherwise, it rolls back and Write returns an error wrapping fn's.
 	Write(ctx context.Context, fn func(w PolicyWriter) error) error
 }
 
@@ -52,13 +50,14 @@ const policyColumns = "id, name, source, created_by, updated_by, created_at, upd
 // PostgresPolicyRepository stores policy records in the policies table of PostgreSQL, and the revision of
 // the policies in the policy_revision table.
 type PostgresPolicyRepository struct {
-	db *sqlx.DB
+	db database.Querier
 }
 
 var _ PolicyRepository = (*PostgresPolicyRepository)(nil)
 
-// NewPostgresPolicyRepository returns a PostgresPolicyRepository that stores records in db.
-func NewPostgresPolicyRepository(db *sqlx.DB) *PostgresPolicyRepository {
+// NewPostgresPolicyRepository returns a PostgresPolicyRepository that stores records in db. On a transaction,
+// Write takes part in it instead of beginning one of its own, and its writes commit with the transaction.
+func NewPostgresPolicyRepository(db database.Querier) *PostgresPolicyRepository {
 	return &PostgresPolicyRepository{db: db}
 }
 
@@ -84,26 +83,19 @@ func (r *PostgresPolicyRepository) ListExistingGroups(ctx context.Context, ids [
 }
 
 // Write runs fn in a transaction that first advances the policy revision. The transaction commits if fn
-// returns nil. Otherwise, it rolls back and Write returns fn's error.
+// returns nil. Otherwise, it rolls back and Write returns an error wrapping fn's. On a repository of a
+// transaction, fn takes part in that one, which its owner commits or rolls back.
 func (r *PostgresPolicyRepository) Write(ctx context.Context, fn func(w PolicyWriter) error) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
+	err := database.InTx(ctx, r.db, func(tx database.Querier) error {
+		// The row lock that this takes holds every other policy write until the commit.
+		if _, err := tx.ExecContext(ctx, `UPDATE policy_revision SET revision = revision + 1`); err != nil {
+			return fmt.Errorf("advance policy revision: %w", err)
+		}
+
+		return fn(postgresPolicyWriter{q: tx})
+	})
 	if err != nil {
-		return fmt.Errorf("begin policy write: %w", err)
-	}
-	// Does nothing once the transaction is committed.
-	defer func() { _ = tx.Rollback() }()
-
-	// The row lock that this takes holds every other policy write until the commit.
-	if _, err := tx.ExecContext(ctx, `UPDATE policy_revision SET revision = revision + 1`); err != nil {
-		return fmt.Errorf("advance policy revision: %w", err)
-	}
-
-	if err := fn(postgresPolicyWriter{q: tx}); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit policy write: %w", err)
+		return fmt.Errorf("write policies: %w", err)
 	}
 
 	return nil

@@ -12,9 +12,6 @@ import (
 	"pkgsilo/test/databasetest"
 )
 
-// administratorsGroup is the ID of the group that the seeded administrators policy grants everything.
-var administratorsGroup = uuid.MustParse("7c1d3e52-8a4f-4b6e-9f21-5d0c8e7a3b14")
-
 // insertIdentity stores an identity row for memberships to refer to and returns its ID. The table belongs
 // to the identity feature, so the row is written directly.
 func insertIdentity(t *testing.T, db *sqlx.DB) uuid.UUID {
@@ -123,8 +120,6 @@ func TestEngine_SeededPolicies(t *testing.T) {
 	t.Parallel()
 	db := databasetest.New(t)
 	engine := New(db)
-	administrator := insertIdentity(t, db)
-	addMembers(t, db, administratorsGroup, administrator)
 	ada := insertIdentity(t, db)
 	grace := insertIdentity(t, db)
 	otherAction := NewAction("identity:delete")
@@ -139,9 +134,6 @@ func TestEngine_SeededPolicies(t *testing.T) {
 		resource Resource
 		want     bool
 	}{
-		{"an administrator reads others", administrator, testAction, identityResource(ada), true},
-		{"an administrator does anything", administrator, otherAction, identityResource(ada), true},
-		{"an administrator can do anything to any type", administrator, otherAction, Resource{Type: "Other", ID: ada}, true},
 		{"an identity reads itself", ada, testAction, identityResource(ada), true},
 		{"an identity doesn't read others", ada, testAction, identityResource(grace), false},
 		{"an identity does nothing else to itself", ada, otherAction, identityResource(ada), false},
@@ -211,6 +203,7 @@ func TestEngine_GroupsOfPrincipal(t *testing.T) {
 	engine := New(db)
 
 	assertCan(t, true, engine, member, testAction, identityResource(outsider))
+	assertCan(t, true, engine, member, NewAction("other:anything"), Resource{Type: "Other", ID: outsider})
 	assertCan(t, false, engine, outsider, testAction, identityResource(member))
 }
 
@@ -376,9 +369,11 @@ func TestEngine_GroupsAreReadPerRequest(t *testing.T) {
 	engine := New(db)
 	ada := insertIdentity(t, db)
 	grace := insertIdentity(t, db)
+	readers := insertGroup(t, db)
+	addPolicy(t, db, `permit (principal in Group::"`+readers.String()+`", action, resource);`)
 	assertCan(t, false, engine, ada, testAction, identityResource(grace))
 
-	addMembers(t, db, administratorsGroup, ada)
+	addMembers(t, db, readers, ada)
 
 	assertCan(t, true, engine, ada, testAction, identityResource(grace))
 }

@@ -13,15 +13,12 @@ import (
 	"pkgsilo/test/databasetest"
 )
 
-// newTestRepo returns a repository on a new database without the migrations' seeded group, so that a
-// test's records are the only ones, and the database for setting up the identities that member records
-// refer to.
+// newTestRepo returns a repository on a new database, which holds no groups, and the database for setting
+// up the identities that member records refer to.
 func newTestRepo(t *testing.T) (*PostgresGroupRepository, *sqlx.DB) {
 	t.Helper()
 
 	db := databasetest.New(t)
-	_, err := db.ExecContext(t.Context(), `DELETE FROM groups`)
-	require.NoError(t, err)
 
 	return NewPostgresGroupRepository(db), db
 }

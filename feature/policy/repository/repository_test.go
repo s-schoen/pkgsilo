@@ -17,10 +17,7 @@ import (
 )
 
 // seededPolicies is the number of policies that the migrations create.
-const seededPolicies = 3
-
-// administratorsGroup is the ID of the group that the migrations create.
-var administratorsGroup = uuid.MustParse("7c1d3e52-8a4f-4b6e-9f21-5d0c8e7a3b14")
+const seededPolicies = 2
 
 // newTestRepo returns a repository on a new database, which holds the seeded policies alone.
 func newTestRepo(t *testing.T) (*PostgresPolicyRepository, *sqlx.DB) {
@@ -134,8 +131,8 @@ func TestPostgresPolicyRepository_ListAll(t *testing.T) {
 	got, err := repo.ListAll(t.Context())
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"administrators", "read-own-identity", "manage-own-api-keys"},
-		[]string{got[0].Name, got[1].Name, got[2].Name}, "the seeded policies come first")
+	assert.Equal(t, []string{"read-own-identity", "manage-own-api-keys"},
+		[]string{got[0].Name, got[1].Name}, "the seeded policies come first")
 	assert.Equal(t, []PolicyRecord{first, second, third}, userPolicies(t, got))
 }
 
@@ -174,13 +171,15 @@ func TestPostgresPolicyRepository_ListAll_Ceiling(t *testing.T) {
 func TestPostgresPolicyRepository_ListExistingGroups(t *testing.T) {
 	t.Parallel()
 	repo, db := newTestRepo(t)
-	group := uuid.NewV4()
-	_, err := db.ExecContext(t.Context(), `
-		INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
-		VALUES ($1, 'maintainers', $1, $1, $2, $2)`,
-		group, baseTime,
-	)
-	require.NoError(t, err)
+	group, other := uuid.NewV4(), uuid.NewV4()
+	for i, id := range []uuid.UUID{group, other} {
+		_, err := db.ExecContext(t.Context(), `
+			INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
+			VALUES ($1, $2, $1, $1, $3, $3)`,
+			id, []string{"maintainers", "auditors"}[i], baseTime,
+		)
+		require.NoError(t, err)
+	}
 
 	tests := []struct {
 		name string
@@ -189,8 +188,8 @@ func TestPostgresPolicyRepository_ListExistingGroups(t *testing.T) {
 	}{
 		{
 			name: "some exist",
-			ids:  []uuid.UUID{group, uuid.NewV4(), administratorsGroup},
-			want: []uuid.UUID{group, administratorsGroup},
+			ids:  []uuid.UUID{group, uuid.NewV4(), other},
+			want: []uuid.UUID{group, other},
 		},
 		{name: "none exists", ids: []uuid.UUID{uuid.NewV4()}},
 		{name: "no IDs", ids: []uuid.UUID{}},
@@ -454,6 +453,32 @@ func TestPostgresPolicyRepository_Write_AdvancesRevision(t *testing.T) {
 	assert.Equal(t, before+1, revision(t, db), "a failed write must not advance the revision")
 	_, err = repo.Get(t.Context(), rec.ID)
 	assert.ErrorIs(t, err, ErrNotFound, "a failed write must roll back")
+}
+
+// TestPostgresPolicyRepository_Write_InTransaction checks that a repository of a transaction writes in it:
+// its writes, and the revision it advances, are visible in the transaction alone, and go with it when the
+// transaction rolls back, even though the write succeeded.
+func TestPostgresPolicyRepository_Write_InTransaction(t *testing.T) {
+	t.Parallel()
+	_, db := newTestRepo(t)
+	before := revision(t, db)
+	tx, err := db.BeginTxx(t.Context(), nil)
+	require.NoError(t, err)
+	repo := NewPostgresPolicyRepository(tx)
+	rec := newRecord("everything", baseTime)
+
+	insert(t, repo, rec)
+
+	got, err := repo.Get(t.Context(), rec.ID)
+	require.NoError(t, err, "the transaction must see the write")
+	assert.Equal(t, rec, got)
+	_, err = NewPostgresPolicyRepository(db).Get(t.Context(), rec.ID)
+	require.ErrorIs(t, err, ErrNotFound, "nothing may commit before the transaction does")
+
+	require.NoError(t, tx.Rollback())
+	_, err = NewPostgresPolicyRepository(db).Get(t.Context(), rec.ID)
+	require.ErrorIs(t, err, ErrNotFound)
+	assert.Equal(t, before, revision(t, db), "the revision must roll back with the transaction")
 }
 
 // TestPostgresPolicyRepository_Write_Serialized checks that a write waits for another one to commit, so that

@@ -17,6 +17,7 @@ import (
 	groupservice "pkgsilo/feature/group/service"
 	identityrepo "pkgsilo/feature/identity/repository"
 	identityservice "pkgsilo/feature/identity/service"
+	policyservice "pkgsilo/feature/policy/service"
 	"pkgsilo/test/databasetest"
 )
 
@@ -30,6 +31,26 @@ func countRows(t *testing.T, db *sqlx.DB, table string) int {
 	require.NoError(t, db.GetContext(t.Context(), &count, "SELECT count(*) FROM "+table))
 
 	return count
+}
+
+// countAdministratorsPolicies returns the number of policies named administrators.
+func countAdministratorsPolicies(t *testing.T, db *sqlx.DB) int {
+	t.Helper()
+
+	var count int
+	require.NoError(t, db.GetContext(t.Context(), &count, "SELECT count(*) FROM policies WHERE name = 'administrators'"))
+
+	return count
+}
+
+// administratorsGroup returns the ID of the group named administrators.
+func administratorsGroup(t *testing.T, db *sqlx.DB) uuid.UUID {
+	t.Helper()
+
+	var id uuid.UUID
+	require.NoError(t, db.GetContext(t.Context(), &id, "SELECT id FROM groups WHERE name = 'administrators'"))
+
+	return id
 }
 
 // groupMembers returns the identities that are members of the group, in no particular order.
@@ -58,7 +79,7 @@ func TestBootstrap_FirstStart(t *testing.T) {
 	assert.Equal(t, authz.Visible("admin"), admin.Username)
 	assert.Equal(t, authz.Visible("Administrator"), admin.DisplayName)
 	assert.Equal(t, authz.Visible(audit.SystemActor()), admin.CreatedBy)
-	assert.Equal(t, []uuid.UUID{admin.ID}, groupMembers(t, db, administratorsGroupID))
+	assertAdministrator(t, db, admin.ID)
 
 	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authz.AllowAll(), testPepper)
 	authenticated, err := apiKeys.Authenticate(t.Context(), key)
@@ -69,6 +90,25 @@ func TestBootstrap_FirstStart(t *testing.T) {
 	assert.Equal(t, authz.Visible("bootstrap"), apiKey.Name)
 	assert.Equal(t, authz.Visible[*time.Time](nil), apiKey.ExpiresAt, "the first key must never expire")
 	assert.Equal(t, authz.Visible(audit.SystemActor()), apiKey.CreatedBy)
+}
+
+// assertAdministrator asserts that the identity is the only member of the group administrators, which the
+// policy administrators grants every action on every resource.
+func assertAdministrator(t *testing.T, db *sqlx.DB, identity uuid.UUID) {
+	t.Helper()
+
+	group := administratorsGroup(t, db)
+	assert.Equal(t, []uuid.UUID{identity}, groupMembers(t, db, group))
+
+	var source string
+	require.NoError(t, db.GetContext(t.Context(), &source, "SELECT source FROM policies WHERE name = 'administrators'"))
+	assert.Equal(t, `permit (principal in Group::"`+group.String()+`", action, resource);`, source)
+
+	decider, err := authz.New(db).For(t.Context(), identity)
+	require.NoError(t, err)
+	can, err := decider.Can(authz.NewAction("other:anything"), authz.Resource{Type: "Other", ID: uuid.NewV4()})
+	require.NoError(t, err)
+	assert.True(t, can, "the administrators policy must grant everything")
 }
 
 func TestBootstrap_AlreadyBootstrapped(t *testing.T) {
@@ -83,7 +123,9 @@ func TestBootstrap_AlreadyBootstrapped(t *testing.T) {
 	assert.Empty(t, key)
 	assert.Equal(t, 1, countRows(t, db, "identities"))
 	assert.Equal(t, 1, countRows(t, db, "api_keys"))
-	assert.Len(t, groupMembers(t, db, administratorsGroupID), 1)
+	assert.Equal(t, 1, countRows(t, db, "groups"))
+	assert.Equal(t, 1, countAdministratorsPolicies(t, db))
+	assert.Len(t, groupMembers(t, db, administratorsGroup(t, db)), 1)
 }
 
 func TestBootstrap_IdentitiesExist(t *testing.T) {
@@ -101,6 +143,8 @@ func TestBootstrap_IdentitiesExist(t *testing.T) {
 	assert.Empty(t, key)
 	assert.Equal(t, 1, countRows(t, db, "identities"), "no admin may be created")
 	assert.Equal(t, 0, countRows(t, db, "api_keys"))
+	assert.Equal(t, 0, countRows(t, db, "groups"))
+	assert.Equal(t, 0, countAdministratorsPolicies(t, db))
 }
 
 func TestBootstrap_FailureLeavesNothingBehind(t *testing.T) {
@@ -115,20 +159,50 @@ func TestBootstrap_FailureLeavesNothingBehind(t *testing.T) {
 	require.Error(t, err)
 	assert.Empty(t, key)
 	assert.Equal(t, 0, countRows(t, db, "identities"), "the admin must not survive without its key")
-	assert.Empty(t, groupMembers(t, db, administratorsGroupID))
+	assert.Equal(t, 0, countRows(t, db, "groups"))
+	assert.Equal(t, 0, countAdministratorsPolicies(t, db))
 }
 
-func TestBootstrap_AdministratorsGroupDeleted(t *testing.T) {
+// TestBootstrap_GroupNameTaken checks that a group named administrators, which is left over when every
+// identity was deleted after the first start, fails the start without leaving anything behind.
+func TestBootstrap_GroupNameTaken(t *testing.T) {
 	t.Parallel()
 	db := databasetest.New(t)
-	_, err := db.ExecContext(t.Context(), "DELETE FROM groups WHERE id = $1", administratorsGroupID)
+	_, err := db.ExecContext(t.Context(), `
+		INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
+		VALUES ($1, 'administrators', $1, $1, now(), now())`,
+		uuid.NewV4(),
+	)
 	require.NoError(t, err)
 
 	key, err := Bootstrap(t.Context(), db, testPepper)
 
-	require.ErrorIs(t, err, groupservice.ErrGroupNotFound)
+	require.ErrorIs(t, err, groupservice.ErrGroupNameTaken)
 	assert.Empty(t, key)
-	assert.Equal(t, 0, countRows(t, db, "identities"), "an admin without the group could do nothing")
+	assert.Equal(t, 0, countRows(t, db, "identities"))
+	assert.Equal(t, 1, countRows(t, db, "groups"))
+	assert.Equal(t, 0, countAdministratorsPolicies(t, db))
+}
+
+// TestBootstrap_PolicyNameTaken checks that a policy named administrators, which is left over when every
+// identity was deleted after the first start, fails the start without leaving anything behind.
+func TestBootstrap_PolicyNameTaken(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	_, err := db.ExecContext(t.Context(), `
+		INSERT INTO policies (id, name, source, created_by, updated_by, created_at, updated_at)
+		VALUES ($1, 'administrators', 'permit (principal, action, resource);', $1, $1, now(), now())`,
+		uuid.NewV4(),
+	)
+	require.NoError(t, err)
+
+	key, err := Bootstrap(t.Context(), db, testPepper)
+
+	require.ErrorIs(t, err, policyservice.ErrPolicyNameTaken)
+	assert.Empty(t, key)
+	assert.Equal(t, 0, countRows(t, db, "identities"))
+	assert.Equal(t, 0, countRows(t, db, "groups"))
+	assert.Equal(t, 1, countAdministratorsPolicies(t, db))
 }
 
 // TestBootstrap_ConcurrentStarts checks what instances that start at once end up with, whichever wins
@@ -150,5 +224,7 @@ func TestBootstrap_ConcurrentStarts(t *testing.T) {
 	assert.NotEqual(t, keys[0] == "", keys[1] == "", "exactly one instance must get a key: %q", keys)
 	assert.Equal(t, 1, countRows(t, db, "identities"))
 	assert.Equal(t, 1, countRows(t, db, "api_keys"))
-	assert.Len(t, groupMembers(t, db, administratorsGroupID), 1)
+	assert.Equal(t, 1, countRows(t, db, "groups"))
+	assert.Equal(t, 1, countAdministratorsPolicies(t, db))
+	assert.Len(t, groupMembers(t, db, administratorsGroup(t, db)), 1)
 }
