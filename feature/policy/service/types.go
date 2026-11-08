@@ -10,40 +10,29 @@ import (
 )
 
 // Policy is a named document of one or more Cedar statements, as an actor sees it: every field but the ID
-// is hidden unless the actor may read it.
+// is hidden unless the actor may read it. The authz tag of a field names its action, such as
+// policy:read:source.
 type Policy struct {
 	ID     uuid.UUID
-	Name   authz.Field[string]
-	Source authz.Field[string]
+	Name   authz.Field[string] `authz:"name"`
+	Source authz.Field[string] `authz:"source"`
 	// CreatedBy and UpdatedBy are the identities, or audit.SystemActor, that made the changes.
-	CreatedBy authz.Field[uuid.UUID]
-	UpdatedBy authz.Field[uuid.UUID]
-	CreatedAt authz.Field[time.Time]
-	UpdatedAt authz.Field[time.Time]
+	CreatedBy authz.Field[uuid.UUID] `authz:"createdBy"`
+	UpdatedBy authz.Field[uuid.UUID] `authz:"updatedBy"`
+	CreatedAt authz.Field[time.Time] `authz:"createdAt"`
+	UpdatedAt authz.Field[time.Time] `authz:"updatedAt"`
 }
 
-// PolicyInput holds the policy fields set by callers when creating or replacing a policy.
+// PolicyInput holds the policy fields set by callers when creating or replacing a policy. The authz tag of a
+// field names its actions, such as policy:create:source and policy:update:source.
 type PolicyInput struct {
-	Name   string
-	Source string
+	Name   string `authz:"name"`
+	Source string `authz:"source"`
 }
 
 // PolicyPatch holds the policy fields that a caller changes when patching a policy. A nil field stays as it
-// is.
+// is. Its members are tagged like those of PolicyInput.
 type PolicyPatch struct {
-	Name   *string
-	Source *string
-}
-
-// fields returns the names of the fields that p sets.
-func (p PolicyPatch) fields() []string {
-	var fields []string
-	if p.Name != nil {
-		fields = append(fields, "name")
-	}
-	if p.Source != nil {
-		fields = append(fields, "source")
-	}
-
-	return fields
+	Name   *string `authz:"name"`
+	Source *string `authz:"source"`
 }

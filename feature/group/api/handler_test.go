@@ -146,7 +146,7 @@ func TestHandler_Create_Unreadable(t *testing.T) {
 func TestHandler_ReadableMembers(t *testing.T) {
 	t.Parallel()
 
-	apitest.AssertReadableMembers(t, reflect.TypeFor[GroupResponse](), service.ReadableFields())
+	apitest.AssertReadableMembers(t, reflect.TypeFor[GroupResponse](), service.Actions().ReadFields().Fields())
 }
 
 func TestHandler_Replace(t *testing.T) {
@@ -301,14 +301,16 @@ func TestHandler_InvalidBody(t *testing.T) {
 // written without being authorized, and a field denial couldn't point to a member that doesn't exist.
 func TestHandler_SettableMembersHaveActions(t *testing.T) {
 	t.Parallel()
+	creatable := service.Actions().CreateFields().Fields()
+	updatable := service.Actions().UpdateFields().Fields()
 	tests := []struct {
 		name    string
 		body    reflect.Type
 		actions []string
 	}{
-		{name: "create", body: reflect.TypeFor[CreateGroupRequest](), actions: service.CreatableFields()},
-		{name: "replace", body: reflect.TypeFor[ReplaceGroupRequest](), actions: service.UpdatableFields()},
-		{name: "patch", body: reflect.TypeFor[PatchGroupRequest](), actions: service.UpdatableFields()},
+		{name: "create", body: reflect.TypeFor[CreateGroupRequest](), actions: creatable},
+		{name: "replace", body: reflect.TypeFor[ReplaceGroupRequest](), actions: updatable},
+		{name: "patch", body: reflect.TypeFor[PatchGroupRequest](), actions: updatable},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

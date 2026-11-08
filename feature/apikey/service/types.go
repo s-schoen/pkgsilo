@@ -9,20 +9,20 @@ import (
 
 // APIKey is a credential that authenticates requests as its identity, as an actor sees it: every field but
 // the ID is hidden unless the actor may read it. It doesn't hold the key itself, which is only known when
-// the API key is created.
+// the API key is created. The authz tag of a field names its action, such as apikey:read:name.
 type APIKey struct {
 	ID         uuid.UUID
-	IdentityID authz.Field[uuid.UUID]
-	Name       authz.Field[string]
+	IdentityID authz.Field[uuid.UUID] `authz:"identityId"`
+	Name       authz.Field[string]    `authz:"name"`
 	// KeySuffix is the key's last characters, which tell the holder of a key which API key it is.
-	KeySuffix authz.Field[string]
+	KeySuffix authz.Field[string] `authz:"keySuffix"`
 	// ExpiresAt is nil for an API key that never expires.
-	ExpiresAt authz.Field[*time.Time]
+	ExpiresAt authz.Field[*time.Time] `authz:"expiresAt"`
 	// LastUsedAt is nil for an API key that has not been used yet. It's accurate to about a minute.
-	LastUsedAt authz.Field[*time.Time]
+	LastUsedAt authz.Field[*time.Time] `authz:"lastUsedAt"`
 	// CreatedBy is the identity, or audit.SystemActor, that created the API key.
-	CreatedBy authz.Field[uuid.UUID]
-	CreatedAt authz.Field[time.Time]
+	CreatedBy authz.Field[uuid.UUID] `authz:"createdBy"`
+	CreatedAt authz.Field[time.Time] `authz:"createdAt"`
 }
 
 // AuthenticatedKey is the API key that a presented key belongs to, as far as a request needs it once it's
@@ -41,9 +41,10 @@ type CreatedAPIKey struct {
 	Key string
 }
 
-// APIKeyInput holds the API key fields set by callers when creating an API key.
+// APIKeyInput holds the API key fields set by callers when creating an API key. The authz tag of a field
+// names its action, such as apikey:create:name.
 type APIKeyInput struct {
-	Name string
+	Name string `authz:"name"`
 	// ExpiresAt is nil for an API key that never expires.
-	ExpiresAt *time.Time
+	ExpiresAt *time.Time `authz:"expiresAt"`
 }

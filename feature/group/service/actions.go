@@ -1,45 +1,32 @@
 package service
 
-import "pkgsilo/core/authz"
+import (
+	"reflect"
 
-// The actions on groups. Each settable field has its own action for each kind of write, such as
-// group:update:name, so that policies can limit writes to some fields. The members of a group are managed
-// with actions on the group, and reading them is one action for the whole member list. Each field but the ID
-// has its own action for reading it too, such as group:read:name, on top of group:read.
+	"pkgsilo/core/authz"
+)
+
+// The actions on groups: group:read, group:delete, and an action for each field and kind of access, named
+// after the authz tags of Group and GroupInput, such as group:read:name and group:update:name, so that
+// policies can limit access to some fields. The members of a group are managed with actions on the group,
+// and reading them is one action for the whole member list.
 var (
-	actionRead         = authz.NewAction("group:read", authz.ActionGroupRead)
-	actionDelete       = authz.NewAction("group:delete")
 	actionReadMembers  = authz.NewAction("group:readMembers", authz.ActionGroupRead)
 	actionAddMember    = authz.NewAction("group:addMember")
 	actionRemoveMember = authz.NewAction("group:removeMember")
-	readFields         = authz.NewReadFieldActions("group", "name", "createdBy", "updatedBy", "createdAt", "updatedAt")
-	createFields       = authz.NewFieldActions("group:create", "name")
-	updateFields       = authz.NewFieldActions("group:update", "name")
+
+	actions = authz.DeclareType(authz.TypeSpec{
+		Type:    authz.GroupType,
+		Model:   reflect.TypeFor[Group](),
+		Create:  reflect.TypeFor[GroupInput](),
+		Update:  reflect.TypeFor[GroupInput](),
+		Patch:   reflect.TypeFor[GroupPatch](),
+		Actions: []authz.Action{actionReadMembers, actionAddMember, actionRemoveMember},
+	})
 )
 
-// Declaration declares groups and the actions on them, for the schema that policies are validated against.
-func Declaration() authz.Declaration {
-	return authz.Declaration{
-		Type:    authz.GroupType,
-		Actions: []authz.Action{actionRead, actionDelete, actionReadMembers, actionAddMember, actionRemoveMember},
-		Fields:  []authz.FieldActions{readFields, createFields, updateFields},
-	}
-}
-
-// ReadableFields returns the names of the fields of a group, besides its ID, each of which has a
-// group:read:<field> action.
-func ReadableFields() []string {
-	return readFields.Fields()
-}
-
-// CreatableFields returns the names of the fields that creating a group sets, each of which has a
-// group:create:<field> action.
-func CreatableFields() []string {
-	return createFields.Fields()
-}
-
-// UpdatableFields returns the names of the fields that replacing a group sets, and patching it may set, each
-// of which has a group:update:<field> action.
-func UpdatableFields() []string {
-	return updateFields.Fields()
+// Actions returns the actions on groups, for the schema that policies are validated against and for the
+// handler tests.
+func Actions() authz.TypeActions {
+	return actions
 }

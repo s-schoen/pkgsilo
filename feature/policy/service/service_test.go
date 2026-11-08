@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
-	"unicode"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
@@ -72,7 +70,7 @@ var testSchema = authz.Schema(
 		Type:    authz.IdentityType,
 		Actions: []authz.Action{authz.NewAction("identity:read", authz.ActionGroupRead)},
 	},
-	Declaration(),
+	Actions().Declaration(),
 )
 
 // newTestService returns a service that may do everything, on mock repositories.
@@ -118,17 +116,17 @@ func newDeciding(t *testing.T) (*authzmocks.MockAuthorizer, *authzmocks.MockDeci
 // expectReadable makes the repository return stored, and the decider allow reading it.
 func expectReadable(repo *mocks.MockPolicyRepository, decider *authzmocks.MockDecider) {
 	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
-	decider.EXPECT().Can(actionRead, storedResource).Return(true, nil)
+	decider.EXPECT().Can(actions.Read(), storedResource).Return(true, nil)
 }
 
 // expectAllFieldsReadable makes the decider allow reading every field of the resource, once each.
 func expectAllFieldsReadable(decider *authzmocks.MockDecider, resource authz.Resource) {
-	servicetest.ExpectReadableFields(decider, readFields, resource, readFields.Fields()...)
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), resource, actions.ReadFields().Fields()...)
 }
 
 // isReadField reports whether the action is one of reading a field of a policy.
 func isReadField(action authz.Action) bool {
-	return slices.ContainsFunc(readFields.Actions(), func(a authz.Action) bool {
+	return slices.ContainsFunc(actions.ReadFields().Actions(), func(a authz.Action) bool {
 		return assert.ObjectsAreEqual(a, action)
 	})
 }
@@ -277,7 +275,7 @@ func TestPolicyService_Create_ReadableFields(t *testing.T) {
 		readable []string
 		want     Policy
 	}{
-		{name: "all", canRead: true, readable: readFields.Fields(), want: storedPolicy},
+		{name: "all", canRead: true, readable: actions.ReadFields().Fields(), want: storedPolicy},
 		{
 			name: "some", canRead: true, readable: []string{"name"},
 			want: Policy{ID: stored.ID, Name: authz.Visible("everything")},
@@ -291,14 +289,14 @@ func TestPolicyService_Create_ReadableFields(t *testing.T) {
 			svc, repo, writer := newTestServiceWith(t, authorizer)
 			// The service generates the ID, so the checks match any resource. That they're on the new
 			// policy is checked by TestPolicyService_Create_ChecksEveryField.
-			for _, action := range createFields.Actions() {
+			for _, action := range actions.CreateFields().Actions() {
 				decider.EXPECT().Can(action, mock.Anything).Return(true, nil).Once()
 			}
-			decider.EXPECT().Can(actionRead, mock.Anything).Return(tt.canRead, nil).Once()
+			decider.EXPECT().Can(actions.Read(), mock.Anything).Return(tt.canRead, nil).Once()
 			if tt.canRead {
-				for i, action := range readFields.Actions() {
+				for i, action := range actions.ReadFields().Actions() {
 					decider.EXPECT().Can(action, mock.Anything).
-						Return(slices.Contains(tt.readable, readFields.Fields()[i]), nil).Once()
+						Return(slices.Contains(tt.readable, actions.ReadFields().Fields()[i]), nil).Once()
 				}
 			}
 			expectWrite(repo, writer)
@@ -311,38 +309,6 @@ func TestPolicyService_Create_ReadableFields(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
-}
-
-// TestPolicyService_ReadFieldActions checks that every field of Policy but the ID has an action for reading
-// it, so that no field is revealed unchecked or hidden from everyone.
-func TestPolicyService_ReadFieldActions(t *testing.T) {
-	t.Parallel()
-	var fields []string
-	for field := range reflect.TypeFor[Policy]().Fields() {
-		if field.Name == "ID" {
-			continue
-		}
-		name := []rune(field.Name)
-		name[0] = unicode.ToLower(name[0])
-		fields = append(fields, string(name))
-	}
-
-	assert.ElementsMatch(t, fields, ReadableFields())
-}
-
-// TestPolicyService_FieldActions checks that every field of PolicyInput, which creating and replacing set, has
-// an action of its own for each, so that no field is written unchecked.
-func TestPolicyService_FieldActions(t *testing.T) {
-	t.Parallel()
-	var fields []string
-	for field := range reflect.TypeFor[PolicyInput]().Fields() {
-		name := []rune(field.Name)
-		name[0] = unicode.ToLower(name[0])
-		fields = append(fields, string(name))
-	}
-
-	assert.ElementsMatch(t, fields, CreatableFields())
-	assert.ElementsMatch(t, fields, UpdatableFields())
 }
 
 // TestPolicyService_Declaration checks that policies can use every action on policies, which the schema
@@ -559,7 +525,7 @@ func TestPolicyService_Get_HiddenFields(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo, _ := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	servicetest.ExpectReadableFields(decider, readFields, storedResource, "name", "updatedAt")
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "name", "updatedAt")
 
 	got, err := svc.Get(t.Context(), actor, stored.ID)
 	require.NoError(t, err)
@@ -576,7 +542,7 @@ func TestPolicyService_Get_Hidden(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo, _ := newTestServiceWith(t, authorizer)
 	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
-	decider.EXPECT().Can(actionRead, storedResource).Return(false, nil)
+	decider.EXPECT().Can(actions.Read(), storedResource).Return(false, nil)
 
 	got, err := svc.Get(t.Context(), actor, stored.ID)
 
@@ -605,7 +571,7 @@ func TestPolicyService_List_Pages(t *testing.T) {
 			authorizer, decider := newDeciding(t)
 			svc, repo, _ := newTestServiceWith(t, authorizer)
 			repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2, 3, 4, 5, 6, 7, 8, 9), nil)
-			decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+			decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 				func(_ authz.Action, resource authz.Resource) (bool, error) {
 					assert.Equal(t, "Policy", resource.Type)
 					return resource.ID[15]%2 == 0, nil
@@ -626,7 +592,7 @@ func TestPolicyService_List_Pages(t *testing.T) {
 			assert.Equal(t, tt.wantHasMore, got.HasMore)
 			wantFieldChecks := map[byte]int{}
 			for _, id := range tt.wantIDs {
-				wantFieldChecks[id] = len(readFields.Fields())
+				wantFieldChecks[id] = len(actions.ReadFields().Fields())
 			}
 			assert.Equal(t, wantFieldChecks, fieldChecks, "the fields of the rows on the page must be checked, and only those")
 		})
@@ -651,7 +617,7 @@ func TestPolicyService_List_ChecksContextBetweenRows(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2, 3), nil)
-	decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+	decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 		func(authz.Action, authz.Resource) (bool, error) {
 			cancel()
 			return true, nil
@@ -672,7 +638,7 @@ func TestPolicyService_Replace(t *testing.T) {
 		decider.EXPECT().Can(authz.NewAction("policy:update:"+field, "policy:update"), storedResource).
 			Return(true, nil).Once()
 	}
-	servicetest.ExpectReadableFields(decider, readFields, storedResource, "name")
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "name")
 	expectWrite(repo, writer)
 	writer.EXPECT().ListAll(mock.Anything).Return([]repository.PolicyRecord{stored}, nil)
 	writer.EXPECT().Update(mock.Anything, repository.PolicyRecord{
@@ -732,7 +698,7 @@ func TestPolicyService_Patch(t *testing.T) {
 				decider.EXPECT().Can(authz.NewAction("policy:update:"+field, "policy:update"), storedResource).
 					Return(true, nil).Once()
 			}
-			servicetest.ExpectReadableFields(decider, readFields, storedResource, "name")
+			servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "name")
 			expectWrite(repo, writer)
 			writer.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 			writer.EXPECT().ListAll(mock.Anything).Return([]repository.PolicyRecord{stored}, nil)
@@ -834,7 +800,7 @@ func TestPolicyService_Delete(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo, writer := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	decider.EXPECT().Can(actionDelete, storedResource).Return(true, nil)
+	decider.EXPECT().Can(actions.Delete(), storedResource).Return(true, nil)
 	expectWrite(repo, writer)
 	writer.EXPECT().Delete(mock.Anything, stored.ID).Return(nil)
 
@@ -847,7 +813,7 @@ func TestPolicyService_Delete_Denied(t *testing.T) {
 	// The mocks fail the test if the repository writes anything.
 	svc, repo, _ := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	decider.EXPECT().Can(actionDelete, storedResource).Return(false, nil)
+	decider.EXPECT().Can(actions.Delete(), storedResource).Return(false, nil)
 
 	err := svc.Delete(t.Context(), actor, stored.ID)
 
@@ -880,7 +846,7 @@ func TestPolicyService_Writes_Hidden(t *testing.T) {
 			// The mocks fail the test on any other decision or on a write.
 			svc, repo, _ := newTestServiceWith(t, authorizer)
 			repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
-			decider.EXPECT().Can(actionRead, storedResource).Return(false, nil)
+			decider.EXPECT().Can(actions.Read(), storedResource).Return(false, nil)
 
 			err := call(svc)
 

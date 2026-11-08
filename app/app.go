@@ -57,6 +57,10 @@ func NewHandler(opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *s
 // schema returns the Cedar schema that saved policies are validated against: the resource types and
 // actions that the features declare.
 func schema() string {
-	return authz.Schema(identityservice.Declaration(), groupservice.Declaration(), apikeyservice.Declaration(),
-		policyservice.Declaration())
+	return authz.Schema(
+		identityservice.Actions().Declaration(),
+		groupservice.Actions().Declaration(),
+		apikeyservice.Actions().Declaration(),
+		policyservice.Actions().Declaration(),
+	)
 }

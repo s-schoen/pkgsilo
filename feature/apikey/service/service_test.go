@@ -5,12 +5,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
-	"strings"
 	"testing"
 	"time"
-	"unicode"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
@@ -114,17 +111,17 @@ func expectOwnerReadable(repo *mocks.MockAPIKeyRepository, decider *authzmocks.M
 func expectReadable(repo *mocks.MockAPIKeyRepository, decider *authzmocks.MockDecider) {
 	expectOwnerReadable(repo, decider)
 	repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(stored, nil)
-	decider.EXPECT().Can(actionRead, storedResource).Return(true, nil)
+	decider.EXPECT().Can(actions.Read(), storedResource).Return(true, nil)
 }
 
 // expectAllFieldsReadable makes the decider allow reading every field of the resource, once each.
 func expectAllFieldsReadable(decider *authzmocks.MockDecider, resource authz.Resource) {
-	servicetest.ExpectReadableFields(decider, readFields, resource, readFields.Fields()...)
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), resource, actions.ReadFields().Fields()...)
 }
 
 // isReadField reports whether the action is one of reading a field of an API key.
 func isReadField(action authz.Action) bool {
-	return slices.ContainsFunc(readFields.Actions(), func(a authz.Action) bool {
+	return slices.ContainsFunc(actions.ReadFields().Actions(), func(a authz.Action) bool {
 		return assert.ObjectsAreEqual(a, action)
 	})
 }
@@ -286,22 +283,6 @@ func TestAPIKeyService_Create_ChecksFields(t *testing.T) {
 	}
 }
 
-// TestAPIKeyService_FieldActions checks that every field of APIKeyInput, which creating sets, has an action
-// of its own, so that no field is written unchecked.
-func TestAPIKeyService_FieldActions(t *testing.T) {
-	t.Parallel()
-	var fields []string
-	for field := range reflect.TypeFor[APIKeyInput]().Fields() {
-		name := []rune(field.Name)
-		name[0] = unicode.ToLower(name[0])
-		fields = append(fields, string(name))
-	}
-
-	assert.ElementsMatch(t, fields, CreatableFields())
-	assert.ElementsMatch(t, fields, setFields(APIKeyInput{ExpiresAt: &expiresAt}),
-		"an input that sets every field must check every field")
-}
-
 // TestAPIKeyService_Create_ReadableFields checks that the new API key is returned with the fields that the
 // actor may read, and with only its ID if it may not read the API key, but always with its key, which can't
 // be retrieved later.
@@ -313,7 +294,7 @@ func TestAPIKeyService_Create_ReadableFields(t *testing.T) {
 		readable []string
 		want     APIKey
 	}{
-		{name: "all", canRead: true, readable: readFields.Fields(), want: storedKey},
+		{name: "all", canRead: true, readable: actions.ReadFields().Fields(), want: storedKey},
 		{
 			name: "some", canRead: true, readable: []string{"name", "expiresAt"},
 			want: APIKey{ID: stored.ID, Name: authz.Visible("ci"), ExpiresAt: authz.Visible(&expiresAt)},
@@ -329,11 +310,11 @@ func TestAPIKeyService_Create_ReadableFields(t *testing.T) {
 			// The service generates the ID, so the checks match any resource. That they're on the new API
 			// key is checked by TestAPIKeyService_Create_ChecksFields.
 			expectFieldChecks(decider, []string{"name"})
-			decider.EXPECT().Can(actionRead, mock.Anything).Return(tt.canRead, nil).Once()
+			decider.EXPECT().Can(actions.Read(), mock.Anything).Return(tt.canRead, nil).Once()
 			if tt.canRead {
-				for i, action := range readFields.Actions() {
+				for i, action := range actions.ReadFields().Actions() {
 					decider.EXPECT().Can(action, mock.Anything).
-						Return(slices.Contains(tt.readable, readFields.Fields()[i]), nil).Once()
+						Return(slices.Contains(tt.readable, actions.ReadFields().Fields()[i]), nil).Once()
 				}
 			}
 			repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(stored, nil)
@@ -347,27 +328,10 @@ func TestAPIKeyService_Create_ReadableFields(t *testing.T) {
 	}
 }
 
-// TestAPIKeyService_ReadFieldActions checks that every field of APIKey but the ID has an action for reading
-// it, named like its member in responses, so that no field is revealed unchecked or hidden from everyone.
-func TestAPIKeyService_ReadFieldActions(t *testing.T) {
-	t.Parallel()
-	var fields []string
-	for field := range reflect.TypeFor[APIKey]().Fields() {
-		if field.Name == "ID" {
-			continue
-		}
-		name := []rune(strings.Replace(field.Name, "ID", "Id", 1))
-		name[0] = unicode.ToLower(name[0])
-		fields = append(fields, string(name))
-	}
-
-	assert.ElementsMatch(t, fields, ReadableFields())
-}
-
 func TestAPIKeyService_Declaration(t *testing.T) {
 	t.Parallel()
 
-	declaration := Declaration()
+	declaration := Actions().Declaration()
 
 	assert.Equal(t, "APIKey", declaration.Type)
 	assert.True(t, declaration.Owned, "policies must be able to refer to the owner of an API key")
@@ -393,7 +357,7 @@ func TestAPIKeyService_Get_HiddenFields(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	servicetest.ExpectReadableFields(decider, readFields, storedResource, "name", "keySuffix")
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "name", "keySuffix")
 
 	got, err := svc.Get(t.Context(), actor, identityID, stored.ID)
 	require.NoError(t, err)
@@ -411,8 +375,8 @@ func TestAPIKeyService_Get_NeverExpires(t *testing.T) {
 	rec := stored
 	rec.ExpiresAt = nil
 	repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(rec, nil)
-	decider.EXPECT().Can(actionRead, storedResource).Return(true, nil)
-	servicetest.ExpectReadableFields(decider, readFields, storedResource, "expiresAt")
+	decider.EXPECT().Can(actions.Read(), storedResource).Return(true, nil)
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "expiresAt")
 
 	got, err := svc.Get(t.Context(), actor, identityID, stored.ID)
 	require.NoError(t, err)
@@ -444,7 +408,7 @@ func TestAPIKeyService_List_Pages(t *testing.T) {
 			svc, repo := newTestServiceWith(t, authorizer)
 			expectOwnerReadable(repo, decider)
 			repo.EXPECT().ListAll(mock.Anything, identityID).Return(newRecords(1, 2, 3, 4, 5, 6, 7, 8, 9), nil)
-			decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+			decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 				func(_ authz.Action, resource authz.Resource) (bool, error) {
 					assert.Equal(t, "APIKey", resource.Type)
 					assert.Equal(t, owner, resource.Owner)
@@ -467,7 +431,7 @@ func TestAPIKeyService_List_Pages(t *testing.T) {
 			assert.Equal(t, tt.wantHasMore, got.HasMore)
 			wantFieldChecks := map[byte]int{}
 			for _, id := range tt.wantIDs {
-				wantFieldChecks[id] = len(readFields.Fields())
+				wantFieldChecks[id] = len(actions.ReadFields().Fields())
 			}
 			assert.Equal(t, wantFieldChecks, fieldChecks, "the fields of the rows on the page must be checked, and only those")
 		})
@@ -497,7 +461,7 @@ func TestAPIKeyService_List_Empty(t *testing.T) {
 			svc, repo := newTestServiceWith(t, authorizer)
 			expectOwnerReadable(repo, decider)
 			repo.EXPECT().ListAll(mock.Anything, identityID).Return(recs, nil)
-			decider.EXPECT().Can(actionRead, mock.Anything).Return(false, nil).Maybe()
+			decider.EXPECT().Can(actions.Read(), mock.Anything).Return(false, nil).Maybe()
 
 			got, err := svc.List(t.Context(), actor, identityID, 0, 5)
 			require.NoError(t, err)
@@ -516,7 +480,7 @@ func TestAPIKeyService_List_ChecksContextBetweenRows(t *testing.T) {
 	t.Cleanup(cancel)
 	expectOwnerReadable(repo, decider)
 	repo.EXPECT().ListAll(mock.Anything, identityID).Return(newRecords(1, 2, 3), nil)
-	decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+	decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 		func(authz.Action, authz.Resource) (bool, error) {
 			cancel()
 			return true, nil
@@ -553,7 +517,7 @@ func TestAPIKeyService_Delete(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	decider.EXPECT().Can(actionDelete, storedResource).Return(true, nil)
+	decider.EXPECT().Can(actions.Delete(), storedResource).Return(true, nil)
 	repo.EXPECT().Delete(mock.Anything, identityID, stored.ID).Return(nil)
 
 	assert.NoError(t, svc.Delete(t.Context(), actor, identityID, stored.ID))
@@ -637,7 +601,7 @@ func TestAPIKeyService_KeyHidden(t *testing.T) {
 			svc, repo := newTestServiceWith(t, authorizer)
 			expectOwnerReadable(repo, decider)
 			repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(stored, nil)
-			decider.EXPECT().Can(actionRead, storedResource).Return(false, nil)
+			decider.EXPECT().Can(actions.Read(), storedResource).Return(false, nil)
 
 			err := all[name](svc)
 
@@ -655,7 +619,7 @@ func TestAPIKeyService_Delete_Denied(t *testing.T) {
 	// The mock fails the test on a write.
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	decider.EXPECT().Can(actionDelete, storedResource).Return(false, nil)
+	decider.EXPECT().Can(actions.Delete(), storedResource).Return(false, nil)
 
 	err := svc.Delete(t.Context(), actor, identityID, stored.ID)
 
@@ -804,7 +768,7 @@ func TestAPIKeyService_AuthorizationFails(t *testing.T) {
 		// The mock fails the test on a write.
 		svc, repo := newTestServiceWith(t, authorizer)
 		expectReadable(repo, decider)
-		decider.EXPECT().Can(actionDelete, storedResource).Return(false, errDecision)
+		decider.EXPECT().Can(actions.Delete(), storedResource).Return(false, errDecision)
 
 		assertFailed(t, svc.Delete(t.Context(), actor, identityID, stored.ID))
 	})

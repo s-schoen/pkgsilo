@@ -81,7 +81,7 @@ func (s *policyService) Create(ctx context.Context, actor uuid.UUID, in PolicyIn
 	}
 
 	id := uuid.NewV4()
-	if err := createFields.Check(decider, toResource(id)); err != nil {
+	if err := actions.CreateFields().Check(decider, toResource(id)); err != nil {
 		return Policy{}, fmt.Errorf("create policy: %w", err)
 	}
 
@@ -91,7 +91,7 @@ func (s *policyService) Create(ctx context.Context, actor uuid.UUID, in PolicyIn
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
-	fields, err := readFields.ReadableIf(decider, actionRead, toResource(id))
+	fields, err := actions.ReadFields().ReadableIf(decider, actions.Read(), toResource(id))
 	if err != nil {
 		return Policy{}, fmt.Errorf("create policy: %w", err)
 	}
@@ -123,7 +123,7 @@ func (s *policyService) Create(ctx context.Context, actor uuid.UUID, in PolicyIn
 		return Policy{}, fmt.Errorf("create policy: %w", translateError(err))
 	}
 
-	return toPolicy(rec, fields), nil
+	return toPolicy.Map(rec, fields), nil
 }
 
 func (s *policyService) Get(ctx context.Context, actor, id uuid.UUID) (Policy, error) {
@@ -137,12 +137,12 @@ func (s *policyService) Get(ctx context.Context, actor, id uuid.UUID) (Policy, e
 		return Policy{}, fmt.Errorf("get policy: %w", err)
 	}
 
-	fields, err := readFields.Readable(decider, toResource(id))
+	fields, err := actions.ReadFields().Readable(decider, toResource(id))
 	if err != nil {
 		return Policy{}, fmt.Errorf("get policy: %w", err)
 	}
 
-	return toPolicy(rec, fields), nil
+	return toPolicy.Map(rec, fields), nil
 }
 
 func (s *policyService) List(ctx context.Context, actor uuid.UUID, offset, limit int) (pagination.Page[Policy], error) {
@@ -156,7 +156,7 @@ func (s *policyService) List(ctx context.Context, actor uuid.UUID, offset, limit
 		return pagination.Page[Policy]{}, fmt.Errorf("list policies: %w", err)
 	}
 
-	readable, err := authz.Filter(ctx, decider, actionRead, recs, func(rec repository.PolicyRecord) authz.Resource {
+	readable, err := authz.Filter(ctx, decider, actions.Read(), recs, func(rec repository.PolicyRecord) authz.Resource {
 		return toResource(rec.ID)
 	})
 	if err != nil {
@@ -167,11 +167,11 @@ func (s *policyService) List(ctx context.Context, actor uuid.UUID, offset, limit
 	page := pagination.FromAll(readable, offset, limit)
 	policies := make([]Policy, len(page.Items))
 	for i, rec := range page.Items {
-		fields, err := readFields.Readable(decider, toResource(rec.ID))
+		fields, err := actions.ReadFields().Readable(decider, toResource(rec.ID))
 		if err != nil {
 			return pagination.Page[Policy]{}, fmt.Errorf("list policies: %w", err)
 		}
-		policies[i] = toPolicy(rec, fields)
+		policies[i] = toPolicy.Map(rec, fields)
 	}
 
 	return pagination.Page[Policy]{Items: policies, HasMore: page.HasMore}, nil
@@ -188,7 +188,7 @@ func (s *policyService) Replace(ctx context.Context, actor, id uuid.UUID, in Pol
 	}
 
 	// Replacing sets every field, so each one is checked, even if its value doesn't change.
-	if err := updateFields.Check(decider, toResource(id)); err != nil {
+	if err := actions.UpdateFields().Check(decider, toResource(id)); err != nil {
 		return Policy{}, fmt.Errorf("replace policy: %w", err)
 	}
 
@@ -198,7 +198,7 @@ func (s *policyService) Replace(ctx context.Context, actor, id uuid.UUID, in Pol
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
-	fields, err := readFields.Readable(decider, toResource(id))
+	fields, err := actions.ReadFields().Readable(decider, toResource(id))
 	if err != nil {
 		return Policy{}, fmt.Errorf("replace policy: %w", err)
 	}
@@ -227,7 +227,7 @@ func (s *policyService) Replace(ctx context.Context, actor, id uuid.UUID, in Pol
 		return Policy{}, fmt.Errorf("replace policy: %w", translateError(err))
 	}
 
-	return toPolicy(rec, fields), nil
+	return toPolicy.Map(rec, fields), nil
 }
 
 func (s *policyService) Patch(ctx context.Context, actor, id uuid.UUID, patch PolicyPatch) (Policy, error) {
@@ -242,18 +242,18 @@ func (s *policyService) Patch(ctx context.Context, actor, id uuid.UUID, patch Po
 	}
 
 	// Patching sets only the fields in the patch, so only those are checked.
-	if err := updateFields.Only(patch.fields()...).Check(decider, toResource(id)); err != nil {
+	if err := actions.UpdateFields().Only(authz.SetFields(patch)...).Check(decider, toResource(id)); err != nil {
 		return Policy{}, fmt.Errorf("patch policy: %w", err)
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
-	fields, err := readFields.Readable(decider, toResource(id))
+	fields, err := actions.ReadFields().Readable(decider, toResource(id))
 	if err != nil {
 		return Policy{}, fmt.Errorf("patch policy: %w", err)
 	}
 
-	if len(patch.fields()) == 0 {
-		return toPolicy(rec, fields), nil
+	if len(authz.SetFields(patch)) == 0 {
+		return toPolicy.Map(rec, fields), nil
 	}
 
 	err = s.repo.Write(ctx, func(w repository.PolicyWriter) error {
@@ -279,7 +279,7 @@ func (s *policyService) Patch(ctx context.Context, actor, id uuid.UUID, patch Po
 		return Policy{}, fmt.Errorf("patch policy: %w", translateError(err))
 	}
 
-	return toPolicy(rec, fields), nil
+	return toPolicy.Map(rec, fields), nil
 }
 
 func (s *policyService) Delete(ctx context.Context, actor, id uuid.UUID) error {
@@ -292,7 +292,7 @@ func (s *policyService) Delete(ctx context.Context, actor, id uuid.UUID) error {
 		return fmt.Errorf("delete policy: %w", err)
 	}
 
-	can, err := decider.Can(actionDelete, toResource(id))
+	can, err := decider.Can(actions.Delete(), toResource(id))
 	if err != nil {
 		return fmt.Errorf("delete policy: %w", err)
 	}
@@ -321,7 +321,7 @@ func (s *policyService) getReadable(
 		return repository.PolicyRecord{}, translateError(err)
 	}
 
-	can, err := decider.Can(actionRead, toResource(id))
+	can, err := decider.Can(actions.Read(), toResource(id))
 	if err != nil {
 		return repository.PolicyRecord{}, fmt.Errorf("check read: %w", err)
 	}
@@ -410,19 +410,9 @@ func checkTotal(ctx context.Context, w repository.PolicyWriter, id uuid.UUID, st
 
 // toResource returns the policy with the given ID as a resource of a decision.
 func toResource(id uuid.UUID) authz.Resource {
-	return authz.Resource{Type: policyType, ID: id}
+	return authz.Resource{Type: actions.Type(), ID: id}
 }
 
-// toPolicy returns the policy of the record with its ID and the readable fields. Every other field stays
-// hidden, so that one that's missing here can't be revealed by mistake.
-func toPolicy(rec repository.PolicyRecord, fields authz.ReadableFields) Policy {
-	return Policy{
-		ID:        rec.ID,
-		Name:      authz.Reveal(fields, "name", rec.Name),
-		Source:    authz.Reveal(fields, "source", rec.Source),
-		CreatedBy: authz.Reveal(fields, "createdBy", rec.CreatedBy),
-		UpdatedBy: authz.Reveal(fields, "updatedBy", rec.UpdatedBy),
-		CreatedAt: authz.Reveal(fields, "createdAt", rec.CreatedAt),
-		UpdatedAt: authz.Reveal(fields, "updatedAt", rec.UpdatedAt),
-	}
-}
+// toPolicy builds the policy of a record, with its ID and the fields that the actor may read. Every other
+// field stays hidden.
+var toPolicy = authz.NewMapper[repository.PolicyRecord, Policy](actions)
