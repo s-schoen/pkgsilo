@@ -136,7 +136,7 @@ func TestAuthenticator_Logs(t *testing.T) {
 			svc := mocks.NewMockAPIKeyService(t)
 			svc.EXPECT().Authenticate(mock.Anything, presentedKey).Return(authenticatedKey, tt.err)
 			logger, buf := loggertest.NewJSON()
-			r := router.New(router.Options{}, logger)
+			r := router.New(router.Options{}, logger, noop.NewMeterProvider())
 			r.With(authn.Require(logger, noop.NewMeterProvider(), NewAuthenticator(svc))).
 				Get("/", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 

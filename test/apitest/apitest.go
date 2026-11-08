@@ -37,7 +37,7 @@ var Actor = uuid.MustParse("5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b")
 // request to them is authenticated as Actor.
 func Mount(prefix string, routes http.Handler) http.Handler {
 	logger := loggertest.Discard()
-	r := router.New(router.Options{}, logger)
+	r := router.New(router.Options{}, logger, noop.NewMeterProvider())
 	r.With(authn.Require(logger, noop.NewMeterProvider(), actorAuthenticator{})).Mount(prefix, routes)
 
 	return r
