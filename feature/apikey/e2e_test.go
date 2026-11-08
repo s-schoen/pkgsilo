@@ -157,8 +157,8 @@ func TestAPIKeys_Lifecycle(t *testing.T) {
 	assert.Equal(t, "no-store", resp.Header().Get("Cache-Control"))
 	assert.Equal(t, envelope.Visible(ada.ID), created.IdentityID)
 	assert.Equal(t, envelope.Visible("ci"), created.Name)
-	assert.Regexp(t, `^psk_[A-Z2-7]{52}$`, created.Key)
-	assert.Equal(t, envelope.Visible(created.Key[len(created.Key)-4:]), created.KeySuffix)
+	assert.Regexp(t, `^psk_[A-Z2-7]{52}$`, created.Key.Value)
+	assert.Equal(t, envelope.Visible(created.Key.Value[len(created.Key.Value)-4:]), created.KeySuffix)
 	assert.Equal(t, expiresAt, *created.ExpiresAt.Value)
 	assert.Equal(t, envelope.Visible[*time.Time](nil), created.LastUsedAt)
 	assert.WithinDuration(t, time.Now(), created.CreatedAt.Value, time.Minute)
@@ -210,7 +210,7 @@ func TestAPIKeys_NamesNeedNotBeUnique(t *testing.T) {
 	// 1. Create.
 	_, keysPath := createIdentity(api, "ada")
 	first, second := createKey(api, keysPath, "ci"), createKey(api, keysPath, "ci")
-	assert.NotEqual(t, first.Key, second.Key)
+	assert.NotEqual(t, first.Key.Value, second.Key.Value)
 
 	// 2. List.
 	listed := apitest.DecodeCollection[apiKey](api.Get(keysPath), http.StatusOK)
@@ -336,7 +336,8 @@ func TestAPIKeys_ManageOwn(t *testing.T) {
 	assert.Equal(t, []uuid.UUID{initial[0], lasting.ID}, keyIDs(asAda, keysPath))
 
 	// 5. Use the other.
-	asAda.WithHeader("X-API-Key", lasting.Key).Get(identitiesPath + "/" + ada.ID.String()).AssertStatus(http.StatusOK)
+	asAda.WithHeader("X-API-Key", lasting.Key.Value).Get(identitiesPath + "/" + ada.ID.String()).
+		AssertStatus(http.StatusOK)
 }
 
 // TestAPIKeys_OfHiddenIdentity checks that ada, by the seeded policies, can't use the API keys of grace,
@@ -524,12 +525,12 @@ func TestAPIKeys_CreateUnreadable(t *testing.T) {
 	// 3. Create.
 	resp := asAda.Post(keysPath, `{"name":"ci"}`)
 	created := apitest.DecodeResource[createdAPIKey](resp, http.StatusCreated)
-	assert.Regexp(t, `^psk_[A-Z2-7]{52}$`, created.Key)
-	resp.AssertCreated(keysPath+"/"+created.ID.String(), `{"id":"`+created.ID.String()+`","key":"`+created.Key+`"}`)
+	assert.Regexp(t, `^psk_[A-Z2-7]{52}$`, created.Key.Value)
+	resp.AssertCreated(keysPath+"/"+created.ID.String(), `{"id":"`+created.ID.String()+`","key":"`+created.Key.Value+`"}`)
 
 	// 4. Use it.
 	asAda.Get(keysPath + "/" + created.ID.String()).AssertProblemType(apiKeyNotFound)
-	asAda.WithHeader("X-API-Key", created.Key).Get(identitiesPath + "/" + ada.ID.String()).
+	asAda.WithHeader("X-API-Key", created.Key.Value).Get(identitiesPath + "/" + ada.ID.String()).
 		AssertStatus(http.StatusOK)
 }
 
@@ -579,7 +580,7 @@ func TestAuthentication_RejectedKeys(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
 	_, keysPath := createIdentity(api, "ada")
-	key := createKey(api, keysPath, "ci").Key
+	key := createKey(api, keysPath, "ci").Key.Value
 
 	for name, rejected := range map[string]string{
 		"without the prefix": "not-a-key",
@@ -614,7 +615,7 @@ func TestAuthentication_KeyActsAsItsIdentity(t *testing.T) {
 		AssertNoContent()
 	key := createKey(api, adaKeysPath, "ci")
 	assert.Equal(t, envelope.Visible[*time.Time](nil), key.LastUsedAt)
-	asAda := api.WithHeader("X-API-Key", key.Key)
+	asAda := api.WithHeader("X-API-Key", key.Key.Value)
 
 	// 2. Create grace.
 	grace, graceKeysPath := createIdentity(asAda, "grace")
@@ -650,15 +651,15 @@ func TestAuthentication_DeletedKeyStopsWorking(t *testing.T) {
 	// 1. Create.
 	_, keysPath := createIdentity(api, "ada")
 	first, second := createKey(api, keysPath, "first"), createKey(api, keysPath, "second")
-	api.WithHeader("X-API-Key", first.Key).Get(identitiesPath).AssertStatus(http.StatusOK)
-	api.WithHeader("X-API-Key", second.Key).Get(identitiesPath).AssertStatus(http.StatusOK)
+	api.WithHeader("X-API-Key", first.Key.Value).Get(identitiesPath).AssertStatus(http.StatusOK)
+	api.WithHeader("X-API-Key", second.Key.Value).Get(identitiesPath).AssertStatus(http.StatusOK)
 
 	// 2. Delete the first.
 	api.Delete(keysPath + "/" + first.ID.String()).AssertNoContent()
 
 	// 3. Use both.
-	assertUnauthorized(t, api.WithHeader("X-API-Key", first.Key).Get(identitiesPath))
-	api.WithHeader("X-API-Key", second.Key).Get(identitiesPath).AssertStatus(http.StatusOK)
+	assertUnauthorized(t, api.WithHeader("X-API-Key", first.Key.Value).Get(identitiesPath))
+	api.WithHeader("X-API-Key", second.Key.Value).Get(identitiesPath).AssertStatus(http.StatusOK)
 }
 
 // TestAuthentication_DeletedIdentityStopsWorking checks that the keys of an identity don't outlive it:
@@ -672,7 +673,7 @@ func TestAuthentication_DeletedIdentityStopsWorking(t *testing.T) {
 
 	// 1. Create.
 	ada, keysPath := createIdentity(api, "ada")
-	asAda := api.WithHeader("X-API-Key", createKey(api, keysPath, "ci").Key)
+	asAda := api.WithHeader("X-API-Key", createKey(api, keysPath, "ci").Key.Value)
 	asAda.Get(identitiesPath).AssertStatus(http.StatusOK)
 
 	// 2. Delete ada.
@@ -696,7 +697,7 @@ func TestAuthentication_ExpiredKeyStopsWorking(t *testing.T) {
 	expiresAt := time.Now().Add(3 * time.Second).UTC()
 	created := apitest.DecodeResource[createdAPIKey](
 		api.Post(keysPath, `{"name":"ci","expiresAt":"`+expiresAt.Format(time.RFC3339Nano)+`"}`), http.StatusCreated)
-	asAda := api.WithHeader("X-API-Key", created.Key)
+	asAda := api.WithHeader("X-API-Key", created.Key.Value)
 	asAda.Get(identitiesPath).AssertStatus(http.StatusOK)
 
 	// 2. Wait for the expiry.
@@ -747,7 +748,7 @@ func TestAuthentication_FirstStart(t *testing.T) {
 	assert.Equal(t, envelope.Visible(admin.ID), own.CreatedBy)
 
 	// 4. Delete the bootstrap key.
-	asOwn := api.WithHeader("X-API-Key", own.Key)
+	asOwn := api.WithHeader("X-API-Key", own.Key.Value)
 	asOwn.Delete(keysPath + "/" + bootstrap.ID.String()).AssertNoContent()
 
 	// 5. Use both.

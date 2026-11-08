@@ -11,11 +11,11 @@ import (
 
 type keyBody struct {
 	ID        string            `json:"id"`
-	Name      Field[string]     `json:"name,omitzero"`
-	ExpiresAt Field[*time.Time] `json:"expiresAt,omitzero"`
+	Name      Field[string]     `json:"name"`
+	ExpiresAt Field[*time.Time] `json:"expiresAt"`
 }
 
-func TestField_MarshalJSON(t *testing.T) {
+func TestField_MarshalJSONTo_Resource(t *testing.T) {
 	t.Parallel()
 	expiresAt := time.Date(2026, time.November, 8, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
@@ -26,31 +26,68 @@ func TestField_MarshalJSON(t *testing.T) {
 		{
 			name: "visible",
 			body: keyBody{ID: "key-1", Name: Visible("ci"), ExpiresAt: Visible(&expiresAt)},
-			want: `{"id":"key-1","name":"ci","expiresAt":"2026-11-08T12:00:00Z"}`,
+			want: `{"data":{"id":"key-1","name":"ci","expiresAt":"2026-11-08T12:00:00Z"}}`,
 		},
 		{
 			name: "visible null",
 			body: keyBody{ID: "key-1", Name: Visible("ci"), ExpiresAt: Visible[*time.Time](nil)},
-			want: `{"id":"key-1","name":"ci","expiresAt":null}`,
+			want: `{"data":{"id":"key-1","name":"ci","expiresAt":null}}`,
 		},
 		{
 			name: "visible zero value",
 			body: keyBody{ID: "key-1", Name: Visible("")},
-			want: `{"id":"key-1","name":""}`,
+			want: `{"data":{"id":"key-1","name":""}}`,
 		},
 		{
 			name: "hidden",
 			body: keyBody{ID: "key-1"},
-			want: `{"id":"key-1"}`,
+			want: `{"data":{"id":"key-1"}}`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.JSONEq(t, tt.want, encode(t, tt.body))
+			assert.JSONEq(t, tt.want, encode(t, NewResource(tt.body)))
 		})
 	}
+}
+
+func TestField_MarshalJSONTo_Collection(t *testing.T) {
+	t.Parallel()
+	c := NewCollection([]keyBody{
+		{ID: "key-1", Name: Visible("ci")},
+		{ID: "key-2", ExpiresAt: Visible[*time.Time](nil)},
+	}, Pagination{Offset: 0, Limit: 2})
+
+	assert.JSONEq(t, `{
+		"data": [{"id":"key-1","name":"ci"},{"id":"key-2","expiresAt":null}],
+		"pagination": {"offset":0,"limit":2,"nextOffset":null}
+	}`, encode(t, c), "hidden fields must be absent, and the pagination must keep its zero members")
+}
+
+func TestField_MarshalJSONTo_ZeroMembersOfValue(t *testing.T) {
+	t.Parallel()
+	type window struct {
+		From int  `json:"from"`
+		To   *int `json:"to"`
+	}
+	type body struct {
+		ID     string        `json:"id"`
+		Window Field[window] `json:"window"`
+	}
+
+	assert.JSONEq(t, `{"data":{"id":"w-1","window":{"from":0,"to":null}}}`,
+		encode(t, NewResource(body{ID: "w-1", Window: Visible(window{})})),
+		"the value of a visible field must keep its zero members")
+}
+
+func TestField_MarshalJSONTo_HiddenOutsideEnvelope(t *testing.T) {
+	t.Parallel()
+
+	_, err := json.Marshal(keyBody{ID: "key-1"})
+
+	require.ErrorIs(t, err, errHiddenFieldEncoded, "a hidden field must not be encoded as null")
 }
 
 func TestField_UnmarshalJSON(t *testing.T) {

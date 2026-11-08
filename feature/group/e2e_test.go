@@ -68,7 +68,7 @@ func memberIDs(api *apitest.Client, groupPath string) []uuid.UUID {
 	members := apitest.DecodeCollection[member](api.Get(groupPath+"/members"), http.StatusOK).Data
 	ids := make([]uuid.UUID, len(members))
 	for i, m := range members {
-		ids[i] = m.IdentityID
+		ids[i] = m.IdentityID.Value
 	}
 
 	return ids
@@ -233,17 +233,17 @@ func TestGroups_Members(t *testing.T) {
 	// 6. List the first page.
 	first := apitest.DecodeCollection[member](api.Get(membersPath+"?limit=2"), http.StatusOK)
 	if assert.Len(t, first.Data, 2) {
-		assert.Equal(t, ada, first.Data[0].IdentityID, "members are listed in the order they were added")
-		assert.Equal(t, grace, first.Data[1].IdentityID)
-		assert.Equal(t, adminID(api), first.Data[0].CreatedBy, "the change is attributed to the caller")
-		assert.WithinDuration(t, time.Now(), first.Data[0].CreatedAt, time.Minute)
+		assert.Equal(t, ada, first.Data[0].IdentityID.Value, "members are listed in the order they were added")
+		assert.Equal(t, grace, first.Data[1].IdentityID.Value)
+		assert.Equal(t, adminID(api), first.Data[0].CreatedBy.Value, "the change is attributed to the caller")
+		assert.WithinDuration(t, time.Now(), first.Data[0].CreatedAt.Value, time.Minute)
 	}
 	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, first.Pagination)
 
 	// 7. List the last page.
 	last := apitest.DecodeCollection[member](api.Get(membersPath+"?offset=2&limit=2"), http.StatusOK)
 	if assert.Len(t, last.Data, 1) {
-		assert.Equal(t, margaret, last.Data[0].IdentityID)
+		assert.Equal(t, margaret, last.Data[0].IdentityID.Value)
 	}
 	assert.Equal(t, envelope.Pagination{Offset: 2, Limit: 2}, last.Pagination)
 

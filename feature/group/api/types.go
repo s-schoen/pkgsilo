@@ -72,11 +72,11 @@ func (r PatchGroupRequest) toPatch() service.GroupPatch {
 // absent.
 type GroupResponse struct {
 	ID        uuid.UUID                 `json:"id"`
-	Name      envelope.Field[string]    `json:"name,omitzero"`
-	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy,omitzero"`
-	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy,omitzero"`
-	CreatedAt envelope.Field[time.Time] `json:"createdAt,omitzero"`
-	UpdatedAt envelope.Field[time.Time] `json:"updatedAt,omitzero"`
+	Name      envelope.Field[string]    `json:"name"`
+	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy"`
+	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy"`
+	CreatedAt envelope.Field[time.Time] `json:"createdAt"`
+	UpdatedAt envelope.Field[time.Time] `json:"updatedAt"`
 }
 
 func toGroupResponse(g service.Group) GroupResponse {
@@ -92,17 +92,17 @@ func toGroupResponse(g service.Group) GroupResponse {
 
 // MemberResponse is the representation of a group member in responses: the identity and who added
 // it when. Reading the members of a group is one action for the whole member list, so no member of it is
-// hidden.
+// hidden; they are envelope.Fields only because every member of a representation is.
 type MemberResponse struct {
-	IdentityID uuid.UUID `json:"identityId"`
-	CreatedBy  uuid.UUID `json:"createdBy"`
-	CreatedAt  time.Time `json:"createdAt"`
+	IdentityID envelope.Field[uuid.UUID] `json:"identityId"`
+	CreatedBy  envelope.Field[uuid.UUID] `json:"createdBy"`
+	CreatedAt  envelope.Field[time.Time] `json:"createdAt"`
 }
 
 func toMemberResponse(m service.Member) MemberResponse {
 	return MemberResponse{
-		IdentityID: m.IdentityID,
-		CreatedBy:  m.CreatedBy,
-		CreatedAt:  m.CreatedAt,
+		IdentityID: envelope.Visible(m.IdentityID),
+		CreatedBy:  envelope.Visible(m.CreatedBy),
+		CreatedAt:  envelope.Visible(m.CreatedAt),
 	}
 }

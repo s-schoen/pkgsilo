@@ -89,12 +89,12 @@ func (r PatchIdentityRequest) toPatch() service.IdentityPatch {
 // read is absent.
 type IdentityResponse struct {
 	ID          uuid.UUID                 `json:"id"`
-	Username    envelope.Field[string]    `json:"username,omitzero"`
-	DisplayName envelope.Field[string]    `json:"displayName,omitzero"`
-	CreatedBy   envelope.Field[uuid.UUID] `json:"createdBy,omitzero"`
-	UpdatedBy   envelope.Field[uuid.UUID] `json:"updatedBy,omitzero"`
-	CreatedAt   envelope.Field[time.Time] `json:"createdAt,omitzero"`
-	UpdatedAt   envelope.Field[time.Time] `json:"updatedAt,omitzero"`
+	Username    envelope.Field[string]    `json:"username"`
+	DisplayName envelope.Field[string]    `json:"displayName"`
+	CreatedBy   envelope.Field[uuid.UUID] `json:"createdBy"`
+	UpdatedBy   envelope.Field[uuid.UUID] `json:"updatedBy"`
+	CreatedAt   envelope.Field[time.Time] `json:"createdAt"`
+	UpdatedAt   envelope.Field[time.Time] `json:"updatedAt"`
 }
 
 func toIdentityResponse(i service.Identity) IdentityResponse {
