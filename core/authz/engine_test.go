@@ -8,8 +8,10 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"pkgsilo/test/databasetest"
+	"pkgsilo/test/telemetrytest"
 )
 
 // insertIdentity stores an identity row for memberships to refer to and returns its ID. The table belongs
@@ -119,7 +121,7 @@ func identityResource(id uuid.UUID, groups ...uuid.UUID) Resource {
 func TestEngine_SeededPolicies(t *testing.T) {
 	t.Parallel()
 	db := databasetest.New(t)
-	engine := New(db)
+	engine := New(db, noop.NewMeterProvider())
 	ada := insertIdentity(t, db)
 	grace := insertIdentity(t, db)
 	otherAction := NewAction("identity:delete")
@@ -163,7 +165,7 @@ func TestEngine_NoPoliciesDeniesEverything(t *testing.T) {
 	removeSeededPolicies(t, db)
 	ada := insertIdentity(t, db)
 
-	assertCan(t, false, New(db), ada, testAction, identityResource(ada))
+	assertCan(t, false, New(db, noop.NewMeterProvider()), ada, testAction, identityResource(ada))
 }
 
 func TestEngine_ActionGroups(t *testing.T) {
@@ -171,7 +173,7 @@ func TestEngine_ActionGroups(t *testing.T) {
 	db := databasetest.New(t)
 	removeSeededPolicies(t, db)
 	addPolicy(t, db, `permit (principal, action in Action::"read", resource);`)
-	engine := New(db)
+	engine := New(db, noop.NewMeterProvider())
 	ada := insertIdentity(t, db)
 	grace := insertIdentity(t, db)
 
@@ -189,7 +191,7 @@ func TestEngine_ForbidOnActionGroupOverridesPermit(t *testing.T) {
 	`)
 	ada := insertIdentity(t, db)
 
-	assertCan(t, false, New(db), ada, testAction, identityResource(ada))
+	assertCan(t, false, New(db, noop.NewMeterProvider()), ada, testAction, identityResource(ada))
 }
 
 func TestEngine_GroupsOfPrincipal(t *testing.T) {
@@ -200,7 +202,7 @@ func TestEngine_GroupsOfPrincipal(t *testing.T) {
 	readers := insertGroup(t, db, member)
 	removeSeededPolicies(t, db)
 	addPolicy(t, db, `permit (principal in Group::"`+readers.String()+`", action, resource);`)
-	engine := New(db)
+	engine := New(db, noop.NewMeterProvider())
 
 	assertCan(t, true, engine, member, testAction, identityResource(outsider))
 	assertCan(t, true, engine, member, NewAction("other:anything"), Resource{Type: "Other", ID: outsider})
@@ -219,7 +221,7 @@ func TestEngine_GroupsOfResource(t *testing.T) {
 		permit (principal, action, resource in Group::"`+visible.String()+`");
 		forbid (principal, action, resource in Group::"`+secret.String()+`");
 	`)
-	engine := New(db)
+	engine := New(db, noop.NewMeterProvider())
 
 	assertCan(t, true, engine, ada, testAction, identityResource(grace, visible))
 	assertCan(t, false, engine, ada, testAction, identityResource(grace))
@@ -236,7 +238,7 @@ func TestEngine_PrincipalInGroupResource(t *testing.T) {
 	maintainers := insertGroup(t, db, member)
 	removeSeededPolicies(t, db)
 	addPolicy(t, db, `permit (principal, action, resource is Group) when { principal in resource };`)
-	engine := New(db)
+	engine := New(db, noop.NewMeterProvider())
 	resource := Resource{Type: GroupType, ID: maintainers}
 
 	assertCan(t, true, engine, member, testAction, resource)
@@ -263,7 +265,7 @@ func TestEngine_Owner(t *testing.T) {
 		permit (principal == Identity::"`+ada.String()+`", action, resource is APIKey);
 		forbid (principal, action, resource is APIKey) when { resource.owner in Group::"`+secret.String()+`" };
 	`)
-	engine := New(db)
+	engine := New(db, noop.NewMeterProvider())
 
 	assertCan(t, true, engine, carol, testAction, ownedResource(carol))
 	assertCan(t, false, engine, carol, testAction, ownedResource(ada))
@@ -286,7 +288,7 @@ func TestEngine_MissingOwner(t *testing.T) {
 		forbid (principal, action, resource is APIKey) when { resource.owner == principal };
 	`)
 
-	decider, err := New(db).For(t.Context(), ada)
+	decider, err := New(db, noop.NewMeterProvider()).For(t.Context(), ada)
 	require.NoError(t, err)
 
 	can, err := decider.Can(testAction, Resource{Type: "APIKey", ID: uuid.NewV4()})
@@ -309,7 +311,7 @@ func TestEngine_FailingForbid(t *testing.T) {
 		forbid (principal, action, resource) `+failingCondition)
 	ada := insertIdentity(t, db)
 
-	decider, err := New(db).For(t.Context(), ada)
+	decider, err := New(db, noop.NewMeterProvider()).For(t.Context(), ada)
 	require.NoError(t, err)
 
 	can, err := decider.Can(testAction, identityResource(ada))
@@ -317,6 +319,41 @@ func TestEngine_FailingForbid(t *testing.T) {
 	assert.False(t, can, "a forbid that fails to evaluate must never result in access")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), policy.String()+"#1", "the error must name the policy and the statement")
+}
+
+// TestEngine_CountsDecisions checks that every decision is counted by its result only: allow, deny, or error
+// for a forbid that fails to evaluate.
+func TestEngine_CountsDecisions(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	removeSeededPolicies(t, db)
+	ada, bob := insertIdentity(t, db), insertIdentity(t, db)
+	addPolicy(t, db, `
+		permit (principal, action, resource);
+		forbid (principal, action, resource) when { principal == resource };
+		forbid (principal, action, resource is `+GroupType+`) `+failingCondition)
+	metrics := telemetrytest.New(t)
+
+	decider, err := New(db, metrics.MeterProvider()).For(t.Context(), ada)
+	require.NoError(t, err)
+	for range 2 {
+		can, err := decider.Can(testAction, identityResource(bob))
+		require.NoError(t, err)
+		require.True(t, can)
+	}
+	can, err := decider.Can(testAction, identityResource(ada))
+	require.NoError(t, err)
+	require.False(t, can)
+	_, err = decider.Can(testAction, Resource{Type: GroupType, ID: uuid.NewV4()})
+	require.Error(t, err)
+
+	got := map[string]int64{}
+	for _, point := range telemetrytest.SumPoints[int64](t, metrics, "pkgsilo.authz.decisions") {
+		require.Equal(t, 1, point.Attributes.Len(), "the decision is the only attribute")
+		decision, _ := point.Attributes.Value("pkgsilo.authz.decision")
+		got[decision.AsString()] = point.Value
+	}
+	assert.Equal(t, map[string]int64{"allow": 2, "deny": 1, "error": 1}, got)
 }
 
 // TestEngine_FailingPermit checks that a permit that fails to evaluate grants nothing, without failing the
@@ -341,7 +378,7 @@ func TestEngine_FailingPermit(t *testing.T) {
 			addPolicy(t, db, tt.source)
 			ada := insertIdentity(t, db)
 
-			assertCan(t, tt.wantCan, New(db), ada, testAction, identityResource(ada))
+			assertCan(t, tt.wantCan, New(db, noop.NewMeterProvider()), ada, testAction, identityResource(ada))
 		})
 	}
 }
@@ -354,7 +391,7 @@ func TestEngine_Revision(t *testing.T) {
 	db := databasetest.New(t)
 	ada := insertIdentity(t, db)
 	grace := insertIdentity(t, db)
-	first, second := New(db), New(db)
+	first, second := New(db, noop.NewMeterProvider()), New(db, noop.NewMeterProvider())
 	assertCan(t, false, first, ada, testAction, identityResource(grace))
 	assertCan(t, false, second, ada, testAction, identityResource(grace))
 
@@ -377,7 +414,7 @@ func TestEngine_Revision(t *testing.T) {
 func TestEngine_GroupsAreReadPerRequest(t *testing.T) {
 	t.Parallel()
 	db := databasetest.New(t)
-	engine := New(db)
+	engine := New(db, noop.NewMeterProvider())
 	ada := insertIdentity(t, db)
 	grace := insertIdentity(t, db)
 	readers := insertGroup(t, db)
@@ -394,7 +431,7 @@ func TestEngine_UnparsablePolicy(t *testing.T) {
 	db := databasetest.New(t)
 	policy := addPolicy(t, db, `permit (`)
 
-	_, err := New(db).For(t.Context(), uuid.NewV4())
+	_, err := New(db, noop.NewMeterProvider()).For(t.Context(), uuid.NewV4())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), policy.String(), "the error must name the policy")
@@ -409,7 +446,7 @@ func TestEngine_DatabaseFails(t *testing.T) {
 			_, err := db.ExecContext(t.Context(), `DROP TABLE `+table)
 			require.NoError(t, err)
 
-			_, err = New(db).For(t.Context(), uuid.NewV4())
+			_, err = New(db, noop.NewMeterProvider()).For(t.Context(), uuid.NewV4())
 
 			assert.Error(t, err)
 		})

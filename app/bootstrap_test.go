@@ -9,6 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"pkgsilo/core/audit"
 	"pkgsilo/core/authz"
@@ -104,7 +105,7 @@ func assertAdministrator(t *testing.T, db *sqlx.DB, identity uuid.UUID) {
 	require.NoError(t, db.GetContext(t.Context(), &source, "SELECT source FROM policies WHERE name = 'administrators'"))
 	assert.Equal(t, `permit (principal in Group::"`+group.String()+`", action, resource);`, source)
 
-	decider, err := authz.New(db).For(t.Context(), identity)
+	decider, err := authz.New(db, noop.NewMeterProvider()).For(t.Context(), identity)
 	require.NoError(t, err)
 	can, err := decider.Can(authz.NewAction("other:anything"), authz.Resource{Type: "Other", ID: uuid.NewV4()})
 	require.NoError(t, err)

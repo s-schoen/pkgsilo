@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"pkgsilo/core/authn"
 	"pkgsilo/core/router"
@@ -77,17 +78,26 @@ func TestAuthenticator_Authenticate_NoCredentials(t *testing.T) {
 
 func TestAuthenticator_Authenticate_Rejected(t *testing.T) {
 	t.Parallel()
-	for _, cause := range []error{service.ErrMalformedKey, service.ErrUnknownKey, service.ErrExpiredKey} {
-		t.Run(cause.Error(), func(t *testing.T) {
+	tests := []struct {
+		cause  error
+		reason error
+	}{
+		{service.ErrMalformedKey, authn.ErrMalformedCredentials},
+		{service.ErrUnknownKey, authn.ErrUnknownCredentials},
+		{service.ErrExpiredKey, authn.ErrExpiredCredentials},
+	}
+	for _, tt := range tests {
+		t.Run(tt.cause.Error(), func(t *testing.T) {
 			t.Parallel()
 			svc := mocks.NewMockAPIKeyService(t)
 			svc.EXPECT().Authenticate(mock.Anything, presentedKey).
-				Return(service.AuthenticatedKey{}, fmt.Errorf("authenticate: %w", cause))
+				Return(service.AuthenticatedKey{}, fmt.Errorf("authenticate: %w", tt.cause))
 
 			_, err := NewAuthenticator(svc).Authenticate(requestWithKey(t, presentedKey))
 
+			require.ErrorIs(t, err, tt.reason)
 			require.ErrorIs(t, err, authn.ErrInvalidCredentials)
-			assert.ErrorContains(t, err, cause.Error(), "the logs must tell the reason")
+			assert.ErrorContains(t, err, tt.cause.Error(), "the logs must tell the cause")
 		})
 	}
 }
@@ -127,7 +137,7 @@ func TestAuthenticator_Logs(t *testing.T) {
 			svc.EXPECT().Authenticate(mock.Anything, presentedKey).Return(authenticatedKey, tt.err)
 			logger, buf := loggertest.NewJSON()
 			r := router.New(router.Options{}, logger)
-			r.With(authn.Require(logger, NewAuthenticator(svc))).
+			r.With(authn.Require(logger, noop.NewMeterProvider(), NewAuthenticator(svc))).
 				Get("/", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 
 			apitest.NewClient(t, r).Do(requestWithKey(t, presentedKey)).AssertStatus(tt.wantStatus)
@@ -140,7 +150,8 @@ func TestAuthenticator_Logs(t *testing.T) {
 				assert.Equal(t, ciKey.ID.String(), request["api_key_id"])
 			} else {
 				assert.NotContains(t, request, "api_key_id")
-				assert.Contains(t, entries[0]["reason"], ciKey.ID.String(), "the rejection must name the expired key")
+				assert.Equal(t, "expired", entries[0]["reason"])
+				assert.Contains(t, entries[0]["error"], ciKey.ID.String(), "the rejection must name the expired key")
 			}
 		})
 	}

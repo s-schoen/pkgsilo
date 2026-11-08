@@ -40,11 +40,12 @@ const (
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
 // on the router that opts configures. All routes but the health check need an authenticated request.
 // API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger, and
-// metrics are recorded with meterProvider: every request but a health check is measured.
+// metrics are recorded with meterProvider: every request but a health check is measured, and so are
+// authentications and authorization decisions.
 func NewHandler(
 	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger, meterProvider metric.MeterProvider,
 ) http.Handler {
-	authorizer := authz.New(db)
+	authorizer := authz.New(db, meterProvider)
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db), authorizer)
 	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db), authorizer)
@@ -57,7 +58,7 @@ func NewHandler(
 	r.Route(apiPath, func(r chi.Router) {
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())
 		r.Group(func(r chi.Router) {
-			r.Use(authn.Require(logger, apikeyapi.NewAuthenticator(apiKeys)))
+			r.Use(authn.Require(logger, meterProvider, apikeyapi.NewAuthenticator(apiKeys)))
 			r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
 			r.Mount("/identities/{identityID}/api-keys", apikeyapi.NewHandler(apiKeys, logger).Routes())
 			r.Mount("/groups", groupapi.NewHandler(groups, logger).Routes())

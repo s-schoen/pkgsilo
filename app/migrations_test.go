@@ -8,6 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"pkgsilo/core/authz"
 	"pkgsilo/test/databasetest"
@@ -38,7 +39,7 @@ func TestManageOwnAPIKeysMigration(t *testing.T) {
 		down = "20261107213000_create_manage_own_api_keys_policy.down.sql"
 	)
 	db := databasetest.New(t)
-	engine := authz.New(db)
+	engine := authz.New(db, noop.NewMeterProvider())
 	ada := insertIdentityRow(t, db, "ada", uuid.NewV4())
 	grace := insertIdentityRow(t, db, "grace", uuid.NewV4())
 	deleteKey := authz.NewAction("apikey:delete")
@@ -74,7 +75,7 @@ func TestExtendSelfServicePoliciesMigration(t *testing.T) {
 		down = "20261108120000_extend_self_service_policies_to_fields.down.sql"
 	)
 	db := databasetest.New(t)
-	engine := authz.New(db)
+	engine := authz.New(db, noop.NewMeterProvider())
 	ada := insertIdentityRow(t, db, "ada", uuid.NewV4())
 	grace := insertIdentityRow(t, db, "grace", uuid.NewV4())
 	readUsername := authz.NewAction("identity:read:username", "read", "identity:readFields")
