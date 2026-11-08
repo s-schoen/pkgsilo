@@ -12,6 +12,8 @@ var (
 	ErrNotFound = errors.New("api key record not found")
 	// ErrIdentityNotFound is returned when a record refers to an identity that doesn't exist.
 	ErrIdentityNotFound = errors.New("api key identity not found")
+	// ErrTooManyRows is returned when loading all records of an identity would exceed pagination.MaxAllRows.
+	ErrTooManyRows = errors.New("too many api key records to load")
 )
 
 const (

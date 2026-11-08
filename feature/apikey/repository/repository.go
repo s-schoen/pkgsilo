@@ -8,6 +8,7 @@ import (
 	"uuid"
 
 	"pkgsilo/core/database"
+	"pkgsilo/core/pagination"
 )
 
 // APIKeyRepository stores API key records.
@@ -18,16 +19,17 @@ type APIKeyRepository interface {
 	Get(ctx context.Context, identityID, id uuid.UUID) (APIKeyRecord, error)
 	// GetByHash returns the record with the given key hash, whatever its identity.
 	GetByHash(ctx context.Context, keyHash []byte) (APIKeyRecord, error)
-	// List returns up to limit records of the given identity, skipping the first offset, ordered by
-	// creation time.
-	List(ctx context.Context, identityID uuid.UUID, offset, limit int) ([]APIKeyRecord, error)
+	// ListAll returns all records of the given identity, ordered by creation time. It returns an error
+	// wrapping ErrTooManyRows if there are more than pagination.MaxAllRows.
+	ListAll(ctx context.Context, identityID uuid.UUID) ([]APIKeyRecord, error)
 	// UpdateLastUsed sets the last use of the record with the given ID. A record that no longer
 	// exists is not an error: its key was deleted while it was in use.
 	UpdateLastUsed(ctx context.Context, id uuid.UUID, lastUsedAt time.Time) error
 	// Delete removes the record with the given ID of the given identity.
 	Delete(ctx context.Context, identityID, id uuid.UUID) error
-	// IdentityExists reports whether the identity with the given ID exists.
-	IdentityExists(ctx context.Context, identityID uuid.UUID) (bool, error)
+	// IdentityGroups returns the IDs of the groups that the identity with the given ID is a member of, in
+	// no particular order. It returns ErrIdentityNotFound if the identity doesn't exist.
+	IdentityGroups(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error)
 }
 
 const keyColumns = "id, identity_id, name, key_hash, key_suffix, expires_at, last_used_at, created_by, created_at"
@@ -84,21 +86,22 @@ func (r *PostgresAPIKeyRepository) GetByHash(ctx context.Context, keyHash []byte
 	return rec, nil
 }
 
-// List returns up to limit records of the given identity, skipping the first offset, ordered by
-// creation time.
-func (r *PostgresAPIKeyRepository) List(
-	ctx context.Context, identityID uuid.UUID, offset, limit int,
-) ([]APIKeyRecord, error) {
+// ListAll returns all records of the given identity, ordered by creation time. It returns an error
+// wrapping ErrTooManyRows if there are more than pagination.MaxAllRows.
+func (r *PostgresAPIKeyRepository) ListAll(ctx context.Context, identityID uuid.UUID) ([]APIKeyRecord, error) {
 	var recs []APIKeyRecord
 	err := r.db.SelectContext(ctx, &recs, `
 		SELECT `+keyColumns+` FROM api_keys
 		WHERE identity_id = $1
 		ORDER BY created_at, id
-		LIMIT $2 OFFSET $3`,
-		identityID, limit, offset,
+		LIMIT $2`,
+		identityID, pagination.MaxAllRows+1,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list api keys: %w", err)
+		return nil, fmt.Errorf("list all api keys: %w", err)
+	}
+	if len(recs) > pagination.MaxAllRows {
+		return nil, fmt.Errorf("list all api keys: over %d: %w", pagination.MaxAllRows, ErrTooManyRows)
 	}
 
 	return recs, nil
@@ -133,13 +136,33 @@ func (r *PostgresAPIKeyRepository) Delete(ctx context.Context, identityID, id uu
 	return nil
 }
 
-// IdentityExists reports whether the identity with the given ID exists.
-func (r *PostgresAPIKeyRepository) IdentityExists(ctx context.Context, identityID uuid.UUID) (bool, error) {
-	var exists bool
-	err := r.db.GetContext(ctx, &exists, `SELECT EXISTS (SELECT FROM identities WHERE id = $1)`, identityID)
+// IdentityGroups returns the IDs of the groups that the identity with the given ID is a member of, in no
+// particular order. It returns ErrIdentityNotFound if the identity doesn't exist. One query tells both, so
+// that the identity can't be deleted between them.
+func (r *PostgresAPIKeyRepository) IdentityGroups(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error) {
+	// One row per group, or one row without a group for an identity in none.
+	var rows []struct {
+		GroupID *uuid.UUID `db:"group_id"`
+	}
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT m.group_id FROM identities i
+		LEFT JOIN group_members m ON m.identity_id = i.id
+		WHERE i.id = $1`,
+		identityID,
+	)
 	if err != nil {
-		return false, fmt.Errorf("check api key identity: %w", err)
+		return nil, fmt.Errorf("list api key identity groups: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("list api key identity groups: %w", ErrIdentityNotFound)
 	}
 
-	return exists, nil
+	var groups []uuid.UUID
+	for _, row := range rows {
+		if row.GroupID != nil {
+			groups = append(groups, *row.GroupID)
+		}
+	}
+
+	return groups, nil
 }

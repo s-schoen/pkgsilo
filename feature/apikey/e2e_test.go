@@ -4,6 +4,7 @@
 package apikey_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	"pkgsilo/core/envelope"
 	apikeyapi "pkgsilo/feature/apikey/api"
+	groupapi "pkgsilo/feature/group/api"
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/test/apitest"
 	"pkgsilo/test/apptest"
@@ -25,18 +27,23 @@ import (
 var (
 	apiKeyNotFound   = envelope.DefineProblemType("api-key-not-found", "API key not found", http.StatusNotFound)
 	identityNotFound = envelope.DefineProblemType("identity-not-found", "Identity not found", http.StatusNotFound)
+	fieldsDenied     = envelope.DefineProblemType("fields-denied", "Fields denied", http.StatusForbidden)
+	forbidden        = envelope.ProblemType{Type: "about:blank", Title: "Forbidden", Status: http.StatusForbidden}
 )
 
 const identitiesPath = "/api/v1/identities"
 
+const groupsPath = "/api/v1/groups"
+
 // administratorsPath is the path of the administrators group that the migrations seed, whose members the
 // seeded policy allows everything.
-const administratorsPath = "/api/v1/groups/7c1d3e52-8a4f-4b6e-9f21-5d0c8e7a3b14"
+const administratorsPath = groupsPath + "/7c1d3e52-8a4f-4b6e-9f21-5d0c8e7a3b14"
 
 type (
 	apiKey        = apikeyapi.KeyResponse
 	createdAPIKey = apikeyapi.CreatedKeyResponse
 	identity      = identityapi.IdentityResponse
+	group         = groupapi.GroupResponse
 )
 
 // assertUnauthorized asserts the answer to a request without a valid credential, which doesn't say why
@@ -60,6 +67,75 @@ func createIdentity(api *apitest.Client, username string) (created identity, key
 // createKey creates an API key at keysPath with the given name.
 func createKey(api *apitest.Client, keysPath, name string) createdAPIKey {
 	return apitest.DecodeResource[createdAPIKey](api.Post(keysPath, `{"name":"`+name+`"}`), http.StatusCreated)
+}
+
+// keysPathOf returns the path of the API keys of the identity with the given ID.
+func keysPathOf(id uuid.UUID) string {
+	return identitiesPath + "/" + id.String() + "/api-keys"
+}
+
+// keyIDs returns the IDs of the API keys at keysPath that the client may read, in order.
+func keyIDs(api *apitest.Client, keysPath string) []uuid.UUID {
+	keys := listKeys(api, keysPath)
+	ids := make([]uuid.UUID, len(keys))
+	for i, key := range keys {
+		ids[i] = key.ID
+	}
+
+	return ids
+}
+
+// listKeys returns the API keys at keysPath that the client may read.
+func listKeys(api *apitest.Client, keysPath string) []apiKey {
+	return apitest.DecodeCollection[apiKey](api.Get(keysPath), http.StatusOK).Data
+}
+
+// createGroup creates a group with the given name and the identities as members, and returns its ID.
+func createGroup(api *apitest.Client, name string, members ...uuid.UUID) uuid.UUID {
+	created := apitest.DecodeResource[group](api.Post(groupsPath, `{"name":"`+name+`"}`), http.StatusCreated)
+	for _, member := range members {
+		api.Put(groupsPath+"/"+created.ID.String()+"/members/"+member.String(), "").AssertNoContent()
+	}
+
+	return created.ID
+}
+
+// addPolicy creates a policy with the given source, under a name of its own, through the client.
+func addPolicy(t *testing.T, api *apitest.Client, source string) {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]string{"name": uuid.NewV4().String(), "source": source})
+	require.NoError(t, err)
+	api.Post("/api/v1/policies", string(body)).AssertStatus(http.StatusCreated)
+}
+
+// assertFieldsDenied asserts a fields-denied problem that points to the given members of the request body,
+// in that order.
+func assertFieldsDenied(t *testing.T, resp *apitest.Response, pointers ...string) {
+	t.Helper()
+	resp.AssertProblemType(fieldsDenied)
+
+	var problem struct {
+		Errors []envelope.ValidationError `json:"errors"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &problem))
+	got := make([]string, len(problem.Errors))
+	for i, err := range problem.Errors {
+		got[i] = err.Pointer
+	}
+	assert.Equal(t, pointers, got)
+}
+
+// assertLikeMissing asserts that send answers target with the same problem, to the byte, as missingTarget,
+// which refers to something that doesn't exist.
+func assertLikeMissing(
+	t *testing.T, send func(target string) *apitest.Response, target, missingTarget string, want envelope.ProblemType,
+) {
+	t.Helper()
+
+	hidden := send(target)
+	hidden.AssertProblemType(want)
+	assert.Equal(t, send(missingTarget).Body.String(), hidden.Body.String(), "%s must look like it's missing", target)
 }
 
 // TestAPIKeys_Lifecycle takes one API key of ada through every endpoint:
@@ -225,6 +301,237 @@ func TestAPIKeys_OfAnotherIdentity(t *testing.T) {
 
 	// 3. Get through ada.
 	api.Get(adaKeysPath + "/" + key.ID.String()).AssertStatus(http.StatusOK)
+}
+
+// TestAPIKeys_ManageOwn checks what the seeded policies give an identity outside the administrators group on
+// its own API keys, which is managing them:
+//
+//  1. Create ada with an API key: 201.
+//  2. As ada, create an API key of hers that expires, and one that doesn't: 201 with the key for both,
+//     attributed to her.
+//  3. As ada, list her API keys: the three of them. Get the one that expires: 200.
+//  4. As ada, delete the one that expires: 204. List her API keys: the other two.
+//  5. Use the API key that doesn't expire: it authenticates as ada.
+func TestAPIKeys_ManageOwn(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create ada.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	keysPath := keysPathOf(ada.ID)
+	initial := keyIDs(api, keysPath)
+	require.Len(t, initial, 1)
+
+	// 2. Create her API keys.
+	expiresAt := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)
+	expiring := apitest.DecodeResource[createdAPIKey](
+		asAda.Post(keysPath, `{"name":"ci","expiresAt":"`+expiresAt.Format(time.RFC3339Nano)+`"}`), http.StatusCreated)
+	lasting := createKey(asAda, keysPath, "laptop")
+	assert.Equal(t, ada.ID, expiring.CreatedBy)
+	assert.Equal(t, ada.ID, lasting.CreatedBy)
+
+	// 3. Read them.
+	assert.Equal(t, []uuid.UUID{initial[0], expiring.ID, lasting.ID}, keyIDs(asAda, keysPath))
+	expiringPath := keysPath + "/" + expiring.ID.String()
+	assert.Equal(t, expiring.KeyResponse, apitest.DecodeResource[apiKey](asAda.Get(expiringPath), http.StatusOK))
+
+	// 4. Delete one.
+	asAda.Delete(expiringPath).AssertNoContent()
+	assert.Equal(t, []uuid.UUID{initial[0], lasting.ID}, keyIDs(asAda, keysPath))
+
+	// 5. Use the other.
+	asAda.WithHeader("X-API-Key", lasting.Key).Get(identitiesPath + "/" + ada.ID.String()).AssertStatus(http.StatusOK)
+}
+
+// TestAPIKeys_OfHiddenIdentity checks that ada, by the seeded policies, can't use the API keys of grace,
+// whom she can't read, and can't tell grace from an identity that doesn't exist:
+//
+//  1. Create ada and grace with an API key each: 201.
+//  2. As ada, list, create, get and delete grace's API keys: the same 404 identity-not-found, to the byte,
+//     as for an identity that doesn't exist, with the same API key ID.
+//  3. As admin, list grace's API keys: nothing was written.
+func TestAPIKeys_OfHiddenIdentity(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	_, asAda := apptest.NewIdentity(api, "ada")
+	grace, _ := apptest.NewIdentity(api, "grace")
+	graceKeysPath := keysPathOf(grace.ID)
+	graceKeys := listKeys(api, graceKeysPath)
+	require.Len(t, graceKeys, 1)
+	missingKeysPath := keysPathOf(uuid.NewV4())
+	keyID := "/" + graceKeys[0].ID.String()
+
+	// 2. Use grace's API keys.
+	assertLikeMissing(t, asAda.Get, graceKeysPath, missingKeysPath, identityNotFound)
+	assertLikeMissing(t, func(target string) *apitest.Response { return asAda.Post(target, `{"name":"mine"}`) },
+		graceKeysPath, missingKeysPath, identityNotFound)
+	assertLikeMissing(t, asAda.Get, graceKeysPath+keyID, missingKeysPath+keyID, identityNotFound)
+	assertLikeMissing(t, asAda.Delete, graceKeysPath+keyID, missingKeysPath+keyID, identityNotFound)
+
+	// 3. Nothing written.
+	assert.Equal(t, graceKeys, listKeys(api, graceKeysPath))
+}
+
+// TestAPIKeys_ReadOnlyAudit checks a policy that limits access by method: the members of an audit group read
+// all API keys, and write none but their own.
+//
+//  1. Create ada and grace with an API key each, and the group auditors with ada as a member: 201 and 204.
+//  2. Add a policy that lets auditors read everything: 201.
+//  3. As ada, list grace's API keys: the same as admin. Get grace's API key: 200.
+//  4. As ada, delete grace's API key: 403 Forbidden. Create an API key of grace with an expiry: 403
+//     fields-denied pointing to name and expiresAt.
+//  5. As admin, list grace's API keys: nothing was written.
+func TestAPIKeys_ReadOnlyAudit(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	grace, _ := apptest.NewIdentity(api, "grace")
+	auditors := createGroup(api, "auditors", ada.ID)
+	graceKeysPath := keysPathOf(grace.ID)
+
+	// 2. Add the policy.
+	addPolicy(t, api, `permit (principal in Group::"`+auditors.String()+`", action in Action::"read", resource);`)
+
+	// 3. Read.
+	graceKeys := listKeys(api, graceKeysPath)
+	require.Len(t, graceKeys, 1)
+	assert.Equal(t, graceKeys, listKeys(asAda, graceKeysPath))
+	graceKeyPath := graceKeysPath + "/" + graceKeys[0].ID.String()
+	assert.Equal(t, graceKeys[0], apitest.DecodeResource[apiKey](asAda.Get(graceKeyPath), http.StatusOK))
+
+	// 4. Write.
+	asAda.Delete(graceKeyPath).AssertProblemType(forbidden)
+	expiresAt := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	assertFieldsDenied(t, asAda.Post(graceKeysPath, `{"name":"mine","expiresAt":"`+expiresAt+`"}`),
+		"#/name", "#/expiresAt")
+
+	// 5. Nothing written.
+	assert.Equal(t, graceKeys, listKeys(api, graceKeysPath))
+}
+
+// TestAPIKeys_ForbidOneKey checks that a list checks each API key as well as their identity, so that a forbid
+// on one API key hides it, and that the pages are cut out of the readable API keys:
+//
+//  1. Create ada with an API key, and three more API keys of hers: 201.
+//  2. Add a policy that forbids everything on her second API key: 201.
+//  3. As ada, list her API keys two at a time: the first and the third, then the fourth alone. Only the
+//     last page is short.
+//  4. As ada, get and delete the second API key: the same 404 api-key-not-found, to the byte, as for an API
+//     key that doesn't exist.
+func TestAPIKeys_ForbidOneKey(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	keysPath := keysPathOf(ada.ID)
+	first := keyIDs(api, keysPath)[0]
+	second, third, fourth := createKey(api, keysPath, "second"), createKey(api, keysPath, "third"),
+		createKey(api, keysPath, "fourth")
+
+	// 2. Add the policy.
+	addPolicy(t, api, `forbid (principal, action, resource == APIKey::"`+second.ID.String()+`");`)
+
+	// 3. List.
+	page := apitest.DecodeCollection[apiKey](asAda.Get(keysPath+"?limit=2"), http.StatusOK)
+	if assert.Len(t, page.Data, 2) {
+		assert.Equal(t, first, page.Data[0].ID)
+		assert.Equal(t, third.KeyResponse, page.Data[1])
+	}
+	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, page.Pagination)
+	page = apitest.DecodeCollection[apiKey](asAda.Get(keysPath+"?limit=2&offset=2"), http.StatusOK)
+	assert.Equal(t, []apiKey{fourth.KeyResponse}, page.Data)
+	assert.Equal(t, envelope.Pagination{Offset: 2, Limit: 2}, page.Pagination)
+
+	// 4. Use the second.
+	missingPath := keysPath + "/" + uuid.NewV4().String()
+	assertLikeMissing(t, asAda.Get, keysPath+"/"+second.ID.String(), missingPath, apiKeyNotFound)
+	assertLikeMissing(t, asAda.Delete, keysPath+"/"+second.ID.String(), missingPath, apiKeyNotFound)
+}
+
+// TestAPIKeys_OwnerGroups checks that an API key's owner carries its groups, so that a policy on the groups of
+// the owner matches:
+//
+//  1. Create ada with an API key, grace and carol with an API key each, and the group secret with grace as a
+//     member: 201 and 204.
+//  2. Add a policy that lets ada read everything, but not the API keys of the members of secret: 201.
+//  3. As ada, list grace's API keys: an empty 200. List carol's: her API key.
+func TestAPIKeys_OwnerGroups(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	grace, _ := apptest.NewIdentity(api, "grace")
+	carol, _ := apptest.NewIdentity(api, "carol")
+	secret := createGroup(api, "secret", grace.ID)
+
+	// 2. Add the policy.
+	addPolicy(t, api, `
+		permit (principal == Identity::"`+ada.ID.String()+`", action in Action::"read", resource);
+		forbid (principal, action, resource is APIKey) when { resource.owner in Group::"`+secret.String()+`" };
+	`)
+
+	// 3. List.
+	assert.Empty(t, listKeys(asAda, keysPathOf(grace.ID)))
+	assert.Equal(t, listKeys(api, keysPathOf(carol.ID)), listKeys(asAda, keysPathOf(carol.ID)))
+}
+
+// TestAPIKeys_CreateFields checks that creating an API key checks only the fields that the request sets:
+//
+//  1. Create ada with an API key: 201.
+//  2. Add a policy that forbids ada to set the expiry of an API key: 201.
+//  3. As ada, create an API key of hers with an expiry: 403 fields-denied pointing to expiresAt.
+//  4. As ada, create one without an expiry: 201, and the API key never expires.
+func TestAPIKeys_CreateFields(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create ada.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	keysPath := keysPathOf(ada.ID)
+
+	// 2. Add the policy.
+	addPolicy(t, api, `forbid (principal, action == Action::"apikey:create:expiresAt", resource);`)
+
+	// 3. Create with an expiry.
+	expiresAt := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	assertFieldsDenied(t, asAda.Post(keysPath, `{"name":"ci","expiresAt":"`+expiresAt+`"}`), "#/expiresAt")
+
+	// 4. Create without an expiry.
+	assert.Nil(t, createKey(asAda, keysPath, "ci").ExpiresAt)
+}
+
+// TestAPIKeys_CreateUnreadable checks that a new API key's key is returned even to a caller that can't read
+// the API key, since it's the only time it's available:
+//
+//  1. Create ada with an API key: 201.
+//  2. Add a policy that forbids ada to read API keys: 201.
+//  3. As ada, create an API key of hers: 201 with the key.
+//  4. As ada, get it: 404 api-key-not-found. Use its key: it authenticates as ada.
+func TestAPIKeys_CreateUnreadable(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create ada.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	keysPath := keysPathOf(ada.ID)
+
+	// 2. Add the policy.
+	addPolicy(t, api, `forbid (principal, action == Action::"apikey:read", resource);`)
+
+	// 3. Create.
+	created := createKey(asAda, keysPath, "ci")
+	assert.Regexp(t, `^psk_[A-Z2-7]{52}$`, created.Key)
+
+	// 4. Use it.
+	asAda.Get(keysPath + "/" + created.ID.String()).AssertProblemType(apiKeyNotFound)
+	asAda.WithHeader("X-API-Key", created.Key).Get(identitiesPath + "/" + ada.ID.String()).
+		AssertStatus(http.StatusOK)
 }
 
 // TestAuthentication_Required sends requests without a credential:

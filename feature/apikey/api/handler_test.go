@@ -2,8 +2,11 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -12,8 +15,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"pkgsilo/core/authz"
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/pagination"
+	"pkgsilo/core/request"
 	"pkgsilo/feature/apikey/service"
 	"pkgsilo/feature/apikey/service/mocks"
 	identityapi "pkgsilo/feature/identity/api"
@@ -64,7 +69,7 @@ func newTestClient(t *testing.T, logger *slog.Logger) (*apitest.Client, *mocks.M
 func TestHandler_List(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().List(mock.Anything, ciKey.IdentityID, 0, 50).
+	svc.EXPECT().List(mock.Anything, apitest.Actor, ciKey.IdentityID, 0, 50).
 		Return(pagination.Page[service.APIKey]{Items: []service.APIKey{ciKey}}, nil)
 
 	api.Get(keysPath).AssertCollection(`[`+ciJSON+`]`, envelope.Pagination{Offset: 0, Limit: 50})
@@ -74,7 +79,7 @@ func TestHandler_List_NextPage(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
 	page := pagination.Page[service.APIKey]{Items: []service.APIKey{ciKey}, HasMore: true}
-	svc.EXPECT().List(mock.Anything, ciKey.IdentityID, 2, 1).Return(page, nil)
+	svc.EXPECT().List(mock.Anything, apitest.Actor, ciKey.IdentityID, 2, 1).Return(page, nil)
 
 	api.Get(keysPath+"?offset=2&limit=1").
 		AssertCollection(`[`+ciJSON+`]`, envelope.Pagination{Offset: 2, Limit: 1, NextOffset: new(3)})
@@ -135,7 +140,7 @@ func TestHandler_Create_MalformedExpiry(t *testing.T) {
 func TestHandler_Get(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Get(mock.Anything, ciKey.IdentityID, ciKey.ID).Return(ciKey, nil)
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).Return(ciKey, nil)
 
 	api.Get(ciPath).AssertResource(ciJSON)
 }
@@ -143,7 +148,7 @@ func TestHandler_Get(t *testing.T) {
 func TestHandler_Delete(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Delete(mock.Anything, ciKey.IdentityID, ciKey.ID).Return(nil)
+	svc.EXPECT().Delete(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).Return(nil)
 
 	api.Delete(ciPath).AssertNoContent()
 }
@@ -194,16 +199,44 @@ func TestHandler_ServiceErrors(t *testing.T) {
 	}{
 		{name: "api key not found", err: service.ErrAPIKeyNotFound, want: apiKeyNotFoundProblem},
 		{name: "identity not found", err: service.ErrIdentityNotFound, want: identityapi.IdentityNotFoundProblem},
+		{name: "denied", err: fmt.Errorf("delete api key: %w", authz.ErrDenied), want: forbiddenProblem},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			api, svc := newTestClient(t, loggertest.Discard())
-			svc.EXPECT().Get(mock.Anything, ciKey.IdentityID, ciKey.ID).Return(service.APIKey{}, tt.err)
+			svc.EXPECT().Delete(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).Return(tt.err)
 
-			api.Get(ciPath).AssertProblem(tt.want)
+			api.Delete(ciPath).AssertProblem(tt.want)
 		})
 	}
+}
+
+func TestHandler_Create_FieldsDenied(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciKey.IdentityID, service.APIKeyInput{Name: "ci"}).
+		Return(service.CreatedAPIKey{}, fmt.Errorf("create api key: %w",
+			&authz.FieldsDeniedError{Fields: []string{"name", "expiresAt"}}))
+
+	resp := api.Post(keysPath, `{"name":"ci"}`)
+
+	resp.AssertProblem(request.FieldsDeniedProblem("name", "expiresAt"))
+	assert.Empty(t, resp.Header().Get("Location"))
+}
+
+// TestHandler_SettableMembersHaveActions checks that every member that the request body sets has an action
+// of its own in the service, and that every such action has a member. A member without one would be
+// written without being authorized, and a field denial couldn't point to a member that doesn't exist.
+func TestHandler_SettableMembersHaveActions(t *testing.T) {
+	t.Parallel()
+	var members []string
+	for field := range reflect.TypeFor[CreateKeyRequest]().Fields() {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		members = append(members, name)
+	}
+
+	assert.ElementsMatch(t, members, service.CreatableFields())
 }
 
 // TestHandler_EndpointErrors checks that every endpoint answers service errors through writeError.
@@ -214,7 +247,8 @@ func TestHandler_EndpointErrors(t *testing.T) {
 	t.Run("list", func(t *testing.T) {
 		t.Parallel()
 		api, svc := newTestClient(t, loggertest.Discard())
-		svc.EXPECT().List(mock.Anything, ciKey.IdentityID, 0, 50).Return(pagination.Page[service.APIKey]{}, notFound)
+		svc.EXPECT().List(mock.Anything, apitest.Actor, ciKey.IdentityID, 0, 50).
+			Return(pagination.Page[service.APIKey]{}, notFound)
 
 		api.Get(keysPath).AssertProblem(identityapi.IdentityNotFoundProblem)
 	})
@@ -232,7 +266,7 @@ func TestHandler_EndpointErrors(t *testing.T) {
 	t.Run("delete", func(t *testing.T) {
 		t.Parallel()
 		api, svc := newTestClient(t, loggertest.Discard())
-		svc.EXPECT().Delete(mock.Anything, ciKey.IdentityID, ciKey.ID).Return(notFound)
+		svc.EXPECT().Delete(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).Return(notFound)
 
 		api.Delete(ciPath).AssertProblem(identityapi.IdentityNotFoundProblem)
 	})
@@ -242,7 +276,8 @@ func TestHandler_UnexpectedErrorIsLoggedButNotExposed(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	api, svc := newTestClient(t, logger)
-	svc.EXPECT().Get(mock.Anything, ciKey.IdentityID, ciKey.ID).Return(service.APIKey{}, errors.New("connection refused"))
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).
+		Return(service.APIKey{}, errors.New("connection refused"))
 
 	api.Get(ciPath).AssertInternalError()
 
