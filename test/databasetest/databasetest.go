@@ -81,8 +81,7 @@ func NewWithMeterProvider(t *testing.T, provider metric.MeterProvider) *sqlx.DB 
 		}
 	})
 
-	db, err := database.Open(t.Context(),
-		database.Options{URL: databaseURL(name), MaxConns: 2, MeterProvider: provider})
+	db, err := database.Open(t.Context(), database.Options{URL: databaseURL(name), MaxConns: 2}, provider)
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
@@ -185,7 +184,7 @@ func migrate(ctx context.Context, dbURL string) error {
 		return errors.New("find migrations: no up migrations")
 	}
 
-	db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 1, MeterProvider: noop.NewMeterProvider()})
+	db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 1}, noop.NewMeterProvider())
 	if err != nil {
 		return fmt.Errorf("open template: %w", err)
 	}
@@ -210,7 +209,7 @@ func migrate(ctx context.Context, dbURL string) error {
 func openWhenReady(ctx context.Context, dbURL string) (*sqlx.DB, error) {
 	deadline := time.Now().Add(readyTimeout)
 	for {
-		db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 4, MeterProvider: noop.NewMeterProvider()})
+		db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 4}, noop.NewMeterProvider())
 		if err == nil {
 			return db, nil
 		}

@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -78,31 +77,24 @@ type Options struct {
 	URL string
 	// MaxConns caps the open connections in the pool.
 	MaxConns int
-	// MeterProvider records the metrics of the connection pool and of every query. Nil: nothing is
-	// recorded.
-	MeterProvider metric.MeterProvider
 }
 
 // Open connects to PostgreSQL at opts.URL and verifies the connection. Scanned
 // timestamptz values are in UTC. The caller must close the returned database.
 //
-// The pool and every operation on its connections are measured with opts.MeterProvider: see
+// The pool and every operation on its connections are measured with meterProvider: see
 // registerPoolMetrics for the pool, and otelpgx for db.client.operation.duration and
 // db.client.operation.errors, with its default attributes only, so no query text reaches a metric.
 // Closing the database stops the pool metrics.
-func Open(ctx context.Context, opts Options) (*sqlx.DB, error) {
+func Open(ctx context.Context, opts Options, meterProvider metric.MeterProvider) (*sqlx.DB, error) {
 	// pgx redacts the password in parse errors, so the error is safe to log.
 	connCfg, err := pgx.ParseConfig(opts.URL)
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 
-	provider := opts.MeterProvider
-	if provider == nil {
-		provider = noop.NewMeterProvider()
-	}
 	connCfg.Tracer = otelpgx.NewTracer(
-		otelpgx.WithMeterProvider(provider),
+		otelpgx.WithMeterProvider(meterProvider),
 		// No spans until tracing lands. Explicit, so that otelpgx never reads the global provider.
 		otelpgx.WithTracerProvider(tracenoop.NewTracerProvider()),
 	)
@@ -115,7 +107,7 @@ func Open(ctx context.Context, opts Options) (*sqlx.DB, error) {
 	db.SetMaxIdleConns(opts.MaxConns)
 	db.SetConnMaxIdleTime(databaseConnMaxIdleTime)
 
-	connector.onClose, err = registerPoolMetrics(provider.Meter(meterName), db.DB, poolName(connCfg))
+	connector.onClose, err = registerPoolMetrics(meterProvider.Meter(meterName), db.DB, poolName(connCfg))
 	if err != nil {
 		_ = db.Close()
 		return nil, err
