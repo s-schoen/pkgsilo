@@ -66,33 +66,34 @@ func NewWithMetrics(t *testing.T) (api, metrics *apitest.Client) {
 
 // NewInstance returns a client for another instance of the application on db, which NewWithDB returned
 // together with api. The client authenticates like api. The instances share nothing but the database, like
-// the instances of a deployment.
+// the instances of a deployment. Unlike in a deployment, they also share db's connection pool, whose
+// metrics only the first instance records.
 func NewInstance(t *testing.T, api *apitest.Client, db *sqlx.DB) *apitest.Client {
 	t.Helper()
 
-	h, _ := newHandler(t, db)
-
-	return api.WithHandler(h)
+	return api.WithHandler(newHandler(t, db, newTelemetry(t)))
 }
 
 // newApp returns clients for the API and the metrics listener of the application on a new database with
 // all migrations applied and the first start done, and that database. The API client authenticates as admin.
+// As in cmd/main.go, the application and its database record their metrics with the same provider.
 func newApp(t *testing.T) (api, metrics *apitest.Client, db *sqlx.DB) {
 	t.Helper()
 
-	db = databasetest.New(t)
+	tel := newTelemetry(t)
+	db = databasetest.NewWithMeterProvider(t, tel.MeterProvider())
 
 	key, err := app.Bootstrap(t.Context(), db, []byte(apiKeyPepper))
 	require.NoError(t, err)
 
-	h, tel := newHandler(t, db)
+	h := newHandler(t, db, tel)
 
 	return apitest.NewClient(t, h).WithHeader(apiKeyHeader, key), apitest.NewClient(t, tel.Handler()), db
 }
 
-// newHandler returns the application, wired as cmd/main.go serves it, on db, and the telemetry that it
-// records its metrics with, which is shut down at the end of the test. It logs to the test's output.
-func newHandler(t *testing.T, db *sqlx.DB) (http.Handler, *telemetry.Telemetry) {
+// newTelemetry returns the enabled telemetry of an application instance, which is shut down at the end of
+// the test, after the database has been closed.
+func newTelemetry(t *testing.T) *telemetry.Telemetry {
 	t.Helper()
 
 	tel, err := telemetry.New(t.Context(), telemetry.Options{Enabled: true, ServiceVersion: "test"})
@@ -102,10 +103,16 @@ func newHandler(t *testing.T, db *sqlx.DB) (http.Handler, *telemetry.Telemetry) 
 		assert.NoError(t, tel.Shutdown(context.Background()))
 	})
 
-	h := app.NewHandler(router.Options{}, db, []byte(apiKeyPepper),
-		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), tel.MeterProvider())
+	return tel
+}
 
-	return h, tel
+// newHandler returns the application, wired as cmd/main.go serves it, on db, recording its metrics with
+// tel. It logs to the test's output.
+func newHandler(t *testing.T, db *sqlx.DB, tel *telemetry.Telemetry) http.Handler {
+	t.Helper()
+
+	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper),
+		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), tel.MeterProvider())
 }
 
 // NewIdentity creates an identity with the given username and an API key of its own through the client

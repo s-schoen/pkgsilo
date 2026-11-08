@@ -4,13 +4,18 @@ package database
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 const (
@@ -73,10 +78,18 @@ type Options struct {
 	URL string
 	// MaxConns caps the open connections in the pool.
 	MaxConns int
+	// MeterProvider records the metrics of the connection pool and of every query. Nil: nothing is
+	// recorded.
+	MeterProvider metric.MeterProvider
 }
 
 // Open connects to PostgreSQL at opts.URL and verifies the connection. Scanned
 // timestamptz values are in UTC. The caller must close the returned database.
+//
+// The pool and every operation on its connections are measured with opts.MeterProvider: see
+// registerPoolMetrics for the pool, and otelpgx for db.client.operation.duration and
+// db.client.operation.errors, with its default attributes only, so no query text reaches a metric.
+// Closing the database stops the pool metrics.
 func Open(ctx context.Context, opts Options) (*sqlx.DB, error) {
 	// pgx redacts the password in parse errors, so the error is safe to log.
 	connCfg, err := pgx.ParseConfig(opts.URL)
@@ -84,10 +97,29 @@ func Open(ctx context.Context, opts Options) (*sqlx.DB, error) {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 
-	db := sqlx.NewDb(stdlib.OpenDB(*connCfg, stdlib.OptionAfterConnect(scanTimestamptzInUTC)), "pgx")
+	provider := opts.MeterProvider
+	if provider == nil {
+		provider = noop.NewMeterProvider()
+	}
+	connCfg.Tracer = otelpgx.NewTracer(
+		otelpgx.WithMeterProvider(provider),
+		// No spans until tracing lands. Explicit, so that otelpgx never reads the global provider.
+		otelpgx.WithTracerProvider(tracenoop.NewTracerProvider()),
+	)
+
+	connector := &closingConnector{
+		Connector: stdlib.GetConnector(*connCfg, stdlib.OptionAfterConnect(scanTimestamptzInUTC)),
+	}
+	db := sqlx.NewDb(sql.OpenDB(connector), "pgx")
 	db.SetMaxOpenConns(opts.MaxConns)
 	db.SetMaxIdleConns(opts.MaxConns)
 	db.SetConnMaxIdleTime(databaseConnMaxIdleTime)
+
+	connector.onClose, err = registerPoolMetrics(provider.Meter(meterName), db.DB, poolName(connCfg))
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, databasePingTimeout)
 	defer cancel()
@@ -98,6 +130,23 @@ func Open(ctx context.Context, opts Options) (*sqlx.DB, error) {
 	}
 
 	return db, nil
+}
+
+// closingConnector is a driver.Connector that calls onClose, if set, when the *sql.DB that it connects
+// closes: sql.DB.Close closes a connector that implements io.Closer.
+type closingConnector struct {
+	driver.Connector
+
+	onClose func() error
+}
+
+// Close calls onClose, if set.
+func (c *closingConnector) Close() error {
+	if c.onClose == nil {
+		return nil
+	}
+
+	return c.onClose()
 }
 
 // scanTimestamptzInUTC makes conn return timestamptz values in UTC instead of the local
