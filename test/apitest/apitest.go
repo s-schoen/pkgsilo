@@ -126,19 +126,29 @@ func (c *Client) Put(target, body string) *Response {
 	return c.Send(http.MethodPut, target, body)
 }
 
+// Patch sends a PATCH request with the JSON Merge Patch body to target.
+func (c *Client) Patch(target, body string) *Response {
+	return c.Send(http.MethodPatch, target, body)
+}
+
 // Delete sends a DELETE request to target.
 func (c *Client) Delete(target string) *Response {
 	return c.Send(http.MethodDelete, target, "")
 }
 
-// Send sends a request with method to target. A non-empty body is sent as application/json.
+// Send sends a request with method to target. A non-empty body is sent as application/json, or, with
+// PATCH, as a JSON Merge Patch in application/merge-patch+json.
 func (c *Client) Send(method, target, body string) *Response {
 	var reader io.Reader
 	if body != "" {
 		reader = strings.NewReader(body)
 	}
 	req := httptest.NewRequestWithContext(c.tb.Context(), method, target, reader)
-	if body != "" {
+	switch {
+	case body == "":
+	case method == http.MethodPatch:
+		req.Header.Set("Content-Type", request.MergePatchMediaType)
+	default:
 		req.Header.Set("Content-Type", jsonMediaType)
 	}
 
