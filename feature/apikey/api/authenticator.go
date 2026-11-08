@@ -52,10 +52,12 @@ func (a *Authenticator) Authenticate(r *http.Request) (authn.Principal, error) {
 		middleware.AddLogAttrs(r.Context(), slog.String("api_key_id", key.ID.String()))
 
 		return authn.Principal{IdentityID: key.IdentityID}, nil
-	case errors.Is(err, service.ErrMalformedKey),
-		errors.Is(err, service.ErrUnknownKey),
-		errors.Is(err, service.ErrExpiredKey):
-		return authn.Principal{}, fmt.Errorf("%w: %w", authn.ErrInvalidCredentials, err)
+	case errors.Is(err, service.ErrMalformedKey):
+		return authn.Principal{}, fmt.Errorf("%w: %w", authn.ErrMalformedCredentials, err)
+	case errors.Is(err, service.ErrUnknownKey):
+		return authn.Principal{}, fmt.Errorf("%w: %w", authn.ErrUnknownCredentials, err)
+	case errors.Is(err, service.ErrExpiredKey):
+		return authn.Principal{}, fmt.Errorf("%w: %w", authn.ErrExpiredCredentials, err)
 	default:
 		return authn.Principal{}, fmt.Errorf("authenticate api key: %w", err)
 	}

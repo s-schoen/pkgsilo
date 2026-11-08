@@ -9,6 +9,7 @@ import (
 
 	"github.com/cedar-policy/cedar-go"
 	"github.com/cedar-policy/cedar-go/types"
+	"go.opentelemetry.io/otel/metric"
 
 	"pkgsilo/core/database"
 )
@@ -25,6 +26,8 @@ type Engine struct {
 	// loaded is the latest parsed policies. Concurrent requests may parse them more than once, and an
 	// older result may replace a newer one, which the next request corrects.
 	loaded atomic.Pointer[revisionedPolicies]
+	// decisions counts the decisions of every Decider of the engine.
+	decisions decisions
 }
 
 var _ Authorizer = (*Engine)(nil)
@@ -41,9 +44,10 @@ type policyRecord struct {
 	Source string    `db:"source"`
 }
 
-// New returns an Engine that reads the policies and the actors' groups from db.
-func New(db database.Querier) *Engine {
-	return &Engine{db: db}
+// New returns an Engine that reads the policies and the actors' groups from db, and counts its decisions
+// with meterProvider in pkgsilo.authz.decisions, by result only.
+func New(db database.Querier, meterProvider metric.MeterProvider) *Engine {
+	return &Engine{db: db, decisions: newDecisions(meterProvider)}
 }
 
 // For returns the Decider for the actor, with the current policies and the actor's groups.
@@ -59,7 +63,7 @@ func (e *Engine) For(ctx context.Context, actor uuid.UUID) (Decider, error) {
 		return nil, fmt.Errorf("load groups of actor: %w", err)
 	}
 
-	return &decider{policies: policies, principal: toEntity(IdentityType, actor, groups)}, nil
+	return &decider{policies: policies, principal: toEntity(IdentityType, actor, groups), decisions: e.decisions}, nil
 }
 
 // currentPolicies returns the policies of the current revision, parsing them if that's not the loaded one.
@@ -110,12 +114,21 @@ func parsePolicies(recs []policyRecord) (*cedar.PolicySet, error) {
 type decider struct {
 	policies  *cedar.PolicySet
 	principal types.Entity
+	decisions decisions
 }
 
 var _ Decider = (*decider)(nil)
 
-// Can reports whether the policies allow the principal the action on the resource.
+// Can reports whether the policies allow the principal the action on the resource, and counts the decision.
 func (d *decider) Can(action Action, resource Resource) (bool, error) {
+	allowed, err := d.decide(action, resource)
+	d.decisions.record(allowed, err)
+
+	return allowed, err
+}
+
+// decide reports whether the policies allow the principal the action on the resource.
+func (d *decider) decide(action Action, resource Resource) (bool, error) {
 	entities := requestEntities{list: [4]types.Entity{d.principal, action.entity}, n: 3}
 	entity := toEntity(resource.Type, resource.ID, resource.Groups)
 	if owner := resource.Owner; owner != nil {

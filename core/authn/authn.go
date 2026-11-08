@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"uuid"
 
+	"go.opentelemetry.io/otel/metric"
+
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/middleware"
 )
@@ -20,9 +22,50 @@ var (
 	// method is tried.
 	ErrNoCredentials = errors.New("no credentials")
 	// ErrInvalidCredentials means that a request holds a credential of the method and the method
-	// rejects it, so that no other method is tried.
+	// rejects it, so that no other method is tried. A method that knows why wraps one of the reason
+	// errors below instead, which are ErrInvalidCredentials too: the metrics and the logs name the
+	// reason, and a bare ErrInvalidCredentials as "invalid".
 	ErrInvalidCredentials = errors.New("invalid credentials")
+
+	// ErrMalformedCredentials is an ErrInvalidCredentials for a credential that doesn't have the
+	// method's format.
+	ErrMalformedCredentials error = &reasonError{reason: reasonMalformed}
+	// ErrUnknownCredentials is an ErrInvalidCredentials for a credential that belongs to no one.
+	ErrUnknownCredentials error = &reasonError{reason: reasonUnknown}
+	// ErrExpiredCredentials is an ErrInvalidCredentials for a credential that has expired.
+	ErrExpiredCredentials error = &reasonError{reason: reasonExpired}
 )
+
+const (
+	reasonMalformed = "malformed"
+	reasonUnknown   = "unknown"
+	reasonExpired   = "expired"
+	// reasonInvalid is the reason of an ErrInvalidCredentials that wraps none of the reason errors.
+	reasonInvalid = "invalid"
+)
+
+// reasonError is an ErrInvalidCredentials with a reason that the metrics and the logs can name.
+type reasonError struct {
+	reason string
+}
+
+func (e *reasonError) Error() string {
+	return e.reason + " credentials"
+}
+
+// Is reports that a reasonError is an ErrInvalidCredentials.
+func (*reasonError) Is(target error) bool {
+	return target == ErrInvalidCredentials
+}
+
+// rejectionReason returns the reason of an error that wraps ErrInvalidCredentials.
+func rejectionReason(err error) string {
+	if reasonErr, ok := errors.AsType[*reasonError](err); ok {
+		return reasonErr.reason
+	}
+
+	return reasonInvalid
+}
 
 // Principal is the caller that a request is authenticated as.
 type Principal struct {
@@ -76,12 +119,17 @@ func Actor(r *http.Request) uuid.UUID {
 //
 // The methods are tried in the given order, and the first that recognizes the credential decides.
 // Requests with a missing or rejected credential get the same 401, which never says why and
-// challenges for every method. Rejections are logged at info level with the method's reason. Any
-// other error of a method is logged at error level and answered with a 500.
-func Require(logger *slog.Logger, authenticators ...Authenticator) func(http.Handler) http.Handler {
+// challenges for every method. Rejections are logged at info level with their reason (see
+// ErrInvalidCredentials) and error. Any other error of a method is logged at error level and answered
+// with a 500. Every request is counted with meterProvider in pkgsilo.authn.attempts, by outcome, method
+// and reason.
+func Require(
+	logger *slog.Logger, meterProvider metric.MeterProvider, authenticators ...Authenticator,
+) func(http.Handler) http.Handler {
 	if len(authenticators) == 0 {
 		panic("authn: Require needs at least one authenticator")
 	}
+	attempts := newAttempts(meterProvider)
 
 	challenges := make([]string, len(authenticators))
 	for i, authenticator := range authenticators {
@@ -96,6 +144,7 @@ func Require(logger *slog.Logger, authenticators ...Authenticator) func(http.Han
 				switch {
 				case err == nil:
 					principal.Method = authenticator.Method()
+					attempts.succeeded(r.Context(), principal.Method)
 					middleware.AddLogAttrs(r.Context(),
 						slog.String("identity_id", principal.IdentityID.String()),
 						slog.String("auth_method", principal.Method),
@@ -106,12 +155,15 @@ func Require(logger *slog.Logger, authenticators ...Authenticator) func(http.Han
 				case errors.Is(err, ErrNoCredentials):
 					continue
 				case errors.Is(err, ErrInvalidCredentials):
+					reason := rejectionReason(err)
+					attempts.rejected(r.Context(), authenticator.Method(), reason)
 					logger.InfoContext(r.Context(), "authentication rejected",
-						"auth_method", authenticator.Method(), "reason", err)
+						"auth_method", authenticator.Method(), "reason", reason, "error", err)
 					writeUnauthorized(w, challenges)
 
 					return
 				default:
+					attempts.failed(r.Context(), authenticator.Method())
 					logger.ErrorContext(r.Context(), "authentication failed",
 						"auth_method", authenticator.Method(), "error", err)
 					envelope.WriteProblem(w, envelope.InternalServerErrorProblem.New(envelope.Occurrence{}))
@@ -120,6 +172,7 @@ func Require(logger *slog.Logger, authenticators ...Authenticator) func(http.Han
 				}
 			}
 
+			attempts.missing(r.Context())
 			writeUnauthorized(w, challenges)
 		})
 	}

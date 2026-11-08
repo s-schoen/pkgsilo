@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"pkgsilo/core/authn"
 	"pkgsilo/core/envelope"
@@ -37,7 +38,7 @@ var Actor = uuid.MustParse("5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b")
 func Mount(prefix string, routes http.Handler) http.Handler {
 	logger := loggertest.Discard()
 	r := router.New(router.Options{}, logger)
-	r.With(authn.Require(logger, actorAuthenticator{})).Mount(prefix, routes)
+	r.With(authn.Require(logger, noop.NewMeterProvider(), actorAuthenticator{})).Mount(prefix, routes)
 
 	return r
 }
