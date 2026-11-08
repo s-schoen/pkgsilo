@@ -777,8 +777,6 @@ func TestGroupService_TranslatesRepositoryErrors(t *testing.T) {
 		{name: "get not found", call: get, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},
 		{name: "get unexpected", call: get, repoErr: errDB, wantErr: errDB},
 		{name: "list unexpected", call: list, repoErr: errDB, wantErr: errDB},
-		// Answered with a logged 500 like any other unexpected error.
-		{name: "list over the ceiling", call: list, repoErr: repository.ErrTooManyRows, wantErr: repository.ErrTooManyRows},
 		{name: "replace get not found", call: replaceGet, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},
 		{name: "replace get unexpected", call: replaceGet, repoErr: errDB, wantErr: errDB},
 		{name: "replace not found", call: replace, repoErr: repository.ErrNotFound, wantErr: ErrGroupNotFound},

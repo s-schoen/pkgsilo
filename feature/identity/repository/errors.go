@@ -12,8 +12,6 @@ var (
 	ErrNotFound = errors.New("identity record not found")
 	// ErrDuplicateUsername is returned when another identity record already has the username.
 	ErrDuplicateUsername = errors.New("duplicate identity username")
-	// ErrTooManyRows is returned when loading all records would exceed pagination.MaxAllRows.
-	ErrTooManyRows = errors.New("too many identity records to load")
 )
 
 const (

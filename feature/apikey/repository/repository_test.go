@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/pagination"
 	"pkgsilo/test/databasetest"
 )
 
@@ -194,32 +193,6 @@ func TestPostgresAPIKeyRepository_ListAll_None(t *testing.T) {
 			assert.Empty(t, got)
 		})
 	}
-}
-
-func TestPostgresAPIKeyRepository_ListAll_Ceiling(t *testing.T) {
-	t.Parallel()
-	repo, db := newTestRepo(t)
-	identityID := insertIdentity(t, db)
-
-	insertKeys := func(count int) {
-		_, err := db.ExecContext(t.Context(), `
-			INSERT INTO api_keys (id, identity_id, name, key_hash, key_suffix, created_by, created_at)
-			SELECT gen_random_uuid(), $1, 'ci', gen_random_uuid()::text::bytea, 'WXYZ', $1, $2
-			FROM generate_series(1, $3::int)`,
-			identityID, baseTime, count,
-		)
-		require.NoError(t, err)
-	}
-
-	insertKeys(pagination.MaxAllRows)
-	got, err := repo.ListAll(t.Context(), identityID)
-	require.NoError(t, err)
-	assert.Len(t, got, pagination.MaxAllRows)
-
-	insertKeys(1)
-	got, err = repo.ListAll(t.Context(), identityID)
-	require.ErrorIs(t, err, ErrTooManyRows)
-	assert.Nil(t, got)
 }
 
 func TestPostgresAPIKeyRepository_UpdateLastUsed(t *testing.T) {

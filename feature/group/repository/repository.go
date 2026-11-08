@@ -7,7 +7,6 @@ import (
 	"uuid"
 
 	"pkgsilo/core/database"
-	"pkgsilo/core/pagination"
 )
 
 // GroupRepository stores group records and the member records of each group.
@@ -16,8 +15,7 @@ type GroupRepository interface {
 	Insert(ctx context.Context, rec GroupRecord) (GroupRecord, error)
 	// Get returns the record with the given ID.
 	Get(ctx context.Context, id uuid.UUID) (GroupRecord, error)
-	// ListAll returns all records, ordered by creation time. It returns an error wrapping ErrTooManyRows if
-	// there are more than pagination.MaxAllRows.
+	// ListAll returns all records, ordered by creation time.
 	ListAll(ctx context.Context) ([]GroupRecord, error)
 	// Update overwrites the name, UpdatedBy and UpdatedAt of the record with rec.ID and returns it
 	// as stored. CreatedBy and CreatedAt are immutable and ignored.
@@ -85,21 +83,15 @@ func (r *PostgresGroupRepository) Get(ctx context.Context, id uuid.UUID) (GroupR
 	return rec, nil
 }
 
-// ListAll returns all records, ordered by creation time. It returns an error wrapping ErrTooManyRows if
-// there are more than pagination.MaxAllRows.
+// ListAll returns all records, ordered by creation time.
 func (r *PostgresGroupRepository) ListAll(ctx context.Context) ([]GroupRecord, error) {
 	var recs []GroupRecord
 	err := r.db.SelectContext(ctx, &recs, `
 		SELECT `+groupColumns+` FROM groups
-		ORDER BY created_at, id
-		LIMIT $1`,
-		pagination.MaxAllRows+1,
+		ORDER BY created_at, id`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list all groups: %w", err)
-	}
-	if len(recs) > pagination.MaxAllRows {
-		return nil, fmt.Errorf("list all groups: over %d: %w", pagination.MaxAllRows, ErrTooManyRows)
 	}
 
 	return recs, nil

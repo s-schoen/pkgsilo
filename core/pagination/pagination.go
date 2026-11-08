@@ -1,10 +1,6 @@
 // Package pagination holds the pages that services return for paginated collections.
 package pagination
 
-// MaxAllRows is the most rows that a list that loads all rows of a table may load. It caps the memory of
-// a request and shows when a table has outgrown this way of listing it.
-const MaxAllRows = 10_000
-
 // Page is a page of a collection.
 type Page[T any] struct {
 	Items []T

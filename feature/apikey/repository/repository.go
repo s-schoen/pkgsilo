@@ -8,7 +8,6 @@ import (
 	"uuid"
 
 	"pkgsilo/core/database"
-	"pkgsilo/core/pagination"
 )
 
 // APIKeyRepository stores API key records.
@@ -19,8 +18,7 @@ type APIKeyRepository interface {
 	Get(ctx context.Context, identityID, id uuid.UUID) (APIKeyRecord, error)
 	// GetByHash returns the record with the given key hash, whatever its identity.
 	GetByHash(ctx context.Context, keyHash []byte) (APIKeyRecord, error)
-	// ListAll returns all records of the given identity, ordered by creation time. It returns an error
-	// wrapping ErrTooManyRows if there are more than pagination.MaxAllRows.
+	// ListAll returns all records of the given identity, ordered by creation time.
 	ListAll(ctx context.Context, identityID uuid.UUID) ([]APIKeyRecord, error)
 	// UpdateLastUsed sets the last use of the record with the given ID. A record that no longer
 	// exists is not an error: its key was deleted while it was in use.
@@ -86,22 +84,17 @@ func (r *PostgresAPIKeyRepository) GetByHash(ctx context.Context, keyHash []byte
 	return rec, nil
 }
 
-// ListAll returns all records of the given identity, ordered by creation time. It returns an error
-// wrapping ErrTooManyRows if there are more than pagination.MaxAllRows.
+// ListAll returns all records of the given identity, ordered by creation time.
 func (r *PostgresAPIKeyRepository) ListAll(ctx context.Context, identityID uuid.UUID) ([]APIKeyRecord, error) {
 	var recs []APIKeyRecord
 	err := r.db.SelectContext(ctx, &recs, `
 		SELECT `+keyColumns+` FROM api_keys
 		WHERE identity_id = $1
-		ORDER BY created_at, id
-		LIMIT $2`,
-		identityID, pagination.MaxAllRows+1,
+		ORDER BY created_at, id`,
+		identityID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list all api keys: %w", err)
-	}
-	if len(recs) > pagination.MaxAllRows {
-		return nil, fmt.Errorf("list all api keys: over %d: %w", pagination.MaxAllRows, ErrTooManyRows)
 	}
 
 	return recs, nil

@@ -733,8 +733,6 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 		{name: "get unexpected", call: get, repoErr: errDB, wantErr: errDB},
 		{name: "get groups unexpected", call: getGroups, repoErr: errDB, wantErr: errDB},
 		{name: "list unexpected", call: list, repoErr: errDB, wantErr: errDB},
-		// Answered with a logged 500 like any other unexpected error.
-		{name: "list over the ceiling", call: list, repoErr: repository.ErrTooManyRows, wantErr: repository.ErrTooManyRows},
 		{name: "list groups unexpected", call: listGroups, repoErr: errDB, wantErr: errDB},
 		{name: "replace get not found", call: replaceGet, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
 		{name: "replace get unexpected", call: replaceGet, repoErr: errDB, wantErr: errDB},

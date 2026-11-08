@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/pagination"
 	"pkgsilo/test/databasetest"
 )
 
@@ -130,34 +129,6 @@ func TestPostgresGroupRepository_ListAll_Empty(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Empty(t, got)
-}
-
-// insertGroups stores count group rows, in one statement to keep the test fast.
-func insertGroups(t *testing.T, db *sqlx.DB, prefix string, count int) {
-	t.Helper()
-
-	_, err := db.ExecContext(t.Context(), `
-		INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
-		SELECT gen_random_uuid(), $1 || n, $2::uuid, $2::uuid, $3::timestamptz, $3::timestamptz
-		FROM generate_series(1, $4::int) AS n`,
-		prefix, uuid.NewV4(), baseTime, count,
-	)
-	require.NoError(t, err)
-}
-
-func TestPostgresGroupRepository_ListAll_Ceiling(t *testing.T) {
-	t.Parallel()
-	repo, db := newTestRepo(t)
-
-	insertGroups(t, db, "at-ceiling-", pagination.MaxAllRows)
-	got, err := repo.ListAll(t.Context())
-	require.NoError(t, err)
-	assert.Len(t, got, pagination.MaxAllRows)
-
-	insertGroups(t, db, "over-ceiling-", 1)
-	got, err = repo.ListAll(t.Context())
-	require.ErrorIs(t, err, ErrTooManyRows)
-	assert.Nil(t, got)
 }
 
 func TestPostgresGroupRepository_Update(t *testing.T) {

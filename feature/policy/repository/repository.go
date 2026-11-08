@@ -7,7 +7,6 @@ import (
 	"uuid"
 
 	"pkgsilo/core/database"
-	"pkgsilo/core/pagination"
 )
 
 // PolicyRepository stores policy records. Every write takes part in a transaction of Write, which advances
@@ -15,8 +14,7 @@ import (
 type PolicyRepository interface {
 	// Get returns the record with the given ID.
 	Get(ctx context.Context, id uuid.UUID) (PolicyRecord, error)
-	// ListAll returns all records, ordered by creation time. It returns an error wrapping ErrTooManyRows
-	// if there are more than pagination.MaxAllRows.
+	// ListAll returns all records, ordered by creation time.
 	ListAll(ctx context.Context) ([]PolicyRecord, error)
 	// ListExistingGroups returns those of the given group IDs that a group has, in one query.
 	ListExistingGroups(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
@@ -66,8 +64,7 @@ func (r *PostgresPolicyRepository) Get(ctx context.Context, id uuid.UUID) (Polic
 	return get(ctx, r.db, id)
 }
 
-// ListAll returns all records, ordered by creation time. It returns an error wrapping ErrTooManyRows if
-// there are more than pagination.MaxAllRows.
+// ListAll returns all records, ordered by creation time.
 func (r *PostgresPolicyRepository) ListAll(ctx context.Context) ([]PolicyRecord, error) {
 	return listAll(ctx, r.db)
 }
@@ -203,21 +200,15 @@ func get(ctx context.Context, q database.Querier, id uuid.UUID) (PolicyRecord, e
 	return rec, nil
 }
 
-// listAll returns all records that q finds, ordered by creation time. It returns an error wrapping
-// ErrTooManyRows if there are more than pagination.MaxAllRows.
+// listAll returns all records that q finds, ordered by creation time.
 func listAll(ctx context.Context, q database.Querier) ([]PolicyRecord, error) {
 	var recs []PolicyRecord
 	err := q.SelectContext(ctx, &recs, `
 		SELECT `+policyColumns+` FROM policies
-		ORDER BY created_at, id
-		LIMIT $1`,
-		pagination.MaxAllRows+1,
+		ORDER BY created_at, id`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list all policies: %w", err)
-	}
-	if len(recs) > pagination.MaxAllRows {
-		return nil, fmt.Errorf("list all policies: over %d: %w", pagination.MaxAllRows, ErrTooManyRows)
 	}
 
 	return recs, nil
