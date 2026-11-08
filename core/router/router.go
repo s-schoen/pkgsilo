@@ -10,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/noop"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
@@ -25,24 +24,28 @@ type Options struct {
 	TrustedProxies []netip.Prefix
 	// Dev prints the stack traces of recovered panics in a readable form instead of logging them.
 	Dev bool
-	// MeterProvider records the HTTP server metrics of every request. Nil: nothing is recorded.
-	MeterProvider metric.MeterProvider
 	// UnmeasuredPaths are the paths whose requests aren't measured, such as the health check, which
-	// would only measure the health checker.
+	// would only measure the health checker. A path matches with a trailing slash too, since a
+	// subrouter mounted at it serves both.
 	UnmeasuredPaths []string
 }
 
-// New returns a chi router with the middleware shared by all features.
+// New returns a chi router with the middleware shared by all features, which records the HTTP server
+// metrics of every request with meterProvider. It panics if meterProvider is nil.
 //
 // Unmatched routes and methods are answered with Problem Details. Subrouters inherit these
 // handlers only when mounted after New returns.
-func New(opts Options, logger *slog.Logger) *chi.Mux {
+func New(opts Options, logger *slog.Logger, meterProvider metric.MeterProvider) *chi.Mux {
+	if meterProvider == nil {
+		panic("router: New needs a meter provider")
+	}
+
 	r := chi.NewRouter()
 	// Order matters: the metrics middleware comes first, so that it measures what the middleware
 	// below writes too, such as the 500 of a recovered panic. RequestLogger reads the request ID
 	// and client IP from the context it receives, so both must be set before it. Recoverer must
 	// sit inside RequestLogger so that recovered panics are logged with their 500 status.
-	r.Use(measure(opts))
+	r.Use(measure(meterProvider, opts.UnmeasuredPaths))
 	r.Use(middleware.RequestID)
 	r.Use(middleware.ClientIP(opts.TrustedProxies))
 	r.Use(middleware.RequestLogger(logger))
@@ -64,28 +67,27 @@ func New(opts Options, logger *slog.Logger) *chi.Mux {
 	return r
 }
 
-// measure returns the middleware that records the HTTP server metrics of semconv with the provider
-// of opts, http.route being the chi route pattern of the request.
+// measure returns the middleware that records the HTTP server metrics of semconv with provider, http.route
+// being the chi route pattern of the request, for every request but those to the unmeasured paths.
 //
 // It must run as a middleware of the root router: chi returns its route context to a pool once
 // the router's ServeHTTP returns, and the route is known only once the request is answered.
 // otelhttp's own route, from Request.Pattern, can't be used: chi sets it only on the copy of the
 // request that it passes to the route's handler.
-func measure(opts Options) func(http.Handler) http.Handler {
-	provider := opts.MeterProvider
-	if provider == nil {
-		provider = noop.NewMeterProvider()
-	}
-	unmeasured := make(map[string]bool, len(opts.UnmeasuredPaths))
-	for _, path := range opts.UnmeasuredPaths {
-		unmeasured[path] = true
+func measure(provider metric.MeterProvider, unmeasuredPaths []string) func(http.Handler) http.Handler {
+	unmeasured := make(map[string]bool, len(unmeasuredPaths))
+	for _, path := range unmeasuredPaths {
+		unmeasured[strings.TrimSuffix(path, "/")] = true
 	}
 
 	otel := otelhttp.NewMiddleware("http.server",
 		otelhttp.WithMeterProvider(provider),
 		// Spans come with tracing, which isn't set up: until then, none are created.
 		otelhttp.WithTracerProvider(tracenoop.NewTracerProvider()),
-		otelhttp.WithFilter(func(r *http.Request) bool { return !unmeasured[r.URL.Path] }),
+		// By the path that chi routes, so that a path it routes elsewhere is measured.
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			return !unmeasured[strings.TrimSuffix(routingPath(r), "/")]
+		}),
 	)
 
 	return func(next http.Handler) http.Handler {
@@ -98,16 +100,33 @@ func measure(opts Options) func(http.Handler) http.Handler {
 func labelRoute(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(w, r)
-		if route := chi.RouteContext(r.Context()).RoutePattern(); route != "" {
+		if route := routePattern(r); route != "" {
 			labeler, _ := otelhttp.LabelerFromContext(r.Context())
 			labeler.Add(semconv.HTTPRoute(route))
 		}
 	})
 }
 
+// routePattern returns the pattern of the route that the request matches, or "" if it matches none.
+//
+// A request that a middleware of a group answers, such as the 401 of authn.Require, never reaches the
+// subrouter mounted in the group, so that chi recorded the mount's wildcard, such as
+// /api/v1/identities/*, as the pattern. It's routed again from the root then, to the route that the
+// subrouter would have served.
+func routePattern(r *http.Request) string {
+	rctx := chi.RouteContext(r.Context())
+	pattern := rctx.RoutePattern()
+	if !strings.HasSuffix(pattern, "/*") {
+		return pattern
+	}
+
+	// A route that ends in a wildcard of its own is found again, under the same pattern.
+	return rctx.Routes.Find(chi.NewRouteContext(), r.Method, routingPath(r))
+}
+
 // forgetRoute drops the route patterns that chi recorded for the request, so that its metrics have no
-// http.route. A request that matches no route still records the patterns of the subrouters on its way,
-// such as /api/v1/identities/* for /api/v1/identities/1/missing, which name no route.
+// http.route. A request that matches no route still records the patterns on its way, such as /sub for
+// a request to /sub when the subrouter mounted there routes nothing at /, which name no route.
 func forgetRoute(r *http.Request) {
 	if rctx := chi.RouteContext(r.Context()); rctx != nil {
 		rctx.RoutePatterns = rctx.RoutePatterns[:0]
@@ -129,12 +148,17 @@ func allowedMethods(r *http.Request) []string {
 		return nil
 	}
 
-	path := r.URL.RawPath
-	if path == "" {
-		path = r.URL.Path
+	return routedMethods(rctx.Routes, routingPath(r))
+}
+
+// routingPath returns the path that the root router routes the request by, as chi does: the escaped
+// path if it differs from the default escaping of the decoded path.
+func routingPath(r *http.Request) string {
+	if r.URL.RawPath != "" {
+		return r.URL.RawPath
 	}
 
-	return routedMethods(rctx.Routes, path)
+	return r.URL.Path
 }
 
 func routedMethods(routes chi.Routes, path string) []string {

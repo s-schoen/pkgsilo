@@ -20,15 +20,15 @@ import (
 //
 //  1. List the identities: 200.
 //  2. Get the first one: 200.
-//  3. Check the health: 200.
-//  4. List the identities without a key: 401.
-//  5. List them with an unknown key: 401.
+//  3. Check the health, without and with a trailing slash: 200 each.
+//  4. Get the first identity without a key: 401.
+//  5. List the identities with an unknown key: 401.
 //  6. Scrape the metrics: 200 in the Prometheus text format, with target_info describing the service
 //     pkgsilo, a Go runtime series, the request durations of steps 1 and 2 under their route
-//     patterns, without the host they were sent to, the connections of the database pool, the
-//     durations of the queries, the authentications of steps 1 and 2 as successes, of step 4 as
-//     missing and of step 5 as rejected for an unknown key, and the allowed authorization decisions.
-//     Step 3 isn't measured.
+//     patterns, and of steps 4 and 5 under the same patterns, without the host they were sent to,
+//     the connections of the database pool, the durations of the queries, the authentications of
+//     steps 1 and 2 as successes, of step 4 as missing and of step 5 as rejected for an unknown key,
+//     and the allowed authorization decisions. Step 3 isn't measured.
 func TestMetrics(t *testing.T) {
 	t.Parallel()
 	api, metrics := apptest.NewWithMetrics(t)
@@ -43,9 +43,10 @@ func TestMetrics(t *testing.T) {
 
 	// 3. Check the health.
 	api.Anonymous().Get("/api/v1/health").AssertStatus(http.StatusOK)
+	api.Anonymous().Get("/api/v1/health/").AssertStatus(http.StatusOK)
 
-	// 4. List without a key.
-	api.Anonymous().Get("/api/v1/identities").AssertStatus(http.StatusUnauthorized)
+	// 4. Get without a key.
+	api.Anonymous().Get("/api/v1/identities/" + identities[0].ID.String()).AssertStatus(http.StatusUnauthorized)
 
 	// 5. List with an unknown key.
 	api.Anonymous().WithHeader("X-Api-Key", "psk_unknown").Get("/api/v1/identities").
@@ -59,8 +60,10 @@ func TestMetrics(t *testing.T) {
 	assert.Regexp(t, `(?m)^target_info\{[^}]*service_name="pkgsilo"[^}]*\} 1$`, body)
 	assert.Regexp(t, `(?m)^go_goroutine_count(_\w+)?\{`, body)
 	for _, route := range []string{`/api/v1/identities`, `/api/v1/identities/\{id\}`} {
-		assert.Regexp(t, `(?m)^http_server_request_duration_seconds_count\{http_request_method="GET",`+
-			`http_response_status_code="200",http_route="`+route+`",[^}]*\} 1$`, body)
+		for _, status := range []string{"200", "401"} {
+			assert.Regexp(t, `(?m)^http_server_request_duration_seconds_count\{http_request_method="GET",`+
+				`http_response_status_code="`+status+`",http_route="`+route+`",[^}]*\} 1$`, body)
+		}
 	}
 	assert.NotRegexp(t, `(?m)^http_server_\w+\{[^}]*(server_address|server_port)=`, body)
 	assert.NotContains(t, body, "/api/v1/health")

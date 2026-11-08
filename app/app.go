@@ -52,9 +52,8 @@ func NewHandler(
 	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authorizer, apiKeyPepper)
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema())
 
-	opts.MeterProvider = meterProvider
 	opts.UnmeasuredPaths = slices.Concat(opts.UnmeasuredPaths, []string{apiPath + healthPath})
-	r := router.New(opts, logger)
+	r := router.New(opts, logger, meterProvider)
 	r.Route(apiPath, func(r chi.Router) {
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())
 		r.Group(func(r chi.Router) {

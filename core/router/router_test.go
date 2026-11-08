@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric/noop"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 
 	"pkgsilo/core/envelope"
@@ -22,7 +23,7 @@ import (
 
 func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
 	t.Parallel()
-	r := New(Options{}, loggertest.Discard())
+	r := New(Options{}, loggertest.Discard(), noop.NewMeterProvider())
 	// chi only builds the middleware chain once at least one route exists.
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
@@ -38,14 +39,14 @@ func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
 
 func TestNew_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
-	r := New(Options{}, loggertest.Discard())
-	noop := func(http.ResponseWriter, *http.Request) {}
-	r.Get("/root", noop)
-	r.Delete("/root", noop)
+	r := New(Options{}, loggertest.Discard(), noop.NewMeterProvider())
+	nothing := func(http.ResponseWriter, *http.Request) {}
+	r.Get("/root", nothing)
+	r.Delete("/root", nothing)
 	// Mounted after New, so the subrouter inherits the 404 and 405 handlers.
 	sub := chi.NewRouter()
-	sub.Put("/", noop)
-	sub.Get("/item", noop)
+	sub.Put("/", nothing)
+	sub.Get("/item", nothing)
 	r.Mount("/sub", sub)
 	r.Mount("/param/{id}", sub)
 	r.Route("/nested", func(n chi.Router) { n.Mount("/sub", sub) })
@@ -79,7 +80,7 @@ func TestNew_MethodNotAllowed(t *testing.T) {
 
 func TestNew_MountedSubrouterNotFound(t *testing.T) {
 	t.Parallel()
-	r := New(Options{}, loggertest.Discard())
+	r := New(Options{}, loggertest.Discard(), noop.NewMeterProvider())
 	sub := chi.NewRouter()
 	sub.Get("/", func(http.ResponseWriter, *http.Request) {})
 	r.Mount("/sub", sub)
@@ -100,7 +101,8 @@ func TestNew_MountedSubrouterNotFound(t *testing.T) {
 func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
-	r := New(Options{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}}, logger)
+	r := New(Options{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}}, logger,
+		noop.NewMeterProvider())
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -116,7 +118,7 @@ func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {
 func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
-	r := New(Options{}, logger)
+	r := New(Options{}, logger, noop.NewMeterProvider())
 	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
 
 	rec := httptest.NewRecorder()
@@ -139,7 +141,7 @@ func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
 func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
-	r := New(Options{}, logger)
+	r := New(Options{}, logger, noop.NewMeterProvider())
 	r.Get("/unencodable", func(w http.ResponseWriter, _ *http.Request) {
 		envelope.WriteResource(w, make(chan int))
 	})
@@ -163,10 +165,13 @@ func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
 
 func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
 	t.Parallel()
-	noop := func(http.ResponseWriter, *http.Request) {}
 	sub := chi.NewRouter()
-	sub.Get("/{itemID}", noop)
+	sub.Get("/{itemID}", func(http.ResponseWriter, *http.Request) {})
 	sub.Get("/missing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	// Answers every request with a 401 before the subrouter mounted behind it routes it, as authn.Require does.
+	unauthorized := func(http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) })
+	}
 
 	tests := []struct {
 		name       string
@@ -189,6 +194,27 @@ func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
 			wantStatus: http.StatusNotFound,
 		},
 		{
+			name: "no route at the path of a mount", method: http.MethodGet, path: "/api/v1/things/7/items",
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name: "answered before a mounted subrouter", method: http.MethodGet, path: "/api/v1/guarded/7/items/42",
+			wantStatus: http.StatusUnauthorized, wantRoute: "/api/v1/guarded/{thingID}/items/{itemID}",
+		},
+		{
+			name: "answered before a mounted subrouter at its path", method: http.MethodGet,
+			path: "/api/v1/guarded/7/items", wantStatus: http.StatusUnauthorized,
+			wantRoute: "/api/v1/guarded/{thingID}/items",
+		},
+		{
+			name: "answered before a mounted subrouter without a route", method: http.MethodGet,
+			path: "/api/v1/guarded/7/items/42/more", wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name: "wildcard route", method: http.MethodGet, path: "/files/a/b",
+			wantStatus: http.StatusOK, wantRoute: "/files/*",
+		},
+		{
 			name: "method not allowed", method: http.MethodPost, path: "/api/v1/things/7/items/42",
 			wantStatus: http.StatusMethodNotAllowed,
 		},
@@ -205,9 +231,13 @@ func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			metrics := telemetrytest.New(t)
-			r := New(Options{MeterProvider: metrics.MeterProvider()}, loggertest.Discard())
+			r := New(Options{}, loggertest.Discard(), metrics.MeterProvider())
 			r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
-			r.Route("/api/v1", func(r chi.Router) { r.Mount("/things/{thingID}/items", sub) })
+			r.Get("/files/*", func(http.ResponseWriter, *http.Request) {})
+			r.Route("/api/v1", func(r chi.Router) {
+				r.Mount("/things/{thingID}/items", sub)
+				r.With(unauthorized).Mount("/guarded/{thingID}/items", sub)
+			})
 
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, nil))
@@ -244,7 +274,7 @@ func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
 func TestNew_RecordsBodySizes(t *testing.T) {
 	t.Parallel()
 	metrics := telemetrytest.New(t)
-	r := New(Options{MeterProvider: metrics.MeterProvider()}, loggertest.Discard())
+	r := New(Options{}, loggertest.Discard(), metrics.MeterProvider())
 	r.Post("/echo", func(w http.ResponseWriter, req *http.Request) { _, _ = io.Copy(w, req.Body) })
 
 	rec := httptest.NewRecorder()
@@ -260,15 +290,41 @@ func TestNew_RecordsBodySizes(t *testing.T) {
 
 func TestNew_SkipsUnmeasuredPaths(t *testing.T) {
 	t.Parallel()
-	metrics := telemetrytest.New(t)
-	r := New(Options{MeterProvider: metrics.MeterProvider(), UnmeasuredPaths: []string{"/api/v1/health"}},
-		loggertest.Discard())
-	r.Get("/api/v1/health", func(http.ResponseWriter, *http.Request) {})
+	health := chi.NewRouter()
+	health.Get("/", func(http.ResponseWriter, *http.Request) {})
 
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/health", nil))
-	require.Equal(t, http.StatusOK, rec.Code)
+	tests := []struct {
+		path         string
+		wantStatus   int
+		wantMeasured bool
+	}{
+		{path: "/api/v1/health", wantStatus: http.StatusOK},
+		{path: "/api/v1/health/", wantStatus: http.StatusOK},
+		// Decoded, the path is unmeasured, but chi routes it by its escaped form, to no route.
+		{path: "/api/v1/%68ealth", wantStatus: http.StatusNotFound, wantMeasured: true},
+		{path: "/api/v1/health/more", wantStatus: http.StatusNotFound, wantMeasured: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+			metrics := telemetrytest.New(t)
+			r := New(Options{UnmeasuredPaths: []string{"/api/v1/health"}}, loggertest.Discard(), metrics.MeterProvider())
+			r.Mount("/api/v1/health", health)
 
-	_, recorded := metrics.Metric(t, "http.server.request.duration")
-	assert.False(t, recorded)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.path, nil))
+			require.Equal(t, tt.wantStatus, rec.Code)
+
+			_, measured := metrics.Metric(t, "http.server.request.duration")
+			assert.Equal(t, tt.wantMeasured, measured)
+		})
+	}
+}
+
+func TestNew_PanicsWithoutMeterProvider(t *testing.T) {
+	t.Parallel()
+
+	assert.PanicsWithValue(t, "router: New needs a meter provider", func() {
+		New(Options{}, loggertest.Discard(), nil)
+	})
 }
