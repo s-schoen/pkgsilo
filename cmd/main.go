@@ -58,12 +58,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("set up telemetry: %w", err)
 	}
+	// Deferred first, so that it runs last, once the servers and the database have stopped recording.
+	defer shutDownTelemetry(ctx, log, tel)
 	// Only for third-party code recording metrics: our own code uses the injected provider.
 	otel.SetMeterProvider(tel.MeterProvider())
 
-	db, err := database.Open(ctx, database.Options{
-		URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns, MeterProvider: tel.MeterProvider(),
-	})
+	db, err := database.Open(ctx, database.Options{URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns},
+		tel.MeterProvider())
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
@@ -91,7 +92,7 @@ func run() error {
 }
 
 // serve serves the API handler h and, if enabled, the metrics of tel, each on its own listener, until
-// ctx is canceled or one of them fails, which stops the other. Then it shuts tel down.
+// ctx is canceled or one of them fails, which stops the other.
 func serve(ctx context.Context, cfg config.Config, log *slog.Logger, h http.Handler, tel *telemetry.Telemetry) error {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
@@ -109,14 +110,16 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, h http.Hand
 			return nil
 		})
 	}
-	err := g.Wait()
 
-	// Both servers have stopped, so nothing records anymore. ctx may be canceled already.
+	return g.Wait() //nolint:wrapcheck // Wrapped by the goroutines above.
+}
+
+// shutDownTelemetry shuts tel down, within telemetryShutdownTimeout even if ctx is canceled already, and
+// logs a failure.
+func shutDownTelemetry(ctx context.Context, log *slog.Logger, tel *telemetry.Telemetry) {
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), telemetryShutdownTimeout)
 	defer cancel()
-	if shutdownErr := tel.Shutdown(shutdownCtx); shutdownErr != nil {
-		log.ErrorContext(shutdownCtx, "shut down telemetry", "error", shutdownErr)
+	if err := tel.Shutdown(shutdownCtx); err != nil {
+		log.ErrorContext(shutdownCtx, "shut down telemetry", "error", err)
 	}
-
-	return err //nolint:wrapcheck // Wrapped by the goroutines above.
 }
