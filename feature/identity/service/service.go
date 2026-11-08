@@ -13,10 +13,13 @@ import (
 
 // The actions on identities. Each settable field has its own action for each kind of write, such as
 // identity:update:username, so that policies can limit writes to some fields. Creating has actions of its
-// own, so that an actor who may rename itself can't create identities.
+// own, so that an actor who may rename itself can't create identities. Each field but the ID has its own
+// action for reading it too, such as identity:read:username, on top of identity:read.
 var (
 	actionRead   = authz.NewAction("identity:read", authz.ActionGroupRead)
 	actionDelete = authz.NewAction("identity:delete")
+	readFields   = authz.NewReadFieldActions("identity",
+		"username", "displayName", "createdBy", "updatedBy", "createdAt", "updatedAt")
 	createFields = authz.NewFieldActions("identity:create", "username", "displayName")
 	updateFields = authz.NewFieldActions("identity:update", "username", "displayName")
 )
@@ -27,7 +30,7 @@ func Declaration() authz.Declaration {
 	return authz.Declaration{
 		Type:    authz.IdentityType,
 		Actions: []authz.Action{actionRead, actionDelete},
-		Fields:  []authz.FieldActions{createFields, updateFields},
+		Fields:  []authz.FieldActions{readFields, createFields, updateFields},
 	}
 }
 
@@ -36,6 +39,12 @@ func Declaration() authz.Declaration {
 // a missing one. The identity as the resource must carry its groups.
 func ReadAction() authz.Action {
 	return actionRead
+}
+
+// ReadableFields returns the names of the fields of an identity, besides its ID, each of which has an
+// identity:read:<field> action.
+func ReadableFields() []string {
+	return readFields.Fields()
 }
 
 // CreatableFields returns the names of the fields that creating an identity sets, each of which has an
@@ -51,9 +60,12 @@ func UpdatableFields() []string {
 }
 
 // IdentityService manages identities. Changes are attributed to the given actor.
+//
+// Every identity that it returns holds only the fields that the actor may read, and the ID.
 type IdentityService interface {
 	// Create stores a new identity with the given input. It returns an *authz.FieldsDeniedError, without
-	// storing anything, if the actor may not set any of its fields.
+	// storing anything, if the actor may not set any of its fields. A new identity that the actor may not
+	// read is returned with only its ID.
 	Create(ctx context.Context, actor uuid.UUID, in IdentityInput) (Identity, error)
 	// Get returns the identity with the given ID. An identity that the actor may not read is reported
 	// like a missing one.
@@ -96,7 +108,14 @@ func (s *identityService) Create(ctx context.Context, actor uuid.UUID, in Identi
 
 	// A new identity is in no group yet.
 	id := uuid.NewV4()
-	if err := createFields.Check(decider, authz.Resource{Type: authz.IdentityType, ID: id}); err != nil {
+	resource := authz.Resource{Type: authz.IdentityType, ID: id}
+	if err := createFields.Check(decider, resource); err != nil {
+		return Identity{}, fmt.Errorf("create identity: %w", err)
+	}
+
+	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
+	fields, err := readFields.ReadableIf(decider, actionRead, resource)
+	if err != nil {
 		return Identity{}, fmt.Errorf("create identity: %w", err)
 	}
 
@@ -114,7 +133,7 @@ func (s *identityService) Create(ctx context.Context, actor uuid.UUID, in Identi
 		return Identity{}, fmt.Errorf("create identity: %w", translateError(err))
 	}
 
-	return toIdentity(rec), nil
+	return toIdentity(rec, fields), nil
 }
 
 func (s *identityService) Get(ctx context.Context, actor, id uuid.UUID) (Identity, error) {
@@ -123,12 +142,17 @@ func (s *identityService) Get(ctx context.Context, actor, id uuid.UUID) (Identit
 		return Identity{}, fmt.Errorf("get identity: %w", err)
 	}
 
-	rec, _, err := s.getReadable(ctx, decider, id)
+	rec, resource, err := s.getReadable(ctx, decider, id)
 	if err != nil {
 		return Identity{}, fmt.Errorf("get identity: %w", err)
 	}
 
-	return toIdentity(rec), nil
+	fields, err := readFields.Readable(decider, resource)
+	if err != nil {
+		return Identity{}, fmt.Errorf("get identity: %w", err)
+	}
+
+	return toIdentity(rec, fields), nil
 }
 
 func (s *identityService) List(
@@ -156,10 +180,15 @@ func (s *identityService) List(
 		return pagination.Page[Identity]{}, fmt.Errorf("list identities: %w", err)
 	}
 
+	// Only the fields of the rows on the page are checked.
 	page := pagination.FromAll(readable, offset, limit)
 	identities := make([]Identity, len(page.Items))
 	for i, rec := range page.Items {
-		identities[i] = toIdentity(rec)
+		fields, err := readFields.Readable(decider, toResource(rec, groups))
+		if err != nil {
+			return pagination.Page[Identity]{}, fmt.Errorf("list identities: %w", err)
+		}
+		identities[i] = toIdentity(rec, fields)
 	}
 
 	return pagination.Page[Identity]{Items: identities, HasMore: page.HasMore}, nil
@@ -181,6 +210,12 @@ func (s *identityService) Replace(ctx context.Context, actor, id uuid.UUID, in I
 		return Identity{}, fmt.Errorf("replace identity: %w", err)
 	}
 
+	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
+	fields, err := readFields.Readable(decider, resource)
+	if err != nil {
+		return Identity{}, fmt.Errorf("replace identity: %w", err)
+	}
+
 	rec, err := s.repo.Update(ctx, repository.IdentityRecord{
 		ID:          id,
 		Username:    in.Username,
@@ -192,7 +227,7 @@ func (s *identityService) Replace(ctx context.Context, actor, id uuid.UUID, in I
 		return Identity{}, fmt.Errorf("replace identity: %w", translateError(err))
 	}
 
-	return toIdentity(rec), nil
+	return toIdentity(rec, fields), nil
 }
 
 func (s *identityService) Delete(ctx context.Context, actor, id uuid.UUID) error {
@@ -276,14 +311,16 @@ func toResource(rec repository.IdentityRecord, groups map[uuid.UUID][]uuid.UUID)
 	return authz.Resource{Type: authz.IdentityType, ID: rec.ID, Groups: groups[rec.ID]}
 }
 
-func toIdentity(rec repository.IdentityRecord) Identity {
+// toIdentity returns the identity of the record with its ID and the readable fields. Every other field
+// stays hidden, so that one that's missing here can't be revealed by mistake.
+func toIdentity(rec repository.IdentityRecord, fields authz.ReadableFields) Identity {
 	return Identity{
 		ID:          rec.ID,
-		Username:    rec.Username,
-		DisplayName: rec.DisplayName,
-		CreatedBy:   rec.CreatedBy,
-		UpdatedBy:   rec.UpdatedBy,
-		CreatedAt:   rec.CreatedAt,
-		UpdatedAt:   rec.UpdatedAt,
+		Username:    authz.Reveal(fields, "username", rec.Username),
+		DisplayName: authz.Reveal(fields, "displayName", rec.DisplayName),
+		CreatedBy:   authz.Reveal(fields, "createdBy", rec.CreatedBy),
+		UpdatedBy:   authz.Reveal(fields, "updatedBy", rec.UpdatedBy),
+		CreatedAt:   authz.Reveal(fields, "createdAt", rec.CreatedAt),
+		UpdatedAt:   authz.Reveal(fields, "updatedAt", rec.UpdatedAt),
 	}
 }
