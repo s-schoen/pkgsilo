@@ -16,17 +16,18 @@ const (
 	meterName = "pkgsilo/core/database"
 	// waitsName and waitDurationName count the requests for a connection that had to wait for one, and the
 	// time they waited. semconv has only the histogram db.client.connection.wait_time, which database/sql
-	// can't feed: it reports only these two totals. The names follow db.client.connection.timeouts.
-	waitsName        = "db.client.connection.waits"
-	waitDurationName = "db.client.connection.wait_duration"
+	// can't feed: it reports only these two totals. So they're pkgsilo's own, named like semconv's
+	// db.client.connection.timeouts.
+	waitsName        = "pkgsilo.database.connection.waits"
+	waitDurationName = "pkgsilo.database.connection.wait_duration"
 )
 
-// registerPoolMetrics registers the semconv connection pool metrics of db, read from db.Stats() whenever
+// registerPoolMetrics registers the connection pool metrics of db, read from db.Stats() whenever
 // the provider collects, under the pool name pool:
 //
 //   - db.client.connection.count, by db.client.connection.state idle or used
 //   - db.client.connection.max
-//   - db.client.connection.waits and db.client.connection.wait_duration, see waitsName
+//   - pkgsilo.database.connection.waits and pkgsilo.database.connection.wait_duration, see waitsName
 //
 // The returned function unregisters them, after which the pool reports nothing.
 func registerPoolMetrics(meter metric.Meter, db *sql.DB, pool string) (unregister func() error, err error) {
