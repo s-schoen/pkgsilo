@@ -1,9 +1,10 @@
 // Package authz decides what an authenticated identity may do, by the Cedar policies in the database.
 //
-// It knows no features. Each feature declares its actions with NewAction, and enforces them in its
-// service: it gets a Decider for the request's actor from an Authorizer and asks it about each resource.
-// The fields of a readable object have read actions of their own, from NewReadFieldActions, and a service
-// reveals only those that the actor may read, as a Field. Everything that no policy permits is denied.
+// It knows no features. Each feature declares its resource type with DeclareType, which derives the actions
+// on it from the authz tags of the feature's types, and enforces them in its service: it gets a Decider for
+// the request's actor from an Authorizer and asks it about each resource. The fields of a readable object
+// have read actions of their own, and a service reveals only those that the actor may read, as a Field,
+// with a Mapper from the object's record. Everything that no policy permits is denied.
 //
 // # Accepted risks
 //
