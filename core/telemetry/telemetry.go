@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
+	"go.opentelemetry.io/otel/attribute"
 	otelprometheus "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -73,7 +74,8 @@ func New(ctx context.Context, opts Options) (*Telemetry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create prometheus exporter: %w", err)
 	}
-	provider := sdkmetric.NewMeterProvider(sdkmetric.WithResource(res), sdkmetric.WithReader(exporter))
+	provider := sdkmetric.NewMeterProvider(
+		sdkmetric.WithResource(res), sdkmetric.WithReader(exporter), sdkmetric.WithView(Views()...))
 
 	if err := runtime.Start(runtime.WithMeterProvider(provider)); err != nil {
 		return nil, fmt.Errorf("start runtime metrics: %w", err)
@@ -108,6 +110,18 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// Views returns the views that the provider applies to what instruments record. They drop server.address
+// and server.port from the HTTP server metrics: both come from the Host header that the client sends, so
+// they can take any value, and semconv makes them opt-in on these metrics.
+func Views() []sdkmetric.View {
+	return []sdkmetric.View{
+		sdkmetric.NewView(
+			sdkmetric.Instrument{Name: "http.server.*"},
+			sdkmetric.Stream{AttributeFilter: attribute.NewDenyKeysFilter(semconv.ServerAddressKey, semconv.ServerPortKey)},
+		),
+	}
 }
 
 // newResource returns the resource that describes this process. The environment overrides the defaults.

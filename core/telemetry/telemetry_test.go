@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 )
 
 // newEnabled returns enabled telemetry in version 1.2.3, shut down at the end of the test.
@@ -61,6 +62,29 @@ func TestNew_UnitSuffix(t *testing.T) {
 	histogram.Record(t.Context(), 0.5)
 
 	assert.Regexp(t, `(?m)^test_duration_seconds_count\{[^}]*\} 1$`, scrape(t, tel))
+}
+
+func TestNew_HTTPServerMetricsDropServerAddress(t *testing.T) {
+	t.Parallel()
+	tel := newEnabled(t)
+	attrs := metric.WithAttributes(
+		semconv.ServerAddress("attacker.example"), semconv.ServerPort(8443), semconv.HTTPRoute("/items"))
+
+	meter := tel.MeterProvider().Meter("pkgsilo/test")
+	server, err := meter.Float64Histogram("http.server.request.duration", metric.WithUnit("s"))
+	require.NoError(t, err)
+	server.Record(t.Context(), 0.5, attrs)
+	client, err := meter.Float64Histogram("http.client.request.duration", metric.WithUnit("s"))
+	require.NoError(t, err)
+	client.Record(t.Context(), 0.5, attrs)
+
+	body := scrape(t, tel)
+
+	assert.Regexp(t, `(?m)^http_server_request_duration_seconds_count\{http_route="/items",[^}]*\} 1$`, body)
+	assert.NotRegexp(t, `(?m)^http_server_request_duration_seconds_count\{[^}]*server_`, body)
+	assert.Regexp(t,
+		`(?m)^http_client_request_duration_seconds_count\{[^}]*server_address="attacker.example",server_port="8443"\} 1$`,
+		body)
 }
 
 func TestNew_TargetInfo(t *testing.T) {
