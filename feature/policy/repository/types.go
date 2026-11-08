@@ -15,3 +15,12 @@ type PolicyRecord struct {
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
 }
+
+// PolicyPatch changes some fields of a policy record: a nil field stays as it is.
+type PolicyPatch struct {
+	ID        uuid.UUID
+	Name      *string
+	Source    *string
+	UpdatedBy uuid.UUID
+	UpdatedAt time.Time
+}

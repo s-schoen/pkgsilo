@@ -394,6 +394,72 @@ func (_c *MockPolicyWriter_Delete_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// Get provides a mock function for the type MockPolicyWriter
+func (_mock *MockPolicyWriter) Get(ctx context.Context, id uuid.UUID) (repository.PolicyRecord, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Get")
+	}
+
+	var r0 repository.PolicyRecord
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) (repository.PolicyRecord, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) repository.PolicyRecord); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		r0 = ret.Get(0).(repository.PolicyRecord)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPolicyWriter_Get_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Get'
+type MockPolicyWriter_Get_Call struct {
+	*mock.Call
+}
+
+// Get is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id uuid.UUID
+func (_e *MockPolicyWriter_Expecter) Get(ctx any, id any) *MockPolicyWriter_Get_Call {
+	return &MockPolicyWriter_Get_Call{Call: _e.mock.On("Get", ctx, id)}
+}
+
+func (_c *MockPolicyWriter_Get_Call) Run(run func(ctx context.Context, id uuid.UUID)) *MockPolicyWriter_Get_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPolicyWriter_Get_Call) Return(policyRecord repository.PolicyRecord, err error) *MockPolicyWriter_Get_Call {
+	_c.Call.Return(policyRecord, err)
+	return _c
+}
+
+func (_c *MockPolicyWriter_Get_Call) RunAndReturn(run func(ctx context.Context, id uuid.UUID) (repository.PolicyRecord, error)) *MockPolicyWriter_Get_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Insert provides a mock function for the type MockPolicyWriter
 func (_mock *MockPolicyWriter) Insert(ctx context.Context, rec repository.PolicyRecord) (repository.PolicyRecord, error) {
 	ret := _mock.Called(ctx, rec)
@@ -518,6 +584,72 @@ func (_c *MockPolicyWriter_ListAll_Call) Return(policyRecords []repository.Polic
 }
 
 func (_c *MockPolicyWriter_ListAll_Call) RunAndReturn(run func(ctx context.Context) ([]repository.PolicyRecord, error)) *MockPolicyWriter_ListAll_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Patch provides a mock function for the type MockPolicyWriter
+func (_mock *MockPolicyWriter) Patch(ctx context.Context, patch repository.PolicyPatch) (repository.PolicyRecord, error) {
+	ret := _mock.Called(ctx, patch)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Patch")
+	}
+
+	var r0 repository.PolicyRecord
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.PolicyPatch) (repository.PolicyRecord, error)); ok {
+		return returnFunc(ctx, patch)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.PolicyPatch) repository.PolicyRecord); ok {
+		r0 = returnFunc(ctx, patch)
+	} else {
+		r0 = ret.Get(0).(repository.PolicyRecord)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.PolicyPatch) error); ok {
+		r1 = returnFunc(ctx, patch)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPolicyWriter_Patch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Patch'
+type MockPolicyWriter_Patch_Call struct {
+	*mock.Call
+}
+
+// Patch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - patch repository.PolicyPatch
+func (_e *MockPolicyWriter_Expecter) Patch(ctx any, patch any) *MockPolicyWriter_Patch_Call {
+	return &MockPolicyWriter_Patch_Call{Call: _e.mock.On("Patch", ctx, patch)}
+}
+
+func (_c *MockPolicyWriter_Patch_Call) Run(run func(ctx context.Context, patch repository.PolicyPatch)) *MockPolicyWriter_Patch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 repository.PolicyPatch
+		if args[1] != nil {
+			arg1 = args[1].(repository.PolicyPatch)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPolicyWriter_Patch_Call) Return(policyRecord repository.PolicyRecord, err error) *MockPolicyWriter_Patch_Call {
+	_c.Call.Return(policyRecord, err)
+	return _c
+}
+
+func (_c *MockPolicyWriter_Patch_Call) RunAndReturn(run func(ctx context.Context, patch repository.PolicyPatch) (repository.PolicyRecord, error)) *MockPolicyWriter_Patch_Call {
 	_c.Call.Return(run)
 	return _c
 }

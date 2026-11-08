@@ -27,3 +27,23 @@ type PolicyInput struct {
 	Name   string
 	Source string
 }
+
+// PolicyPatch holds the policy fields that a caller changes when patching a policy. A nil field stays as it
+// is.
+type PolicyPatch struct {
+	Name   *string
+	Source *string
+}
+
+// fields returns the names of the fields that p sets.
+func (p PolicyPatch) fields() []string {
+	var fields []string
+	if p.Name != nil {
+		fields = append(fields, "name")
+	}
+	if p.Source != nil {
+		fields = append(fields, "source")
+	}
+
+	return fields
+}

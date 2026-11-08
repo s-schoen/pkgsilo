@@ -141,6 +141,48 @@ func TestHandler_Replace(t *testing.T) {
 	api.Put(everythingPath, everythingBody).AssertResource(everythingJSON)
 }
 
+func TestHandler_Patch(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		body  string
+		patch service.PolicyPatch
+	}{
+		{name: "name", body: `{"name":"everything"}`, patch: service.PolicyPatch{Name: new("everything")}},
+		{
+			name: "source", body: `{"source":"permit (principal, action, resource);"}`,
+			patch: service.PolicyPatch{Source: new(`permit (principal, action, resource);`)},
+		},
+		{
+			name: "both", body: everythingBody,
+			patch: service.PolicyPatch{Name: new("everything"), Source: new(`permit (principal, action, resource);`)},
+		},
+		{name: "none", body: `{}`, patch: service.PolicyPatch{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			api, svc := newTestClient(t, loggertest.Discard())
+			svc.EXPECT().Patch(mock.Anything, apitest.Actor, everything.ID, tt.patch).Return(everything, nil)
+
+			api.Patch(everythingPath, tt.body).AssertResource(everythingJSON)
+		})
+	}
+}
+
+// TestHandler_Patch_InvalidBody checks that a member of a patch may be left out, but not set to null or to
+// an invalid value.
+func TestHandler_Patch_InvalidBody(t *testing.T) {
+	t.Parallel()
+	// The mock fails the test if the service is called.
+	api, _ := newTestClient(t, loggertest.Discard())
+
+	api.Patch(everythingPath, `{"name":null,"source":""}`).AssertInvalidBody(
+		envelope.ValidationError{Pointer: "#/name", Detail: "cannot be null"},
+		envelope.ValidationError{Pointer: "#/source", Detail: "cannot be blank"},
+	)
+}
+
 func TestHandler_Delete(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
@@ -181,6 +223,7 @@ func TestHandler_SettableMembersHaveActions(t *testing.T) {
 	}{
 		{name: "create", body: reflect.TypeFor[CreatePolicyRequest](), actions: service.CreatableFields()},
 		{name: "replace", body: reflect.TypeFor[ReplacePolicyRequest](), actions: service.UpdatableFields()},
+		{name: "patch", body: reflect.TypeFor[PatchPolicyRequest](), actions: service.UpdatableFields()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -198,7 +241,7 @@ func TestHandler_SettableMembersHaveActions(t *testing.T) {
 
 func TestHandler_InvalidID(t *testing.T) {
 	t.Parallel()
-	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
 			api, _ := newTestClient(t, loggertest.Discard())
@@ -240,6 +283,12 @@ func TestHandler_ServiceErrors(t *testing.T) {
 				svc.EXPECT().Replace(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(service.Policy{}, err)
 			},
 		}
+		patch = endpoint{
+			method: http.MethodPatch, target: everythingPath, body: everythingBody,
+			expect: func(svc *mocks.MockPolicyService, err error) {
+				svc.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(service.Policy{}, err)
+			},
+		}
 		del = endpoint{
 			method: http.MethodDelete, target: everythingPath,
 			expect: func(svc *mocks.MockPolicyService, err error) {
@@ -277,6 +326,11 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		{name: "replace invalid", endpoint: replace, err: invalidErr, want: invalid},
 		{name: "replace fields denied", endpoint: replace, err: fieldsDeniedErr, want: fieldsDenied},
 		{name: "replace unexpected", endpoint: replace, err: unexpectedErr, want: internal},
+		{name: "patch not found", endpoint: patch, err: notFoundErr, want: policyNotFoundProblem},
+		{name: "patch name taken", endpoint: patch, err: takenErr, want: policyNameTakenProblem},
+		{name: "patch invalid", endpoint: patch, err: invalidErr, want: invalid},
+		{name: "patch fields denied", endpoint: patch, err: fieldsDeniedErr, want: fieldsDenied},
+		{name: "patch unexpected", endpoint: patch, err: unexpectedErr, want: internal},
 		{name: "delete not found", endpoint: del, err: notFoundErr, want: policyNotFoundProblem},
 		{name: "delete denied", endpoint: del, err: deniedErr, want: forbiddenProblem},
 		{name: "delete unexpected", endpoint: del, err: unexpectedErr, want: internal},

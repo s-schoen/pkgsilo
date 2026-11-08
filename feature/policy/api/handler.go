@@ -33,6 +33,7 @@ func (h *Handler) Routes() chi.Router {
 	r.Post("/", h.create)
 	r.Get("/{id}", h.get)
 	r.Put("/{id}", h.replace)
+	r.Patch("/{id}", h.patch)
 	r.Delete("/{id}", h.delete)
 
 	return r
@@ -100,6 +101,26 @@ func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	policy, err := h.service.Replace(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, body.toInput())
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+
+	envelope.WriteResource(w, toPolicyResponse(policy))
+}
+
+func (h *Handler) patch(w http.ResponseWriter, r *http.Request) {
+	id, ok := policyID(w, r)
+	if !ok {
+		return
+	}
+
+	var body PatchPolicyRequest
+	if !request.DecodeMergePatch(w, r, &body) {
+		return
+	}
+
+	policy, err := h.service.Patch(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, body.toPatch())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
