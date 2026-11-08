@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
+	"go.opentelemetry.io/otel/metric"
 
 	"pkgsilo/core/authn"
 	"pkgsilo/core/authz"
@@ -30,8 +31,11 @@ import (
 
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
 // on the router that opts configures. All routes but the health check need an authenticated request.
-// API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger.
-func NewHandler(opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger) http.Handler {
+// API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger. The
+// metric.MeterProvider is the one that metrics are recorded with, once a component records any.
+func NewHandler(
+	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger, _ metric.MeterProvider,
+) http.Handler {
 	authorizer := authz.New(db)
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db), authorizer)

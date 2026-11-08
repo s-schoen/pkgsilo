@@ -3,6 +3,7 @@ package config
 import (
 	"log/slog"
 	"net/netip"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,10 +12,20 @@ import (
 
 const testPepper = "test-pepper-of-at-least-32-characters"
 
+// unsetenv unsets the environment variable key for the test and restores it afterwards.
+func unsetenv(t *testing.T, key string) {
+	t.Helper()
+
+	// Registers the restore, which os.Unsetenv alone wouldn't.
+	t.Setenv(key, "")
+	require.NoError(t, os.Unsetenv(key))
+}
+
 func TestLoad_Defaults(t *testing.T) {
 	// Empty values fall back to the defaults, isolating the test from the shell environment.
 	t.Setenv("ENV", "")
 	t.Setenv("HTTP_ADDR", "")
+	unsetenv(t, "METRICS_ADDR")
 	t.Setenv("LOG_LEVEL", "")
 	t.Setenv("TRUSTED_PROXIES", "")
 	t.Setenv("DATABASE_MAX_CONNS", "")
@@ -27,6 +38,8 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, "prod", cfg.Env)
 	assert.False(t, cfg.IsDev())
 	assert.Equal(t, ":8080", cfg.HTTPAddr)
+	assert.Equal(t, ":9090", cfg.MetricsAddr)
+	assert.True(t, cfg.MetricsEnabled())
 	assert.Equal(t, slog.LevelInfo, cfg.LogLevel)
 	assert.Empty(t, cfg.TrustedProxies)
 	assert.Equal(t, "postgres://localhost/pkgsilo", cfg.DatabaseURL)
@@ -36,6 +49,7 @@ func TestLoad_Defaults(t *testing.T) {
 func TestLoad_FromEnv(t *testing.T) {
 	t.Setenv("ENV", "dev")
 	t.Setenv("HTTP_ADDR", "127.0.0.1:9000")
+	t.Setenv("METRICS_ADDR", "127.0.0.1:9100")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("TRUSTED_PROXIES", "10.0.0.1, 192.168.0.0/16")
 	t.Setenv("DATABASE_URL", "postgres://db.internal/pkgsilo")
@@ -47,6 +61,7 @@ func TestLoad_FromEnv(t *testing.T) {
 
 	assert.True(t, cfg.IsDev())
 	assert.Equal(t, "127.0.0.1:9000", cfg.HTTPAddr)
+	assert.Equal(t, "127.0.0.1:9100", cfg.MetricsAddr)
 	assert.Equal(t, slog.LevelDebug, cfg.LogLevel)
 	assert.Equal(t, Prefixes{
 		netip.MustParsePrefix("10.0.0.1/32"),
@@ -55,6 +70,18 @@ func TestLoad_FromEnv(t *testing.T) {
 	assert.Equal(t, "postgres://db.internal/pkgsilo", cfg.DatabaseURL)
 	assert.Equal(t, 25, cfg.DatabaseMaxConns)
 	assert.Equal(t, Pepper(testPepper), cfg.APIKeyPepper)
+}
+
+func TestLoad_MetricsOff(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
+	t.Setenv("API_KEY_PEPPER", testPepper)
+	t.Setenv("METRICS_ADDR", "")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	assert.Empty(t, cfg.MetricsAddr)
+	assert.False(t, cfg.MetricsEnabled())
 }
 
 func TestLoad_Invalid(t *testing.T) {
