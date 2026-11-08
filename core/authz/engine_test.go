@@ -295,42 +295,53 @@ func TestEngine_MissingOwner(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestEngine_EvaluationError(t *testing.T) {
+// failingCondition is a condition that fails to evaluate, since the entity lacks the attribute.
+const failingCondition = `when { resource.missing == principal };`
+
+// TestEngine_FailingForbid checks that a forbid that fails to evaluate fails the decision, since Cedar skips
+// it, so that the permit alone would decide.
+func TestEngine_FailingForbid(t *testing.T) {
 	t.Parallel()
-	// An attribute that the entity lacks fails the evaluation.
-	const failing = `when { resource.missing == principal };`
-	const failingPermit = `permit (principal, action, resource) ` + failing
-	const failingForbid = `forbid (principal, action, resource) ` + failing
+	db := databasetest.New(t)
+	removeSeededPolicies(t, db)
+	policy := addPolicy(t, db, `
+		permit (principal, action, resource);
+		forbid (principal, action, resource) `+failingCondition)
+	ada := insertIdentity(t, db)
+
+	decider, err := New(db).For(t.Context(), ada)
+	require.NoError(t, err)
+
+	can, err := decider.Can(testAction, identityResource(ada))
+
+	assert.False(t, can, "a forbid that fails to evaluate must never result in access")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), policy.String()+"#1", "the error must name the policy and the statement")
+}
+
+// TestEngine_FailingPermit checks that a permit that fails to evaluate grants nothing, without failing the
+// decision, so that the other statements still decide.
+func TestEngine_FailingPermit(t *testing.T) {
+	t.Parallel()
+	const failingPermit = `permit (principal, action, resource) ` + failingCondition
 
 	tests := []struct {
-		name          string
-		source        string
-		wantStatement string
+		name    string
+		source  string
+		wantCan bool
 	}{
-		{name: "permit", source: failingPermit, wantStatement: "#0"},
-		// Cedar skips the statement that fails, so that the permit alone would decide.
-		{
-			name:          "forbid beside a permit",
-			source:        `permit (principal, action, resource);` + failingForbid,
-			wantStatement: "#1",
-		},
+		{name: "alone", source: failingPermit, wantCan: false},
+		{name: "beside a permit", source: `permit (principal, action, resource);` + failingPermit, wantCan: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			db := databasetest.New(t)
 			removeSeededPolicies(t, db)
-			policy := addPolicy(t, db, tt.source)
+			addPolicy(t, db, tt.source)
 			ada := insertIdentity(t, db)
 
-			decider, err := New(db).For(t.Context(), ada)
-			require.NoError(t, err)
-
-			can, err := decider.Can(testAction, identityResource(ada))
-
-			assert.False(t, can, "a policy that fails to evaluate must never result in access")
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), policy.String()+tt.wantStatement, "the error must name the policy")
+			assertCan(t, tt.wantCan, New(db), ada, testAction, identityResource(ada))
 		})
 	}
 }
