@@ -17,6 +17,9 @@ import (
 //
 // Each request reads the policies' revision and parses them only if it changed. Every instance on the
 // database thus applies a policy change on its next request, without a background process.
+//
+// It reads tables that features own: policies and policy_revision of the policy feature, and group_members
+// of the group feature. Changing them means changing Engine, which their tests cover.
 type Engine struct {
 	db database.Querier
 	// loaded is the latest parsed policies. Concurrent requests may parse them more than once, and an
