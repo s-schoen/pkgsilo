@@ -29,6 +29,34 @@ type Querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
+// InTx runs fn in a transaction on q. On a *sqlx.DB, it begins one, which commits if fn returns nil and
+// rolls back otherwise. On anything else, such as a *sqlx.Tx, fn takes part in the transaction that q
+// already is, which its owner commits or rolls back. This lets a repository that needs a transaction take
+// part in its caller's. InTx returns fn's error unchanged.
+func InTx(ctx context.Context, q Querier, fn func(tx Querier) error) error {
+	db, ok := q.(*sqlx.DB)
+	if !ok {
+		return fn(q)
+	}
+
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	// Does nothing once the transaction is committed.
+	defer func() { _ = tx.Rollback() }()
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
 // Options configures the database connection.
 type Options struct {
 	// URL is the PostgreSQL connection string, e.g. postgres://user:pass@host:5432/db.
