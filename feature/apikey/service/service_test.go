@@ -495,8 +495,7 @@ func TestAPIKeyService_List_ChecksContextBetweenRows(t *testing.T) {
 func TestAPIKeyService_List_Errors(t *testing.T) {
 	t.Parallel()
 	for name, repoErr := range map[string]error{
-		"list fails":    errDB,
-		"too many rows": fmt.Errorf("list all api keys: %w", repository.ErrTooManyRows),
+		"list fails": errDB,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

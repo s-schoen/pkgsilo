@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/pagination"
 	"pkgsilo/test/databasetest"
 )
 
@@ -99,35 +98,6 @@ func TestPostgresIdentityRepository_ListAll_Empty(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Empty(t, got)
-}
-
-// insertIdentities stores count identity rows, in one statement to keep the test fast.
-func insertIdentities(t *testing.T, db *sqlx.DB, prefix string, count int) {
-	t.Helper()
-
-	_, err := db.ExecContext(t.Context(), `
-		INSERT INTO identities (id, username, display_name, created_by, updated_by, created_at, updated_at)
-		SELECT gen_random_uuid(), $1 || n, 'Test', $2::uuid, $2::uuid, $3::timestamptz, $3::timestamptz
-		FROM generate_series(1, $4::int) AS n`,
-		prefix, uuid.NewV4(), baseTime, count,
-	)
-	require.NoError(t, err)
-}
-
-func TestPostgresIdentityRepository_ListAll_Ceiling(t *testing.T) {
-	t.Parallel()
-	db := databasetest.New(t)
-	repo := NewPostgresIdentityRepository(db)
-
-	insertIdentities(t, db, "at-ceiling-", pagination.MaxAllRows)
-	got, err := repo.ListAll(t.Context())
-	require.NoError(t, err)
-	assert.Len(t, got, pagination.MaxAllRows)
-
-	insertIdentities(t, db, "over-ceiling-", 1)
-	got, err = repo.ListAll(t.Context())
-	require.ErrorIs(t, err, ErrTooManyRows)
-	assert.Nil(t, got)
 }
 
 func TestPostgresIdentityRepository_ListMemberships(t *testing.T) {

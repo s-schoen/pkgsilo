@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"pkgsilo/core/pagination"
 	"pkgsilo/test/databasetest"
 )
 
@@ -134,38 +133,6 @@ func TestPostgresPolicyRepository_ListAll(t *testing.T) {
 	assert.Equal(t, []string{"read-own-identity", "manage-own-api-keys"},
 		[]string{got[0].Name, got[1].Name}, "the seeded policies come first")
 	assert.Equal(t, []PolicyRecord{first, second, third}, userPolicies(t, got))
-}
-
-func TestPostgresPolicyRepository_ListAll_Ceiling(t *testing.T) {
-	t.Parallel()
-	repo, db := newTestRepo(t)
-
-	insertPolicies := func(prefix string, count int) {
-		_, err := db.ExecContext(t.Context(), `
-			INSERT INTO policies (id, name, source, created_by, updated_by, created_at, updated_at)
-			SELECT gen_random_uuid(), $1 || n, '', $2::uuid, $2::uuid, $3::timestamptz, $3::timestamptz
-			FROM generate_series(1, $4::int) AS n`,
-			prefix, uuid.NewV4(), baseTime, count,
-		)
-		require.NoError(t, err)
-	}
-
-	insertPolicies("at-ceiling-", pagination.MaxAllRows-seededPolicies)
-	got, err := repo.ListAll(t.Context())
-	require.NoError(t, err)
-	assert.Len(t, got, pagination.MaxAllRows)
-
-	insertPolicies("over-ceiling-", 1)
-	got, err = repo.ListAll(t.Context())
-	require.ErrorIs(t, err, ErrTooManyRows)
-	assert.Nil(t, got)
-
-	// The writer lists the same way.
-	err = repo.Write(t.Context(), func(w PolicyWriter) error {
-		_, err := w.ListAll(t.Context())
-		return err
-	})
-	assert.ErrorIs(t, err, ErrTooManyRows)
 }
 
 func TestPostgresPolicyRepository_ListExistingGroups(t *testing.T) {

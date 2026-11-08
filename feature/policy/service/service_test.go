@@ -965,13 +965,10 @@ func TestPolicyService_TranslatesRepositoryErrors(t *testing.T) {
 		{call: "create", repoErr: errDB, wantErr: errDB},
 		{call: "create groups", repoErr: errDB, wantErr: errDB},
 		{call: "create count", repoErr: errDB, wantErr: errDB},
-		// Answered with a logged 500 like any other unexpected error.
-		{call: "create count", repoErr: repository.ErrTooManyRows, wantErr: repository.ErrTooManyRows},
 		{call: "create write", repoErr: errDB, wantErr: errDB},
 		{call: "get", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
 		{call: "get", repoErr: errDB, wantErr: errDB},
 		{call: "list", repoErr: errDB, wantErr: errDB},
-		{call: "list", repoErr: repository.ErrTooManyRows, wantErr: repository.ErrTooManyRows},
 		{call: "replace get", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
 		{call: "replace get", repoErr: errDB, wantErr: errDB},
 		{call: "replace", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},

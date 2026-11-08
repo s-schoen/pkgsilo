@@ -7,7 +7,6 @@ import (
 	"uuid"
 
 	"pkgsilo/core/database"
-	"pkgsilo/core/pagination"
 )
 
 // IdentityRepository stores identity records.
@@ -16,8 +15,7 @@ type IdentityRepository interface {
 	Insert(ctx context.Context, rec IdentityRecord) (IdentityRecord, error)
 	// Get returns the record with the given ID.
 	Get(ctx context.Context, id uuid.UUID) (IdentityRecord, error)
-	// ListAll returns all records, ordered by creation time. It returns an error wrapping
-	// ErrTooManyRows if there are more than pagination.MaxAllRows.
+	// ListAll returns all records, ordered by creation time.
 	ListAll(ctx context.Context) ([]IdentityRecord, error)
 	// ListMemberships returns the group memberships of the identities with the given IDs, in one query.
 	ListMemberships(ctx context.Context, identityIDs []uuid.UUID) ([]MembershipRecord, error)
@@ -72,21 +70,15 @@ func (r *PostgresIdentityRepository) Get(ctx context.Context, id uuid.UUID) (Ide
 	return rec, nil
 }
 
-// ListAll returns all records, ordered by creation time. It returns an error wrapping ErrTooManyRows if
-// there are more than pagination.MaxAllRows.
+// ListAll returns all records, ordered by creation time.
 func (r *PostgresIdentityRepository) ListAll(ctx context.Context) ([]IdentityRecord, error) {
 	var recs []IdentityRecord
 	err := r.db.SelectContext(ctx, &recs, `
 		SELECT `+identityColumns+` FROM identities
-		ORDER BY created_at, id
-		LIMIT $1`,
-		pagination.MaxAllRows+1,
+		ORDER BY created_at, id`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list all identities: %w", err)
-	}
-	if len(recs) > pagination.MaxAllRows {
-		return nil, fmt.Errorf("list all identities: over %d: %w", pagination.MaxAllRows, ErrTooManyRows)
 	}
 
 	return recs, nil
