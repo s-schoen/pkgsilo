@@ -30,15 +30,18 @@ var (
 	ciExpiresAt  = time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC)
 	ciLastUsedAt = time.Date(2026, time.November, 5, 11, 30, 0, 123456000, time.UTC)
 
+	// ciIdentityID is the identity of ciKey.
+	ciIdentityID = uuid.MustParse("7a2d3b4c-5e6f-4071-8b8c-0d1e2f3a4b5c")
+
 	ciKey = service.APIKey{
 		ID:         uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
-		IdentityID: uuid.MustParse("7a2d3b4c-5e6f-4071-8b8c-0d1e2f3a4b5c"),
-		Name:       "ci",
-		KeySuffix:  "WXYZ",
-		ExpiresAt:  &ciExpiresAt,
-		LastUsedAt: &ciLastUsedAt,
-		CreatedBy:  uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
-		CreatedAt:  time.Date(2026, time.November, 5, 10, 0, 0, 0, time.UTC),
+		IdentityID: authz.Visible(ciIdentityID),
+		Name:       authz.Visible("ci"),
+		KeySuffix:  authz.Visible("WXYZ"),
+		ExpiresAt:  authz.Visible(&ciExpiresAt),
+		LastUsedAt: authz.Visible(&ciLastUsedAt),
+		CreatedBy:  authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
+		CreatedAt:  authz.Visible(time.Date(2026, time.November, 5, 10, 0, 0, 0, time.UTC)),
 	}
 	ciJSON = `{
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
@@ -69,7 +72,7 @@ func newTestClient(t *testing.T, logger *slog.Logger) (*apitest.Client, *mocks.M
 func TestHandler_List(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().List(mock.Anything, apitest.Actor, ciKey.IdentityID, 0, 50).
+	svc.EXPECT().List(mock.Anything, apitest.Actor, ciIdentityID, 0, 50).
 		Return(pagination.Page[service.APIKey]{Items: []service.APIKey{ciKey}}, nil)
 
 	api.Get(keysPath).AssertCollection(`[`+ciJSON+`]`, envelope.Pagination{Offset: 0, Limit: 50})
@@ -79,7 +82,7 @@ func TestHandler_List_NextPage(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
 	page := pagination.Page[service.APIKey]{Items: []service.APIKey{ciKey}, HasMore: true}
-	svc.EXPECT().List(mock.Anything, apitest.Actor, ciKey.IdentityID, 2, 1).Return(page, nil)
+	svc.EXPECT().List(mock.Anything, apitest.Actor, ciIdentityID, 2, 1).Return(page, nil)
 
 	api.Get(keysPath+"?offset=2&limit=1").
 		AssertCollection(`[`+ciJSON+`]`, envelope.Pagination{Offset: 2, Limit: 1, NextOffset: new(3)})
@@ -99,7 +102,7 @@ func TestHandler_Create(t *testing.T) {
 	created := service.CreatedAPIKey{APIKey: ciKey, Key: "psk_NEWKEY"}
 	expiresAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	in := service.APIKeyInput{Name: "ci", ExpiresAt: &expiresAt}
-	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciKey.IdentityID, in).Return(created, nil)
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciIdentityID, in).Return(created, nil)
 
 	resp := api.Post(keysPath, `{"name":"ci","expiresAt":"`+expiresAt.Format(time.RFC3339)+`"}`)
 
@@ -110,13 +113,59 @@ func TestHandler_Create(t *testing.T) {
 func TestHandler_Create_NeverExpires(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	created := service.APIKey{IdentityID: ciKey.IdentityID, Name: "ci"}
-	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciKey.IdentityID, service.APIKeyInput{Name: "ci"}).
+	created := service.APIKey{
+		ID:         ciKey.ID,
+		ExpiresAt:  authz.Visible[*time.Time](nil),
+		LastUsedAt: authz.Visible[*time.Time](nil),
+	}
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciIdentityID, service.APIKeyInput{Name: "ci"}).
 		Return(service.CreatedAPIKey{APIKey: created, Key: "psk_NEWKEY"}, nil)
 
-	got := apitest.DecodeResource[CreatedKeyResponse](api.Post(keysPath, `{"name":"ci"}`), http.StatusCreated)
-	assert.Nil(t, got.ExpiresAt)
-	assert.Nil(t, got.LastUsedAt)
+	api.Post(keysPath, `{"name":"ci"}`).AssertCreated(ciPath, `{
+		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
+		"expiresAt": null,
+		"lastUsedAt": null,
+		"key": "psk_NEWKEY"
+	}`)
+}
+
+// TestHandler_Create_Unreadable checks that a new API key that the caller may not read is answered with only
+// its ID, Location and key, since the key can't be retrieved later.
+func TestHandler_Create_Unreadable(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciIdentityID, service.APIKeyInput{Name: "ci"}).
+		Return(service.CreatedAPIKey{ID: ciKey.ID, Key: "psk_NEWKEY"}, nil)
+
+	api.Post(keysPath, `{"name":"ci"}`).
+		AssertCreated(ciPath, `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","key":"psk_NEWKEY"}`)
+}
+
+// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response, unlike a visible
+// null.
+func TestHandler_Get_HiddenFields(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, ciIdentityID, ciKey.ID).
+		Return(service.APIKey{ID: ciKey.ID, Name: ciKey.Name, LastUsedAt: authz.Visible[*time.Time](nil)}, nil)
+
+	api.Get(ciPath).
+		AssertResource(`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"ci","lastUsedAt":null}`)
+}
+
+// TestHandler_ReadableMembers checks that every member of the response but the ID can be hidden and has
+// an action for reading it, and that a new API key adds nothing to it but its key.
+func TestHandler_ReadableMembers(t *testing.T) {
+	t.Parallel()
+
+	apitest.AssertReadableMembers(t, reflect.TypeFor[KeyResponse](), service.ReadableFields())
+
+	var members []string
+	for field := range reflect.TypeFor[CreatedKeyResponse]().Fields() {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		members = append(members, name)
+	}
+	assert.Equal(t, []string{"", "key"}, members, "a new API key must be the API key and its key")
 }
 
 func TestHandler_Create_InvalidBody(t *testing.T) {
@@ -140,7 +189,7 @@ func TestHandler_Create_MalformedExpiry(t *testing.T) {
 func TestHandler_Get(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Get(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).Return(ciKey, nil)
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, ciIdentityID, ciKey.ID).Return(ciKey, nil)
 
 	api.Get(ciPath).AssertResource(ciJSON)
 }
@@ -148,7 +197,7 @@ func TestHandler_Get(t *testing.T) {
 func TestHandler_Delete(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Delete(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).Return(nil)
+	svc.EXPECT().Delete(mock.Anything, apitest.Actor, ciIdentityID, ciKey.ID).Return(nil)
 
 	api.Delete(ciPath).AssertNoContent()
 }
@@ -205,7 +254,7 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			api, svc := newTestClient(t, loggertest.Discard())
-			svc.EXPECT().Delete(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).Return(tt.err)
+			svc.EXPECT().Delete(mock.Anything, apitest.Actor, ciIdentityID, ciKey.ID).Return(tt.err)
 
 			api.Delete(ciPath).AssertProblem(tt.want)
 		})
@@ -215,7 +264,7 @@ func TestHandler_ServiceErrors(t *testing.T) {
 func TestHandler_Create_FieldsDenied(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciKey.IdentityID, service.APIKeyInput{Name: "ci"}).
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciIdentityID, service.APIKeyInput{Name: "ci"}).
 		Return(service.CreatedAPIKey{}, fmt.Errorf("create api key: %w",
 			&authz.FieldsDeniedError{Fields: []string{"name", "expiresAt"}}))
 
@@ -247,7 +296,7 @@ func TestHandler_EndpointErrors(t *testing.T) {
 	t.Run("list", func(t *testing.T) {
 		t.Parallel()
 		api, svc := newTestClient(t, loggertest.Discard())
-		svc.EXPECT().List(mock.Anything, apitest.Actor, ciKey.IdentityID, 0, 50).
+		svc.EXPECT().List(mock.Anything, apitest.Actor, ciIdentityID, 0, 50).
 			Return(pagination.Page[service.APIKey]{}, notFound)
 
 		api.Get(keysPath).AssertProblem(identityapi.IdentityNotFoundProblem)
@@ -255,7 +304,7 @@ func TestHandler_EndpointErrors(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		t.Parallel()
 		api, svc := newTestClient(t, loggertest.Discard())
-		svc.EXPECT().Create(mock.Anything, apitest.Actor, ciKey.IdentityID, service.APIKeyInput{Name: "ci"}).
+		svc.EXPECT().Create(mock.Anything, apitest.Actor, ciIdentityID, service.APIKeyInput{Name: "ci"}).
 			Return(service.CreatedAPIKey{}, notFound)
 
 		resp := api.Post(keysPath, `{"name":"ci"}`)
@@ -266,7 +315,7 @@ func TestHandler_EndpointErrors(t *testing.T) {
 	t.Run("delete", func(t *testing.T) {
 		t.Parallel()
 		api, svc := newTestClient(t, loggertest.Discard())
-		svc.EXPECT().Delete(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).Return(notFound)
+		svc.EXPECT().Delete(mock.Anything, apitest.Actor, ciIdentityID, ciKey.ID).Return(notFound)
 
 		api.Delete(ciPath).AssertProblem(identityapi.IdentityNotFoundProblem)
 	})
@@ -276,7 +325,7 @@ func TestHandler_UnexpectedErrorIsLoggedButNotExposed(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	api, svc := newTestClient(t, logger)
-	svc.EXPECT().Get(mock.Anything, apitest.Actor, ciKey.IdentityID, ciKey.ID).
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, ciIdentityID, ciKey.ID).
 		Return(service.APIKey{}, errors.New("connection refused"))
 
 	api.Get(ciPath).AssertInternalError()

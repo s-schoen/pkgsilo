@@ -3,26 +3,38 @@ package service
 import (
 	"time"
 	"uuid"
+
+	"pkgsilo/core/authz"
 )
 
-// APIKey is a credential that authenticates requests as its identity. It doesn't hold the key itself,
-// which is only known when the API key is created.
+// APIKey is a credential that authenticates requests as its identity, as an actor sees it: every field but
+// the ID is hidden unless the actor may read it. It doesn't hold the key itself, which is only known when
+// the API key is created.
 type APIKey struct {
 	ID         uuid.UUID
-	IdentityID uuid.UUID
-	Name       string
+	IdentityID authz.Field[uuid.UUID]
+	Name       authz.Field[string]
 	// KeySuffix is the key's last characters, which tell the holder of a key which API key it is.
-	KeySuffix string
+	KeySuffix authz.Field[string]
 	// ExpiresAt is nil for an API key that never expires.
-	ExpiresAt *time.Time
+	ExpiresAt authz.Field[*time.Time]
 	// LastUsedAt is nil for an API key that has not been used yet. It's accurate to about a minute.
-	LastUsedAt *time.Time
+	LastUsedAt authz.Field[*time.Time]
 	// CreatedBy is the identity, or audit.SystemActor, that created the API key.
-	CreatedBy uuid.UUID
-	CreatedAt time.Time
+	CreatedBy authz.Field[uuid.UUID]
+	CreatedAt authz.Field[time.Time]
 }
 
-// CreatedAPIKey is a new API key with its key, which can't be retrieved later.
+// AuthenticatedKey is the API key that a presented key belongs to, as far as a request needs it once it's
+// authenticated.
+type AuthenticatedKey struct {
+	ID uuid.UUID
+	// IdentityID is the identity that the request acts as.
+	IdentityID uuid.UUID
+}
+
+// CreatedAPIKey is a new API key with its key, which can't be retrieved later. The key is never hidden,
+// since the API key would be useless without it.
 type CreatedAPIKey struct {
 	APIKey
 

@@ -50,22 +50,22 @@ func (_m *MockAPIKeyService) EXPECT() *MockAPIKeyService_Expecter {
 }
 
 // Authenticate provides a mock function for the type MockAPIKeyService
-func (_mock *MockAPIKeyService) Authenticate(ctx context.Context, key string) (service.APIKey, error) {
+func (_mock *MockAPIKeyService) Authenticate(ctx context.Context, key string) (service.AuthenticatedKey, error) {
 	ret := _mock.Called(ctx, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Authenticate")
 	}
 
-	var r0 service.APIKey
+	var r0 service.AuthenticatedKey
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (service.APIKey, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (service.AuthenticatedKey, error)); ok {
 		return returnFunc(ctx, key)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) service.APIKey); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) service.AuthenticatedKey); ok {
 		r0 = returnFunc(ctx, key)
 	} else {
-		r0 = ret.Get(0).(service.APIKey)
+		r0 = ret.Get(0).(service.AuthenticatedKey)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
 		r1 = returnFunc(ctx, key)
@@ -105,12 +105,12 @@ func (_c *MockAPIKeyService_Authenticate_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockAPIKeyService_Authenticate_Call) Return(aPIKey service.APIKey, err error) *MockAPIKeyService_Authenticate_Call {
-	_c.Call.Return(aPIKey, err)
+func (_c *MockAPIKeyService_Authenticate_Call) Return(authenticatedKey service.AuthenticatedKey, err error) *MockAPIKeyService_Authenticate_Call {
+	_c.Call.Return(authenticatedKey, err)
 	return _c
 }
 
-func (_c *MockAPIKeyService_Authenticate_Call) RunAndReturn(run func(ctx context.Context, key string) (service.APIKey, error)) *MockAPIKeyService_Authenticate_Call {
+func (_c *MockAPIKeyService_Authenticate_Call) RunAndReturn(run func(ctx context.Context, key string) (service.AuthenticatedKey, error)) *MockAPIKeyService_Authenticate_Call {
 	_c.Call.Return(run)
 	return _c
 }

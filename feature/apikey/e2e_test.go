@@ -159,13 +159,13 @@ func TestAPIKeys_Lifecycle(t *testing.T) {
 	location := keysPath + "/" + created.ID.String()
 	assert.Equal(t, location, resp.Header().Get("Location"))
 	assert.Equal(t, "no-store", resp.Header().Get("Cache-Control"))
-	assert.Equal(t, ada.ID, created.IdentityID)
-	assert.Equal(t, "ci", created.Name)
+	assert.Equal(t, envelope.Visible(ada.ID), created.IdentityID)
+	assert.Equal(t, envelope.Visible("ci"), created.Name)
 	assert.Regexp(t, `^psk_[A-Z2-7]{52}$`, created.Key)
-	assert.Equal(t, created.Key[len(created.Key)-4:], created.KeySuffix)
-	assert.Equal(t, expiresAt, *created.ExpiresAt)
-	assert.Nil(t, created.LastUsedAt)
-	assert.WithinDuration(t, time.Now(), created.CreatedAt, time.Minute)
+	assert.Equal(t, envelope.Visible(created.Key[len(created.Key)-4:]), created.KeySuffix)
+	assert.Equal(t, expiresAt, *created.ExpiresAt.Value)
+	assert.Equal(t, envelope.Visible[*time.Time](nil), created.LastUsedAt)
+	assert.WithinDuration(t, time.Now(), created.CreatedAt.Value, time.Minute)
 
 	// 2. Get. Decoding fails on a key in the response, which has no member for it.
 	assert.Equal(t, created.KeyResponse, apitest.DecodeResource[apiKey](api.Get(location), http.StatusOK))
@@ -196,11 +196,11 @@ func TestAPIKeys_NeverExpires(t *testing.T) {
 	// 1. Create.
 	_, keysPath := createIdentity(api, "ada")
 	created := createKey(api, keysPath, "ci")
-	assert.Nil(t, created.ExpiresAt)
+	assert.Equal(t, envelope.Visible[*time.Time](nil), created.ExpiresAt)
 
 	// 2. Get.
 	got := apitest.DecodeResource[apiKey](api.Get(keysPath+"/"+created.ID.String()), http.StatusOK)
-	assert.Nil(t, got.ExpiresAt)
+	assert.Equal(t, envelope.Visible[*time.Time](nil), got.ExpiresAt)
 }
 
 // TestAPIKeys_NamesNeedNotBeUnique checks that rotating an API key can keep its name:
@@ -327,8 +327,8 @@ func TestAPIKeys_ManageOwn(t *testing.T) {
 	expiring := apitest.DecodeResource[createdAPIKey](
 		asAda.Post(keysPath, `{"name":"ci","expiresAt":"`+expiresAt.Format(time.RFC3339Nano)+`"}`), http.StatusCreated)
 	lasting := createKey(asAda, keysPath, "laptop")
-	assert.Equal(t, ada.ID, expiring.CreatedBy)
-	assert.Equal(t, ada.ID, lasting.CreatedBy)
+	assert.Equal(t, envelope.Visible(ada.ID), expiring.CreatedBy)
+	assert.Equal(t, envelope.Visible(ada.ID), lasting.CreatedBy)
 
 	// 3. Read them.
 	assert.Equal(t, []uuid.UUID{initial[0], expiring.ID, lasting.ID}, keyIDs(asAda, keysPath))
@@ -379,7 +379,8 @@ func TestAPIKeys_OfHiddenIdentity(t *testing.T) {
 //
 //  1. Create ada and grace with an API key each, and the group auditors with ada as a member: 201 and 204.
 //  2. Add a policy that lets auditors read everything: 201.
-//  3. As ada, list grace's API keys: the same as admin. Get grace's API key: 200.
+//  3. As ada, list grace's API keys: the same as admin, with every field. Get grace's API key: 200 with
+//     every field.
 //  4. As ada, delete grace's API key: 403 Forbidden. Create an API key of grace with an expiry: 403
 //     fields-denied pointing to name and expiresAt.
 //  5. As admin, list grace's API keys: nothing was written.
@@ -503,7 +504,7 @@ func TestAPIKeys_CreateFields(t *testing.T) {
 	assertFieldsDenied(t, asAda.Post(keysPath, `{"name":"ci","expiresAt":"`+expiresAt+`"}`), "#/expiresAt")
 
 	// 4. Create without an expiry.
-	assert.Nil(t, createKey(asAda, keysPath, "ci").ExpiresAt)
+	assert.Equal(t, envelope.Visible[*time.Time](nil), createKey(asAda, keysPath, "ci").ExpiresAt)
 }
 
 // TestAPIKeys_CreateUnreadable checks that a new API key's key is returned even to a caller that can't read
@@ -511,7 +512,7 @@ func TestAPIKeys_CreateFields(t *testing.T) {
 //
 //  1. Create ada with an API key: 201.
 //  2. Add a policy that forbids ada to read API keys: 201.
-//  3. As ada, create an API key of hers: 201 with the key.
+//  3. As ada, create an API key of hers: 201 with its ID and key alone, at its Location.
 //  4. As ada, get it: 404 api-key-not-found. Use its key: it authenticates as ada.
 func TestAPIKeys_CreateUnreadable(t *testing.T) {
 	t.Parallel()
@@ -525,8 +526,10 @@ func TestAPIKeys_CreateUnreadable(t *testing.T) {
 	addPolicy(t, api, `forbid (principal, action == Action::"apikey:read", resource);`)
 
 	// 3. Create.
-	created := createKey(asAda, keysPath, "ci")
+	resp := asAda.Post(keysPath, `{"name":"ci"}`)
+	created := apitest.DecodeResource[createdAPIKey](resp, http.StatusCreated)
 	assert.Regexp(t, `^psk_[A-Z2-7]{52}$`, created.Key)
+	resp.AssertCreated(keysPath+"/"+created.ID.String(), `{"id":"`+created.ID.String()+`","key":"`+created.Key+`"}`)
 
 	// 4. Use it.
 	asAda.Get(keysPath + "/" + created.ID.String()).AssertProblemType(apiKeyNotFound)
@@ -613,27 +616,27 @@ func TestAuthentication_KeyActsAsItsIdentity(t *testing.T) {
 	ada, adaKeysPath := createIdentity(api, "ada")
 	api.Put(administratorsPath+"/members/"+ada.ID.String(), "").AssertNoContent()
 	key := createKey(api, adaKeysPath, "ci")
-	assert.Nil(t, key.LastUsedAt)
+	assert.Equal(t, envelope.Visible[*time.Time](nil), key.LastUsedAt)
 	asAda := api.WithHeader("X-API-Key", key.Key)
 
 	// 2. Create grace.
 	grace, graceKeysPath := createIdentity(asAda, "grace")
-	assert.Equal(t, ada.ID, grace.CreatedBy)
+	assert.Equal(t, envelope.Visible(ada.ID), grace.CreatedBy)
 
 	// 3. Replace grace.
 	replaced := apitest.DecodeResource[identity](asAda.Put(identitiesPath+"/"+grace.ID.String(),
 		`{"username":"grace","displayName":"Grace Hopper"}`), http.StatusOK)
-	assert.Equal(t, ada.ID, replaced.UpdatedBy)
+	assert.Equal(t, envelope.Visible(ada.ID), replaced.UpdatedBy)
 
 	// 4. Create a key of grace.
 	graceKey := createKey(asAda, graceKeysPath, "ci")
-	assert.Equal(t, ada.ID, graceKey.CreatedBy)
-	assert.Equal(t, grace.ID, graceKey.IdentityID)
+	assert.Equal(t, envelope.Visible(ada.ID), graceKey.CreatedBy)
+	assert.Equal(t, envelope.Visible(grace.ID), graceKey.IdentityID)
 
 	// 5. Get ada's key.
 	used := apitest.DecodeResource[apiKey](api.Get(adaKeysPath+"/"+key.ID.String()), http.StatusOK)
-	if assert.NotNil(t, used.LastUsedAt) {
-		assert.WithinDuration(t, time.Now(), *used.LastUsedAt, time.Minute)
+	if assert.NotNil(t, used.LastUsedAt.Value) {
+		assert.WithinDuration(t, time.Now(), *used.LastUsedAt.Value, time.Minute)
 	}
 }
 
@@ -707,8 +710,8 @@ func TestAuthentication_ExpiredKeyStopsWorking(t *testing.T) {
 
 	// 3. Get the key.
 	got := apitest.DecodeResource[apiKey](api.Get(keysPath+"/"+created.ID.String()), http.StatusOK)
-	if assert.NotNil(t, got.LastUsedAt) {
-		assert.True(t, got.LastUsedAt.Before(expiresAt))
+	if assert.NotNil(t, got.LastUsedAt.Value) {
+		assert.True(t, got.LastUsedAt.Value.Before(expiresAt))
 	}
 }
 
@@ -729,22 +732,22 @@ func TestAuthentication_FirstStart(t *testing.T) {
 	identities := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data
 	require.Len(t, identities, 1)
 	admin := identities[0]
-	assert.Equal(t, "admin", admin.Username)
-	assert.Equal(t, uuid.Nil(), admin.CreatedBy)
+	assert.Equal(t, envelope.Visible("admin"), admin.Username)
+	assert.Equal(t, envelope.Visible(uuid.Nil()), admin.CreatedBy)
 
 	// 2. List admin's keys.
 	keysPath := identitiesPath + "/" + admin.ID.String() + "/api-keys"
 	keys := apitest.DecodeCollection[apiKey](api.Get(keysPath), http.StatusOK).Data
 	require.Len(t, keys, 1)
 	bootstrap := keys[0]
-	assert.Equal(t, "bootstrap", bootstrap.Name)
-	assert.Nil(t, bootstrap.ExpiresAt)
-	assert.NotNil(t, bootstrap.LastUsedAt)
-	assert.Equal(t, uuid.Nil(), bootstrap.CreatedBy)
+	assert.Equal(t, envelope.Visible("bootstrap"), bootstrap.Name)
+	assert.Equal(t, envelope.Visible[*time.Time](nil), bootstrap.ExpiresAt)
+	assert.NotNil(t, bootstrap.LastUsedAt.Value)
+	assert.Equal(t, envelope.Visible(uuid.Nil()), bootstrap.CreatedBy)
 
 	// 3. Create a key.
 	own := createKey(api, keysPath, "own")
-	assert.Equal(t, admin.ID, own.CreatedBy)
+	assert.Equal(t, envelope.Visible(admin.ID), own.CreatedBy)
 
 	// 4. Delete the bootstrap key.
 	asOwn := api.WithHeader("X-API-Key", own.Key)
@@ -771,4 +774,41 @@ func TestAuthentication_RoutingProblems(t *testing.T) {
 	// 2. Patch the identities.
 	api.Send(http.MethodPatch, identitiesPath, "").
 		AssertProblem(envelope.MethodNotAllowedProblem.New(envelope.Occurrence{}))
+}
+
+// TestAPIKeys_HiddenExpiry checks that a hidden expiry is absent, unlike the null of an API key that never
+// expires:
+//
+//  1. Create ada with an API key that never expires: 201.
+//  2. As ada, get it: 200 with expiresAt null.
+//  3. Add a policy that forbids ada to read the expiry of API keys: 201.
+//  4. As ada, get it: 200 without expiresAt, and with every other field. As admin, get it: 200 with
+//     expiresAt null.
+func TestAPIKeys_HiddenExpiry(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	keyPath := keysPathOf(ada.ID) + "/" + keyIDs(api, keysPathOf(ada.ID))[0].String()
+
+	// 2. Get it.
+	visible := apitest.DecodeResource[map[string]any](asAda.Get(keyPath), http.StatusOK)
+	assert.Contains(t, visible, "expiresAt")
+	assert.Nil(t, visible["expiresAt"])
+
+	// 3. Add the policy.
+	addPolicy(t, api, `forbid (
+		principal == Identity::"`+ada.ID.String()+`",
+		action == Action::"apikey:read:expiresAt",
+		resource
+	);`)
+
+	// 4. Get it again.
+	hidden := apitest.DecodeResource[map[string]any](asAda.Get(keyPath), http.StatusOK)
+	assert.NotContains(t, hidden, "expiresAt")
+	delete(visible, "expiresAt")
+	assert.Equal(t, visible, hidden, "every other field must stay visible")
+	assert.Equal(t, envelope.Visible[*time.Time](nil),
+		apitest.DecodeResource[apiKey](api.Get(keyPath), http.StatusOK).ExpiresAt)
 }

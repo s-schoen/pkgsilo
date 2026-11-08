@@ -21,6 +21,9 @@ import (
 
 const presentedKey = "psk_PRESENTEDKEY"
 
+// authenticatedKey is ciKey as Authenticate returns it.
+var authenticatedKey = service.AuthenticatedKey{ID: ciKey.ID, IdentityID: ciIdentityID}
+
 func requestWithKey(t *testing.T, key string) *http.Request {
 	t.Helper()
 
@@ -45,12 +48,12 @@ func TestAuthenticator_Challenge(t *testing.T) {
 func TestAuthenticator_Authenticate(t *testing.T) {
 	t.Parallel()
 	svc := mocks.NewMockAPIKeyService(t)
-	svc.EXPECT().Authenticate(mock.Anything, presentedKey).Return(ciKey, nil)
+	svc.EXPECT().Authenticate(mock.Anything, presentedKey).Return(authenticatedKey, nil)
 
 	got, err := NewAuthenticator(svc).Authenticate(requestWithKey(t, presentedKey))
 	require.NoError(t, err)
 
-	assert.Equal(t, authn.Principal{IdentityID: ciKey.IdentityID}, got)
+	assert.Equal(t, authn.Principal{IdentityID: ciIdentityID}, got)
 }
 
 func TestAuthenticator_Authenticate_NoCredentials(t *testing.T) {
@@ -79,7 +82,7 @@ func TestAuthenticator_Authenticate_Rejected(t *testing.T) {
 			t.Parallel()
 			svc := mocks.NewMockAPIKeyService(t)
 			svc.EXPECT().Authenticate(mock.Anything, presentedKey).
-				Return(service.APIKey{}, fmt.Errorf("authenticate: %w", cause))
+				Return(service.AuthenticatedKey{}, fmt.Errorf("authenticate: %w", cause))
 
 			_, err := NewAuthenticator(svc).Authenticate(requestWithKey(t, presentedKey))
 
@@ -93,7 +96,7 @@ func TestAuthenticator_Authenticate_UnexpectedError(t *testing.T) {
 	t.Parallel()
 	errDB := errors.New("connection refused")
 	svc := mocks.NewMockAPIKeyService(t)
-	svc.EXPECT().Authenticate(mock.Anything, presentedKey).Return(service.APIKey{}, errDB)
+	svc.EXPECT().Authenticate(mock.Anything, presentedKey).Return(service.AuthenticatedKey{}, errDB)
 
 	_, err := NewAuthenticator(svc).Authenticate(requestWithKey(t, presentedKey))
 
@@ -121,7 +124,7 @@ func TestAuthenticator_Logs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			svc := mocks.NewMockAPIKeyService(t)
-			svc.EXPECT().Authenticate(mock.Anything, presentedKey).Return(ciKey, tt.err)
+			svc.EXPECT().Authenticate(mock.Anything, presentedKey).Return(authenticatedKey, tt.err)
 			logger, buf := loggertest.NewJSON()
 			r := router.New(router.Options{}, logger)
 			r.With(authn.Require(logger, NewAuthenticator(svc))).
