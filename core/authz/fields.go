@@ -49,6 +49,11 @@ func (f FieldActions) Fields() []string {
 	return append([]string(nil), f.fields...)
 }
 
+// Actions returns the actions of the fields, in the order of their declaration.
+func (f FieldActions) Actions() []Action {
+	return append([]Action(nil), f.actions...)
+}
+
 // Only returns the actions of the given fields, in the order of their declaration, for a write that sets
 // only some of them, such as a POST that leaves out an optional field. It panics on a field that isn't
 // declared, which is a bug in the caller: checking nothing for it would let it be written unchecked.
