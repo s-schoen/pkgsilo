@@ -61,7 +61,9 @@ func run() error {
 	// Only for third-party code recording metrics: our own code uses the injected provider.
 	otel.SetMeterProvider(tel.MeterProvider())
 
-	db, err := database.Open(ctx, database.Options{URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns})
+	db, err := database.Open(ctx, database.Options{
+		URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns, MeterProvider: tel.MeterProvider(),
+	})
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

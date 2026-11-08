@@ -75,3 +75,19 @@ func HistogramPoints[N int64 | float64](tb testing.TB, r *Recorder, name string)
 
 	return histogram.DataPoints
 }
+
+// SumPoints returns the data points of the counter or up-down counter with the given name, synchronous or
+// observable, one per attribute set, or nil when it has recorded nothing. It fails the test if the metric
+// is no sum of N.
+func SumPoints[N int64 | float64](tb testing.TB, r *Recorder, name string) []metricdata.DataPoint[N] {
+	tb.Helper()
+
+	m, ok := r.Metric(tb, name)
+	if !ok {
+		return nil
+	}
+	sum, ok := m.Data.(metricdata.Sum[N])
+	require.Truef(tb, ok, "metric %s is a %T, no sum of %T", name, m.Data, N(0))
+
+	return sum.DataPoints
+}
