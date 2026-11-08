@@ -96,9 +96,9 @@ func TestGroups_Lifecycle(t *testing.T) {
 	maintainers := apitest.DecodeResource[group](created, http.StatusCreated)
 	location := groupsPath + "/" + maintainers.ID.String()
 	assert.Equal(t, location, created.Header().Get("Location"))
-	assert.Equal(t, "Maintainers", maintainers.Name)
+	assert.Equal(t, envelope.Visible("Maintainers"), maintainers.Name)
 	assert.Equal(t, maintainers.CreatedBy, maintainers.UpdatedBy)
-	assert.WithinDuration(t, time.Now(), maintainers.CreatedAt, time.Minute)
+	assert.WithinDuration(t, time.Now(), maintainers.CreatedAt.Value, time.Minute)
 	assert.Equal(t, maintainers.CreatedAt, maintainers.UpdatedAt)
 
 	// 2. Get.
@@ -107,16 +107,16 @@ func TestGroups_Lifecycle(t *testing.T) {
 	// 3. List.
 	listed := apitest.DecodeCollection[group](api.Get(groupsPath), http.StatusOK).Data
 	if assert.Len(t, listed, 2) {
-		assert.Equal(t, "administrators", listed[0].Name)
+		assert.Equal(t, envelope.Visible("administrators"), listed[0].Name)
 		assert.Equal(t, maintainers, listed[1])
 	}
 
 	// 4. Replace.
 	replaced := apitest.DecodeResource[group](api.Put(location, `{"name":"Core maintainers"}`), http.StatusOK)
 	assert.Equal(t, maintainers.ID, replaced.ID)
-	assert.Equal(t, "Core maintainers", replaced.Name)
+	assert.Equal(t, envelope.Visible("Core maintainers"), replaced.Name)
 	assert.Equal(t, maintainers.CreatedAt, replaced.CreatedAt, "the creation time is immutable")
-	assert.True(t, replaced.UpdatedAt.After(maintainers.UpdatedAt), "the update time must advance")
+	assert.True(t, replaced.UpdatedAt.Value.After(maintainers.UpdatedAt.Value), "the update time must advance")
 
 	// 5. Get again.
 	assert.Equal(t, replaced, apitest.DecodeResource[group](api.Get(location), http.StatusOK))
@@ -182,7 +182,7 @@ func TestGroups_ListPages(t *testing.T) {
 	// 2. List the first page.
 	first := apitest.DecodeCollection[group](api.Get(groupsPath+"?limit=2"), http.StatusOK)
 	if assert.Len(t, first.Data, 2) {
-		assert.Equal(t, "administrators", first.Data[0].Name, "groups are listed in creation order")
+		assert.Equal(t, envelope.Visible("administrators"), first.Data[0].Name, "groups are listed in creation order")
 		assert.Equal(t, created[0], first.Data[1])
 	}
 	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, first.Pagination)
@@ -464,7 +464,8 @@ func TestGroups_IdentitiesButNotGroups(t *testing.T) {
 //  1. Create ada with an API key and grace, the group auditors with ada as a member, and maintainers with
 //     grace as a member: 201 and 204.
 //  2. Add a policy that lets auditors read everything: 201.
-//  3. As ada, list the groups and maintainers' members: the same as admin. Get maintainers: 200.
+//  3. As ada, list the groups and maintainers' members: the same as admin, with every field. Get maintainers:
+//     200 with every field.
 //  4. As ada, create a group and replace maintainers: 403 fields-denied pointing to name for both. Delete
 //     maintainers, add ada to it and remove grace from it: 403 Forbidden for each.
 //  5. As admin, list the groups and maintainers' members: nothing was written.
@@ -530,7 +531,7 @@ func TestGroups_MembersReadOwnGroup(t *testing.T) {
 	// 2. Add the policy.
 	addPolicy(t, api, `permit (
 		principal,
-		action in [Action::"group:read", Action::"group:readMembers"],
+		action in [Action::"group:read", Action::"group:readFields", Action::"group:readMembers"],
 		resource is Group
 	) when { principal in resource };`)
 

@@ -4,17 +4,20 @@ package service
 import (
 	"time"
 	"uuid"
+
+	"pkgsilo/core/authz"
 )
 
-// Group is a named set of identities, its members.
+// Group is a named set of identities, its members, as an actor sees it: every field but the ID is hidden
+// unless the actor may read it.
 type Group struct {
 	ID   uuid.UUID
-	Name string
+	Name authz.Field[string]
 	// CreatedBy and UpdatedBy are the identities, or audit.SystemActor, that made the changes.
-	CreatedBy uuid.UUID
-	UpdatedBy uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedBy authz.Field[uuid.UUID]
+	UpdatedBy authz.Field[uuid.UUID]
+	CreatedAt authz.Field[time.Time]
+	UpdatedAt authz.Field[time.Time]
 }
 
 // GroupInput holds the group fields set by callers when creating or replacing a group.
