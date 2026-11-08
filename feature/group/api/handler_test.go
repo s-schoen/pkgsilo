@@ -30,11 +30,11 @@ import (
 var (
 	maintainers = service.Group{
 		ID:        uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
-		Name:      "Maintainers",
-		CreatedBy: audit.SystemActor(),
-		UpdatedBy: uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
-		CreatedAt: time.Date(2026, time.November, 2, 10, 0, 0, 0, time.UTC),
-		UpdatedAt: time.Date(2026, time.November, 2, 11, 30, 0, 123456000, time.UTC),
+		Name:      authz.Visible("Maintainers"),
+		CreatedBy: authz.Visible(audit.SystemActor()),
+		UpdatedBy: authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
+		CreatedAt: authz.Visible(time.Date(2026, time.November, 2, 10, 0, 0, 0, time.UTC)),
+		UpdatedAt: authz.Visible(time.Date(2026, time.November, 2, 11, 30, 0, 123456000, time.UTC)),
 	}
 	maintainersJSON = `{
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
@@ -117,6 +117,36 @@ func TestHandler_Get(t *testing.T) {
 	svc.EXPECT().Get(mock.Anything, apitest.Actor, maintainers.ID).Return(maintainers, nil)
 
 	api.Get(maintainersPath).AssertResource(maintainersJSON)
+}
+
+// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response.
+func TestHandler_Get_HiddenFields(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, maintainers.ID).
+		Return(service.Group{ID: maintainers.ID, Name: maintainers.Name}, nil)
+
+	api.Get(maintainersPath).AssertResource(`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"Maintainers"}`)
+}
+
+// TestHandler_Create_Unreadable checks that a new group that the caller may not read is answered with only
+// its ID and Location.
+func TestHandler_Create_Unreadable(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Create(mock.Anything, apitest.Actor, maintainersInput).
+		Return(service.Group{ID: maintainers.ID}, nil)
+
+	api.Post("/groups", maintainersBody).
+		AssertCreated(maintainersPath, `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"}`)
+}
+
+// TestHandler_ReadableMembers checks that every member of the response but the ID can be hidden and has
+// an action for reading it.
+func TestHandler_ReadableMembers(t *testing.T) {
+	t.Parallel()
+
+	apitest.AssertReadableMembers(t, reflect.TypeFor[GroupResponse](), service.ReadableFields())
 }
 
 func TestHandler_Replace(t *testing.T) {

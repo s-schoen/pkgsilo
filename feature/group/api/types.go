@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
+	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/feature/group/service"
 )
@@ -50,29 +51,31 @@ func (r ReplaceGroupRequest) toInput() service.GroupInput {
 	return service.GroupInput{Name: r.Name}
 }
 
-// GroupResponse is the representation of a group in responses.
+// GroupResponse is the representation of a group in responses. A field that the caller may not read is
+// absent.
 type GroupResponse struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	CreatedBy uuid.UUID `json:"createdBy"`
-	UpdatedBy uuid.UUID `json:"updatedBy"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID        uuid.UUID                 `json:"id"`
+	Name      envelope.Field[string]    `json:"name,omitzero"`
+	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy,omitzero"`
+	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy,omitzero"`
+	CreatedAt envelope.Field[time.Time] `json:"createdAt,omitzero"`
+	UpdatedAt envelope.Field[time.Time] `json:"updatedAt,omitzero"`
 }
 
 func toGroupResponse(g service.Group) GroupResponse {
 	return GroupResponse{
 		ID:        g.ID,
-		Name:      g.Name,
-		CreatedBy: g.CreatedBy,
-		UpdatedBy: g.UpdatedBy,
-		CreatedAt: g.CreatedAt,
-		UpdatedAt: g.UpdatedAt,
+		Name:      envelope.NewField(g.Name.Get()),
+		CreatedBy: envelope.NewField(g.CreatedBy.Get()),
+		UpdatedBy: envelope.NewField(g.UpdatedBy.Get()),
+		CreatedAt: envelope.NewField(g.CreatedAt.Get()),
+		UpdatedAt: envelope.NewField(g.UpdatedAt.Get()),
 	}
 }
 
 // MemberResponse is the representation of a group member in responses: the identity and who added
-// it when.
+// it when. Reading the members of a group is one action for the whole member list, so no member of it is
+// hidden.
 type MemberResponse struct {
 	IdentityID uuid.UUID `json:"identityId"`
 	CreatedBy  uuid.UUID `json:"createdBy"`

@@ -14,13 +14,15 @@ import (
 
 // The actions on groups. Each settable field has its own action for each kind of write, such as
 // group:update:name, so that policies can limit writes to some fields. The members of a group are managed
-// with actions on the group, and reading them is one action for the whole member list.
+// with actions on the group, and reading them is one action for the whole member list. Each field but the ID
+// has its own action for reading it too, such as group:read:name, on top of group:read.
 var (
 	actionRead         = authz.NewAction("group:read", authz.ActionGroupRead)
 	actionDelete       = authz.NewAction("group:delete")
 	actionReadMembers  = authz.NewAction("group:readMembers", authz.ActionGroupRead)
 	actionAddMember    = authz.NewAction("group:addMember")
 	actionRemoveMember = authz.NewAction("group:removeMember")
+	readFields         = authz.NewReadFieldActions("group", "name", "createdBy", "updatedBy", "createdAt", "updatedAt")
 	createFields       = authz.NewFieldActions("group:create", "name")
 	updateFields       = authz.NewFieldActions("group:update", "name")
 )
@@ -30,8 +32,14 @@ func Declaration() authz.Declaration {
 	return authz.Declaration{
 		Type:    authz.GroupType,
 		Actions: []authz.Action{actionRead, actionDelete, actionReadMembers, actionAddMember, actionRemoveMember},
-		Fields:  []authz.FieldActions{createFields, updateFields},
+		Fields:  []authz.FieldActions{readFields, createFields, updateFields},
 	}
+}
+
+// ReadableFields returns the names of the fields of a group, besides its ID, each of which has a
+// group:read:<field> action.
+func ReadableFields() []string {
+	return readFields.Fields()
 }
 
 // CreatableFields returns the names of the fields that creating a group sets, each of which has a
@@ -49,10 +57,12 @@ func UpdatableFields() []string {
 // GroupService manages groups and their members. Changes are attributed to the given actor.
 //
 // A group that the actor may not read is reported like a missing one by every method, its members' included.
-// One that it may read, but not do the method's action to, is reported with authz.ErrDenied.
+// One that it may read, but not do the method's action to, is reported with authz.ErrDenied. Every group that
+// it returns holds only the fields that the actor may read, and the ID.
 type GroupService interface {
 	// Create stores a new group with the given input. It returns an *authz.FieldsDeniedError, without
-	// storing anything, if the actor may not set any of its fields.
+	// storing anything, if the actor may not set any of its fields. A new group that the actor may not
+	// read is returned with only its ID.
 	Create(ctx context.Context, actor uuid.UUID, in GroupInput) (Group, error)
 	// Get returns the group with the given ID.
 	Get(ctx context.Context, actor, id uuid.UUID) (Group, error)
@@ -103,6 +113,12 @@ func (s *groupService) Create(ctx context.Context, actor uuid.UUID, in GroupInpu
 		return Group{}, fmt.Errorf("create group: %w", err)
 	}
 
+	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
+	fields, err := readFields.ReadableIf(decider, actionRead, toResource(id))
+	if err != nil {
+		return Group{}, fmt.Errorf("create group: %w", err)
+	}
+
 	now := s.now()
 	rec, err := s.repo.Insert(ctx, repository.GroupRecord{
 		ID:        id,
@@ -116,7 +132,7 @@ func (s *groupService) Create(ctx context.Context, actor uuid.UUID, in GroupInpu
 		return Group{}, fmt.Errorf("create group: %w", translateError(err))
 	}
 
-	return toGroup(rec), nil
+	return toGroup(rec, fields), nil
 }
 
 func (s *groupService) Get(ctx context.Context, actor, id uuid.UUID) (Group, error) {
@@ -130,7 +146,12 @@ func (s *groupService) Get(ctx context.Context, actor, id uuid.UUID) (Group, err
 		return Group{}, fmt.Errorf("get group: %w", err)
 	}
 
-	return toGroup(rec), nil
+	fields, err := readFields.Readable(decider, toResource(id))
+	if err != nil {
+		return Group{}, fmt.Errorf("get group: %w", err)
+	}
+
+	return toGroup(rec, fields), nil
 }
 
 func (s *groupService) List(ctx context.Context, actor uuid.UUID, offset, limit int) (pagination.Page[Group], error) {
@@ -151,10 +172,15 @@ func (s *groupService) List(ctx context.Context, actor uuid.UUID, offset, limit 
 		return pagination.Page[Group]{}, fmt.Errorf("list groups: %w", err)
 	}
 
+	// Only the fields of the rows on the page are checked.
 	page := pagination.FromAll(readable, offset, limit)
 	groups := make([]Group, len(page.Items))
 	for i, rec := range page.Items {
-		groups[i] = toGroup(rec)
+		fields, err := readFields.Readable(decider, toResource(rec.ID))
+		if err != nil {
+			return pagination.Page[Group]{}, fmt.Errorf("list groups: %w", err)
+		}
+		groups[i] = toGroup(rec, fields)
 	}
 
 	return pagination.Page[Group]{Items: groups, HasMore: page.HasMore}, nil
@@ -175,6 +201,12 @@ func (s *groupService) Replace(ctx context.Context, actor, id uuid.UUID, in Grou
 		return Group{}, fmt.Errorf("replace group: %w", err)
 	}
 
+	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
+	fields, err := readFields.Readable(decider, toResource(id))
+	if err != nil {
+		return Group{}, fmt.Errorf("replace group: %w", err)
+	}
+
 	rec, err := s.repo.Update(ctx, repository.GroupRecord{
 		ID:        id,
 		Name:      in.Name,
@@ -185,7 +217,7 @@ func (s *groupService) Replace(ctx context.Context, actor, id uuid.UUID, in Grou
 		return Group{}, fmt.Errorf("replace group: %w", translateError(err))
 	}
 
-	return toGroup(rec), nil
+	return toGroup(rec, fields), nil
 }
 
 func (s *groupService) Delete(ctx context.Context, actor, id uuid.UUID) error {
@@ -347,14 +379,16 @@ func toResource(id uuid.UUID) authz.Resource {
 	return authz.Resource{Type: authz.GroupType, ID: id}
 }
 
-func toGroup(rec repository.GroupRecord) Group {
+// toGroup returns the group of the record with its ID and the readable fields. Every other field stays
+// hidden, so that one that's missing here can't be revealed by mistake.
+func toGroup(rec repository.GroupRecord, fields authz.ReadableFields) Group {
 	return Group{
 		ID:        rec.ID,
-		Name:      rec.Name,
-		CreatedBy: rec.CreatedBy,
-		UpdatedBy: rec.UpdatedBy,
-		CreatedAt: rec.CreatedAt,
-		UpdatedAt: rec.UpdatedAt,
+		Name:      authz.Reveal(fields, "name", rec.Name),
+		CreatedBy: authz.Reveal(fields, "createdBy", rec.CreatedBy),
+		UpdatedBy: authz.Reveal(fields, "updatedBy", rec.UpdatedBy),
+		CreatedAt: authz.Reveal(fields, "createdAt", rec.CreatedAt),
+		UpdatedAt: authz.Reveal(fields, "updatedAt", rec.UpdatedAt),
 	}
 }
 
