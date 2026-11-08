@@ -9,40 +9,28 @@ import (
 )
 
 // Identity is a user of pkgsilo, as an actor sees it: every field but the ID is hidden unless the actor may
-// read it.
+// read it. The authz tag of a field names its action, such as identity:read:username.
 type Identity struct {
 	ID          uuid.UUID
-	Username    authz.Field[string]
-	DisplayName authz.Field[string]
+	Username    authz.Field[string] `authz:"username"`
+	DisplayName authz.Field[string] `authz:"displayName"`
 	// CreatedBy and UpdatedBy are the identities, or audit.SystemActor, that made the changes.
-	CreatedBy authz.Field[uuid.UUID]
-	UpdatedBy authz.Field[uuid.UUID]
-	CreatedAt authz.Field[time.Time]
-	UpdatedAt authz.Field[time.Time]
+	CreatedBy authz.Field[uuid.UUID] `authz:"createdBy"`
+	UpdatedBy authz.Field[uuid.UUID] `authz:"updatedBy"`
+	CreatedAt authz.Field[time.Time] `authz:"createdAt"`
+	UpdatedAt authz.Field[time.Time] `authz:"updatedAt"`
 }
 
-// IdentityInput holds the identity fields set by callers when creating or replacing an identity.
+// IdentityInput holds the identity fields set by callers when creating or replacing an identity. The authz
+// tag of a field names its actions, such as identity:create:username and identity:update:username.
 type IdentityInput struct {
-	Username    string
-	DisplayName string
+	Username    string `authz:"username"`
+	DisplayName string `authz:"displayName"`
 }
 
 // IdentityPatch holds the identity fields that a caller changes when patching an identity. A nil field
-// stays as it is.
+// stays as it is. Its members are tagged like those of IdentityInput.
 type IdentityPatch struct {
-	Username    *string
-	DisplayName *string
-}
-
-// fields returns the names of the fields that p sets.
-func (p IdentityPatch) fields() []string {
-	var fields []string
-	if p.Username != nil {
-		fields = append(fields, "username")
-	}
-	if p.DisplayName != nil {
-		fields = append(fields, "displayName")
-	}
-
-	return fields
+	Username    *string `authz:"username"`
+	DisplayName *string `authz:"displayName"`
 }

@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"testing"
 	"time"
-	"unicode"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
@@ -92,17 +90,17 @@ func newDeciding(t *testing.T) (*authzmocks.MockAuthorizer, *authzmocks.MockDeci
 func expectReadable(repo *mocks.MockIdentityRepository, decider *authzmocks.MockDecider) {
 	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 	repo.EXPECT().ListMemberships(mock.Anything, []uuid.UUID{stored.ID}).Return(nil, nil)
-	decider.EXPECT().Can(actionRead, storedResource).Return(true, nil)
+	decider.EXPECT().Can(actions.Read(), storedResource).Return(true, nil)
 }
 
 // expectAllFieldsReadable makes the decider allow reading every field of the resource, once each.
 func expectAllFieldsReadable(decider *authzmocks.MockDecider, resource authz.Resource) {
-	servicetest.ExpectReadableFields(decider, readFields, resource, readFields.Fields()...)
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), resource, actions.ReadFields().Fields()...)
 }
 
 // isReadField reports whether the action is one of reading a field of an identity.
 func isReadField(action authz.Action) bool {
-	return slices.ContainsFunc(readFields.Actions(), func(a authz.Action) bool {
+	return slices.ContainsFunc(actions.ReadFields().Actions(), func(a authz.Action) bool {
 		return assert.ObjectsAreEqual(a, action)
 	})
 }
@@ -224,38 +222,6 @@ func TestIdentityService_Create_ChecksEveryField(t *testing.T) {
 	}
 }
 
-// TestIdentityService_FieldActions checks that every field of IdentityInput, which creating and replacing
-// set, has an action of its own for each, so that no field is written unchecked.
-func TestIdentityService_FieldActions(t *testing.T) {
-	t.Parallel()
-	var fields []string
-	for field := range reflect.TypeFor[IdentityInput]().Fields() {
-		name := []rune(field.Name)
-		name[0] = unicode.ToLower(name[0])
-		fields = append(fields, string(name))
-	}
-
-	assert.ElementsMatch(t, fields, CreatableFields())
-	assert.ElementsMatch(t, fields, UpdatableFields())
-}
-
-// TestIdentityService_ReadFieldActions checks that every field of Identity but the ID has an action for
-// reading it, so that no field is revealed unchecked or hidden from everyone.
-func TestIdentityService_ReadFieldActions(t *testing.T) {
-	t.Parallel()
-	var fields []string
-	for field := range reflect.TypeFor[Identity]().Fields() {
-		if field.Name == "ID" {
-			continue
-		}
-		name := []rune(field.Name)
-		name[0] = unicode.ToLower(name[0])
-		fields = append(fields, string(name))
-	}
-
-	assert.ElementsMatch(t, fields, ReadableFields())
-}
-
 // TestIdentityService_Create_ReadableFields checks that the new identity is returned with the fields that
 // the actor may read, and with only its ID if it may not read the identity.
 func TestIdentityService_Create_ReadableFields(t *testing.T) {
@@ -266,7 +232,7 @@ func TestIdentityService_Create_ReadableFields(t *testing.T) {
 		readable []string
 		want     Identity
 	}{
-		{name: "all", canRead: true, readable: readFields.Fields(), want: storedIdentity},
+		{name: "all", canRead: true, readable: actions.ReadFields().Fields(), want: storedIdentity},
 		{
 			name: "some", canRead: true, readable: []string{"displayName", "createdAt"},
 			want: Identity{
@@ -284,14 +250,14 @@ func TestIdentityService_Create_ReadableFields(t *testing.T) {
 			svc, repo := newTestServiceWith(t, authorizer)
 			// The service generates the ID, so the checks match any resource. That they're on the new
 			// identity is checked by TestIdentityService_Create_ChecksEveryField.
-			for _, action := range createFields.Actions() {
+			for _, action := range actions.CreateFields().Actions() {
 				decider.EXPECT().Can(action, mock.Anything).Return(true, nil).Once()
 			}
-			decider.EXPECT().Can(actionRead, mock.Anything).Return(tt.canRead, nil).Once()
+			decider.EXPECT().Can(actions.Read(), mock.Anything).Return(tt.canRead, nil).Once()
 			if tt.canRead {
-				for i, action := range readFields.Actions() {
+				for i, action := range actions.ReadFields().Actions() {
 					decider.EXPECT().Can(action, mock.Anything).
-						Return(slices.Contains(tt.readable, readFields.Fields()[i]), nil).Once()
+						Return(slices.Contains(tt.readable, actions.ReadFields().Fields()[i]), nil).Once()
 				}
 			}
 			repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(stored, nil)
@@ -314,7 +280,7 @@ func TestIdentityService_Get(t *testing.T) {
 		{IdentityID: stored.ID, GroupID: reviewers},
 	}, nil)
 	resource := authz.Resource{Type: "Identity", ID: stored.ID, Groups: []uuid.UUID{maintainers, reviewers}}
-	decider.EXPECT().Can(actionRead, resource).Return(true, nil)
+	decider.EXPECT().Can(actions.Read(), resource).Return(true, nil)
 	expectAllFieldsReadable(decider, resource)
 
 	got, err := svc.Get(t.Context(), actor, stored.ID)
@@ -330,7 +296,7 @@ func TestIdentityService_Get_HiddenFields(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	servicetest.ExpectReadableFields(decider, readFields, storedResource, "displayName", "updatedBy")
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "displayName", "updatedBy")
 
 	got, err := svc.Get(t.Context(), actor, stored.ID)
 	require.NoError(t, err)
@@ -348,7 +314,7 @@ func TestIdentityService_Get_Hidden(t *testing.T) {
 	svc, repo := newTestServiceWith(t, authorizer)
 	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 	repo.EXPECT().ListMemberships(mock.Anything, []uuid.UUID{stored.ID}).Return(nil, nil)
-	decider.EXPECT().Can(actionRead, authz.Resource{Type: "Identity", ID: stored.ID}).Return(false, nil)
+	decider.EXPECT().Can(actions.Read(), authz.Resource{Type: "Identity", ID: stored.ID}).Return(false, nil)
 
 	got, err := svc.Get(t.Context(), actor, stored.ID)
 
@@ -380,7 +346,7 @@ func TestIdentityService_List_Pages(t *testing.T) {
 			svc, repo := newTestServiceWith(t, authorizer)
 			repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2, 3, 4, 5, 6, 7, 8, 9), nil)
 			repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
-			decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+			decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 				func(_ authz.Action, resource authz.Resource) (bool, error) {
 					return resource.ID[15]%2 == 0, nil
 				},
@@ -400,7 +366,7 @@ func TestIdentityService_List_Pages(t *testing.T) {
 			assert.Equal(t, tt.wantHasMore, got.HasMore)
 			wantFieldChecks := map[byte]int{}
 			for _, id := range tt.wantIDs {
-				wantFieldChecks[id] = len(readFields.Fields())
+				wantFieldChecks[id] = len(actions.ReadFields().Fields())
 			}
 			assert.Equal(t, wantFieldChecks, fieldChecks, "the fields of the rows on the page must be checked, and only those")
 		})
@@ -425,7 +391,7 @@ func TestIdentityService_List_NothingReadable(t *testing.T) {
 	svc, repo := newTestServiceWith(t, authorizer)
 	repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2), nil)
 	repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
-	decider.EXPECT().Can(actionRead, mock.Anything).Return(false, nil)
+	decider.EXPECT().Can(actions.Read(), mock.Anything).Return(false, nil)
 
 	got, err := svc.List(t.Context(), actor, 0, 5)
 	require.NoError(t, err)
@@ -463,8 +429,8 @@ func TestIdentityService_List_LoadsGroupsInBulk(t *testing.T) {
 		Once()
 	first := authz.Resource{Type: "Identity", ID: recs[0].ID, Groups: []uuid.UUID{maintainers, reviewers}}
 	second := authz.Resource{Type: "Identity", ID: recs[1].ID}
-	decider.EXPECT().Can(actionRead, first).Return(true, nil)
-	decider.EXPECT().Can(actionRead, second).Return(true, nil)
+	decider.EXPECT().Can(actions.Read(), first).Return(true, nil)
+	decider.EXPECT().Can(actions.Read(), second).Return(true, nil)
 	// The fields are checked with the groups too, so that a forbid on a group member's field applies.
 	expectAllFieldsReadable(decider, first)
 	expectAllFieldsReadable(decider, second)
@@ -483,7 +449,7 @@ func TestIdentityService_List_ChecksContextBetweenRows(t *testing.T) {
 	t.Cleanup(cancel)
 	repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2, 3), nil)
 	repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
-	decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+	decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 		func(authz.Action, authz.Resource) (bool, error) {
 			cancel()
 			return true, nil
@@ -504,7 +470,7 @@ func TestIdentityService_Replace(t *testing.T) {
 		decider.EXPECT().Can(authz.NewAction("identity:update:"+field, "identity:update"), storedResource).
 			Return(true, nil).Once()
 	}
-	servicetest.ExpectReadableFields(decider, readFields, storedResource, "username")
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "username")
 	repo.EXPECT().Update(mock.Anything, repository.IdentityRecord{
 		ID:          stored.ID,
 		Username:    "ada",
@@ -564,7 +530,7 @@ func TestIdentityService_Patch(t *testing.T) {
 				decider.EXPECT().Can(authz.NewAction("identity:update:"+field, "identity:update"), storedResource).
 					Return(true, nil).Once()
 			}
-			servicetest.ExpectReadableFields(decider, readFields, storedResource, "username")
+			servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "username")
 			repo.EXPECT().Patch(mock.Anything, repository.IdentityPatch{
 				ID:          stored.ID,
 				Username:    tt.patch.Username,
@@ -623,7 +589,7 @@ func TestIdentityService_Delete(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	decider.EXPECT().Can(actionDelete, storedResource).Return(true, nil)
+	decider.EXPECT().Can(actions.Delete(), storedResource).Return(true, nil)
 	repo.EXPECT().Delete(mock.Anything, stored.ID).Return(nil)
 
 	assert.NoError(t, svc.Delete(t.Context(), actor, stored.ID))
@@ -635,7 +601,7 @@ func TestIdentityService_Delete_Denied(t *testing.T) {
 	// The mock fails the test if the repository deletes anything.
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	decider.EXPECT().Can(actionDelete, storedResource).Return(false, nil)
+	decider.EXPECT().Can(actions.Delete(), storedResource).Return(false, nil)
 
 	err := svc.Delete(t.Context(), actor, stored.ID)
 
@@ -669,7 +635,7 @@ func TestIdentityService_Writes_Hidden(t *testing.T) {
 			svc, repo := newTestServiceWith(t, authorizer)
 			repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 			repo.EXPECT().ListMemberships(mock.Anything, []uuid.UUID{stored.ID}).Return(nil, nil)
-			decider.EXPECT().Can(actionRead, storedResource).Return(false, nil)
+			decider.EXPECT().Can(actions.Read(), storedResource).Return(false, nil)
 
 			err := call(svc)
 

@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"testing"
 	"time"
-	"unicode"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
@@ -105,17 +103,17 @@ func newDeciding(t *testing.T) (*authzmocks.MockAuthorizer, *authzmocks.MockDeci
 // expectReadable makes the repository return stored and the decider allow reading it.
 func expectReadable(repo *mocks.MockGroupRepository, decider *authzmocks.MockDecider) {
 	repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
-	decider.EXPECT().Can(actionRead, storedResource).Return(true, nil)
+	decider.EXPECT().Can(actions.Read(), storedResource).Return(true, nil)
 }
 
 // expectAllFieldsReadable makes the decider allow reading every field of the resource, once each.
 func expectAllFieldsReadable(decider *authzmocks.MockDecider, resource authz.Resource) {
-	servicetest.ExpectReadableFields(decider, readFields, resource, readFields.Fields()...)
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), resource, actions.ReadFields().Fields()...)
 }
 
 // isReadField reports whether the action is one of reading a field of a group.
 func isReadField(action authz.Action) bool {
-	return slices.ContainsFunc(readFields.Actions(), func(a authz.Action) bool {
+	return slices.ContainsFunc(actions.ReadFields().Actions(), func(a authz.Action) bool {
 		return assert.ObjectsAreEqual(a, action)
 	})
 }
@@ -236,7 +234,7 @@ func TestGroupService_Create_ReadableFields(t *testing.T) {
 		readable []string
 		want     Group
 	}{
-		{name: "all", canRead: true, readable: readFields.Fields(), want: storedGroup},
+		{name: "all", canRead: true, readable: actions.ReadFields().Fields(), want: storedGroup},
 		{
 			name: "some", canRead: true, readable: []string{"name"},
 			want: Group{ID: stored.ID, Name: authz.Visible("Reviewers")},
@@ -252,11 +250,11 @@ func TestGroupService_Create_ReadableFields(t *testing.T) {
 			// is checked by TestGroupService_Create_ChecksFields.
 			decider.EXPECT().Can(authz.NewAction("group:create:name", "group:create"), mock.Anything).
 				Return(true, nil).Once()
-			decider.EXPECT().Can(actionRead, mock.Anything).Return(tt.canRead, nil).Once()
+			decider.EXPECT().Can(actions.Read(), mock.Anything).Return(tt.canRead, nil).Once()
 			if tt.canRead {
-				for i, action := range readFields.Actions() {
+				for i, action := range actions.ReadFields().Actions() {
 					decider.EXPECT().Can(action, mock.Anything).
-						Return(slices.Contains(tt.readable, readFields.Fields()[i]), nil).Once()
+						Return(slices.Contains(tt.readable, actions.ReadFields().Fields()[i]), nil).Once()
 				}
 			}
 			repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(stored, nil)
@@ -267,38 +265,6 @@ func TestGroupService_Create_ReadableFields(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
-}
-
-// TestGroupService_ReadFieldActions checks that every field of Group but the ID has an action for reading
-// it, so that no field is revealed unchecked or hidden from everyone.
-func TestGroupService_ReadFieldActions(t *testing.T) {
-	t.Parallel()
-	var fields []string
-	for field := range reflect.TypeFor[Group]().Fields() {
-		if field.Name == "ID" {
-			continue
-		}
-		name := []rune(field.Name)
-		name[0] = unicode.ToLower(name[0])
-		fields = append(fields, string(name))
-	}
-
-	assert.ElementsMatch(t, fields, ReadableFields())
-}
-
-// TestGroupService_FieldActions checks that every field of GroupInput, which creating and replacing set,
-// has an action of its own for each, so that no field is written unchecked.
-func TestGroupService_FieldActions(t *testing.T) {
-	t.Parallel()
-	var fields []string
-	for field := range reflect.TypeFor[GroupInput]().Fields() {
-		name := []rune(field.Name)
-		name[0] = unicode.ToLower(name[0])
-		fields = append(fields, string(name))
-	}
-
-	assert.ElementsMatch(t, fields, CreatableFields())
-	assert.ElementsMatch(t, fields, UpdatableFields())
 }
 
 func TestGroupService_Get(t *testing.T) {
@@ -321,7 +287,7 @@ func TestGroupService_Get_HiddenFields(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	servicetest.ExpectReadableFields(decider, readFields, storedResource, "name")
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "name")
 
 	got, err := svc.Get(t.Context(), actor, stored.ID)
 	require.NoError(t, err)
@@ -352,7 +318,7 @@ func TestGroupService_List_Pages(t *testing.T) {
 			authorizer, decider := newDeciding(t)
 			svc, repo := newTestServiceWith(t, authorizer)
 			repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2, 3, 4, 5, 6, 7, 8, 9), nil)
-			decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+			decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 				func(_ authz.Action, resource authz.Resource) (bool, error) {
 					assert.Equal(t, "Group", resource.Type)
 					return resource.ID[15]%2 == 0, nil
@@ -373,7 +339,7 @@ func TestGroupService_List_Pages(t *testing.T) {
 			assert.Equal(t, tt.wantHasMore, got.HasMore)
 			wantFieldChecks := map[byte]int{}
 			for _, id := range tt.wantIDs {
-				wantFieldChecks[id] = len(readFields.Fields())
+				wantFieldChecks[id] = len(actions.ReadFields().Fields())
 			}
 			assert.Equal(t, wantFieldChecks, fieldChecks, "the fields of the rows on the page must be checked, and only those")
 		})
@@ -396,7 +362,7 @@ func TestGroupService_List_NothingReadable(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2), nil)
-	decider.EXPECT().Can(actionRead, mock.Anything).Return(false, nil)
+	decider.EXPECT().Can(actions.Read(), mock.Anything).Return(false, nil)
 
 	got, err := svc.List(t.Context(), actor, 0, 5)
 	require.NoError(t, err)
@@ -424,7 +390,7 @@ func TestGroupService_List_ChecksContextBetweenRows(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	repo.EXPECT().ListAll(mock.Anything).Return(newRecords(1, 2, 3), nil)
-	decider.EXPECT().Can(actionRead, mock.Anything).RunAndReturn(
+	decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 		func(authz.Action, authz.Resource) (bool, error) {
 			cancel()
 			return true, nil
@@ -441,7 +407,7 @@ func TestGroupService_Replace(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectAllowed(repo, decider, authz.NewAction("group:update:name", "group:update"))
-	servicetest.ExpectReadableFields(decider, readFields, storedResource, "name")
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "name")
 	repo.EXPECT().Update(mock.Anything, repository.GroupRecord{
 		ID:        stored.ID,
 		Name:      "Maintainers",
@@ -478,7 +444,7 @@ func TestGroupService_Patch(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectAllowed(repo, decider, authz.NewAction("group:update:name", "group:update"))
-	servicetest.ExpectReadableFields(decider, readFields, storedResource, "name")
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "name")
 	repo.EXPECT().Patch(mock.Anything, repository.GroupPatch{
 		ID:        stored.ID,
 		Name:      new("Maintainers"),
@@ -528,7 +494,7 @@ func TestGroupService_Delete(t *testing.T) {
 	t.Parallel()
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
-	expectAllowed(repo, decider, actionDelete)
+	expectAllowed(repo, decider, actions.Delete())
 	repo.EXPECT().Delete(mock.Anything, stored.ID).Return(nil)
 
 	assert.NoError(t, svc.Delete(t.Context(), actor, stored.ID))
@@ -667,7 +633,7 @@ func TestGroupService_Hidden(t *testing.T) {
 			// The mocks fail the test on any other decision or on a write.
 			svc, repo := newTestServiceWith(t, authorizer)
 			repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
-			decider.EXPECT().Can(actionRead, storedResource).Return(false, nil)
+			decider.EXPECT().Can(actions.Read(), storedResource).Return(false, nil)
 
 			err := call(svc)
 
@@ -682,7 +648,7 @@ func TestGroupService_Hidden(t *testing.T) {
 func TestGroupService_ActionDenied(t *testing.T) {
 	t.Parallel()
 	actions := map[string]authz.Action{
-		"delete":        actionDelete,
+		"delete":        actions.Delete(),
 		"add member":    actionAddMember,
 		"list members":  actionReadMembers,
 		"remove member": actionRemoveMember,

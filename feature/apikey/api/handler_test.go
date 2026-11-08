@@ -158,7 +158,7 @@ func TestHandler_Get_HiddenFields(t *testing.T) {
 func TestHandler_ReadableMembers(t *testing.T) {
 	t.Parallel()
 
-	apitest.AssertReadableMembers(t, reflect.TypeFor[KeyResponse](), service.ReadableFields())
+	apitest.AssertReadableMembers(t, reflect.TypeFor[KeyResponse](), service.Actions().ReadFields().Fields())
 
 	var members []string
 	for field := range reflect.TypeFor[CreatedKeyResponse]().Fields() {
@@ -285,7 +285,7 @@ func TestHandler_SettableMembersHaveActions(t *testing.T) {
 		members = append(members, name)
 	}
 
-	assert.ElementsMatch(t, members, service.CreatableFields())
+	assert.ElementsMatch(t, members, service.Actions().CreateFields().Fields())
 }
 
 // TestHandler_EndpointErrors checks that every endpoint answers service errors through writeError.

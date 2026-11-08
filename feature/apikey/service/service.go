@@ -93,13 +93,13 @@ func (s *apiKeyService) Create(
 	}
 
 	id := uuid.NewV4()
-	if err := createFields.Only(setFields(in)...).Check(decider, toResource(id, owner)); err != nil {
+	if err := actions.CreateFields().Only(authz.SetFields(in)...).Check(decider, toResource(id, owner)); err != nil {
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded, and
 	// lose the key that the caller couldn't retrieve again.
-	fields, err := readFields.ReadableIf(decider, actionRead, toResource(id, owner))
+	fields, err := actions.ReadFields().ReadableIf(decider, actions.Read(), toResource(id, owner))
 	if err != nil {
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
 	}
@@ -119,7 +119,7 @@ func (s *apiKeyService) Create(
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", translateError(err))
 	}
 
-	return CreatedAPIKey{APIKey: toAPIKey(rec, fields), Key: key}, nil
+	return CreatedAPIKey{APIKey: toAPIKey.Map(rec, fields), Key: key}, nil
 }
 
 func (s *apiKeyService) Get(ctx context.Context, actor, identityID, id uuid.UUID) (APIKey, error) {
@@ -138,12 +138,12 @@ func (s *apiKeyService) Get(ctx context.Context, actor, identityID, id uuid.UUID
 		return APIKey{}, fmt.Errorf("get api key: %w", err)
 	}
 
-	fields, err := readFields.Readable(decider, toResource(id, owner))
+	fields, err := actions.ReadFields().Readable(decider, toResource(id, owner))
 	if err != nil {
 		return APIKey{}, fmt.Errorf("get api key: %w", err)
 	}
 
-	return toAPIKey(rec, fields), nil
+	return toAPIKey.Map(rec, fields), nil
 }
 
 func (s *apiKeyService) List(
@@ -164,7 +164,7 @@ func (s *apiKeyService) List(
 		return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
 	}
 
-	readable, err := authz.Filter(ctx, decider, actionRead, recs, func(rec repository.APIKeyRecord) authz.Resource {
+	readable, err := authz.Filter(ctx, decider, actions.Read(), recs, func(rec repository.APIKeyRecord) authz.Resource {
 		return toResource(rec.ID, owner)
 	})
 	if err != nil {
@@ -175,11 +175,11 @@ func (s *apiKeyService) List(
 	page := pagination.FromAll(readable, offset, limit)
 	keys := make([]APIKey, len(page.Items))
 	for i, rec := range page.Items {
-		fields, err := readFields.Readable(decider, toResource(rec.ID, owner))
+		fields, err := actions.ReadFields().Readable(decider, toResource(rec.ID, owner))
 		if err != nil {
 			return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
 		}
-		keys[i] = toAPIKey(rec, fields)
+		keys[i] = toAPIKey.Map(rec, fields)
 	}
 
 	return pagination.Page[APIKey]{Items: keys, HasMore: page.HasMore}, nil
@@ -200,7 +200,7 @@ func (s *apiKeyService) Delete(ctx context.Context, actor, identityID, id uuid.U
 		return fmt.Errorf("delete api key: %w", err)
 	}
 
-	can, err := decider.Can(actionDelete, toResource(id, owner))
+	can, err := decider.Can(actions.Delete(), toResource(id, owner))
 	if err != nil {
 		return fmt.Errorf("delete api key: check action: %w", err)
 	}
@@ -253,7 +253,7 @@ func (s *apiKeyService) readableOwner(
 		return nil, translateError(err)
 	}
 
-	can, err := decider.Can(identityservice.ReadAction(),
+	can, err := decider.Can(identityservice.Actions().Read(),
 		authz.Resource{Type: authz.IdentityType, ID: identityID, Groups: groups})
 	if err != nil {
 		return nil, fmt.Errorf("check identity read: %w", err)
@@ -275,7 +275,7 @@ func (s *apiKeyService) getReadable(
 		return repository.APIKeyRecord{}, translateError(err)
 	}
 
-	can, err := decider.Can(actionRead, toResource(id, owner))
+	can, err := decider.Can(actions.Read(), toResource(id, owner))
 	if err != nil {
 		return repository.APIKeyRecord{}, fmt.Errorf("check read: %w", err)
 	}
@@ -286,20 +286,9 @@ func (s *apiKeyService) getReadable(
 	return rec, nil
 }
 
-// setFields returns the names of the fields that creating an API key with the input sets. An API key
-// without an expiry never expires, so leaving it out sets nothing.
-func setFields(in APIKeyInput) []string {
-	fields := []string{"name"}
-	if in.ExpiresAt != nil {
-		fields = append(fields, "expiresAt")
-	}
-
-	return fields
-}
-
 // toResource returns the API key with the given ID of the owner as a resource of a decision.
 func toResource(id uuid.UUID, owner *authz.Owner) authz.Resource {
-	return authz.Resource{Type: resourceType, ID: id, Owner: owner}
+	return authz.Resource{Type: actions.Type(), ID: id, Owner: owner}
 }
 
 // hash returns the keyed hash of key that's stored and looked up. It's deterministic, so that a key
@@ -319,17 +308,6 @@ func generateKey() string {
 	return keyPrefix + rand.Text() + rand.Text()
 }
 
-// toAPIKey returns the API key of the record with its ID and the readable fields. Every other field stays
-// hidden, so that one that's missing here can't be revealed by mistake.
-func toAPIKey(rec repository.APIKeyRecord, fields authz.ReadableFields) APIKey {
-	return APIKey{
-		ID:         rec.ID,
-		IdentityID: authz.Reveal(fields, "identityId", rec.IdentityID),
-		Name:       authz.Reveal(fields, "name", rec.Name),
-		KeySuffix:  authz.Reveal(fields, "keySuffix", rec.KeySuffix),
-		ExpiresAt:  authz.Reveal(fields, "expiresAt", rec.ExpiresAt),
-		LastUsedAt: authz.Reveal(fields, "lastUsedAt", rec.LastUsedAt),
-		CreatedBy:  authz.Reveal(fields, "createdBy", rec.CreatedBy),
-		CreatedAt:  authz.Reveal(fields, "createdAt", rec.CreatedAt),
-	}
-}
+// toAPIKey builds the API key of a record, with its ID and the fields that the actor may read. Every other
+// field stays hidden.
+var toAPIKey = authz.NewMapper[repository.APIKeyRecord, APIKey](actions)
