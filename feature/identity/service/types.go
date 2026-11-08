@@ -26,3 +26,23 @@ type IdentityInput struct {
 	Username    string
 	DisplayName string
 }
+
+// IdentityPatch holds the identity fields that a caller changes when patching an identity. A nil field
+// stays as it is.
+type IdentityPatch struct {
+	Username    *string
+	DisplayName *string
+}
+
+// fields returns the names of the fields that p sets.
+func (p IdentityPatch) fields() []string {
+	var fields []string
+	if p.Username != nil {
+		fields = append(fields, "username")
+	}
+	if p.DisplayName != nil {
+		fields = append(fields, "displayName")
+	}
+
+	return fields
+}

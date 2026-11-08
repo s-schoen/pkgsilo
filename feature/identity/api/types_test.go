@@ -8,6 +8,8 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"pkgsilo/core/request"
 )
 
 func TestIdentityRequests_Validate(t *testing.T) {
@@ -45,6 +47,10 @@ func TestIdentityRequests_Validate(t *testing.T) {
 			requests := map[string]validation.Validatable{
 				"create":  CreateIdentityRequest{Username: tt.username, DisplayName: tt.displayName},
 				"replace": ReplaceIdentityRequest{Username: tt.username, DisplayName: tt.displayName},
+				"patch": PatchIdentityRequest{
+					Username:    request.Optional[string]{Value: tt.username, Set: true},
+					DisplayName: request.Optional[string]{Value: tt.displayName, Set: true},
+				},
 			}
 			for kind, req := range requests {
 				err := req.Validate()
@@ -54,6 +60,37 @@ func TestIdentityRequests_Validate(t *testing.T) {
 				}
 				assert.ElementsMatch(t, tt.wantInvalid, invalidMembers(err), kind)
 			}
+		})
+	}
+}
+
+// TestPatchIdentityRequest_Validate checks that a member of a patch may be left out, but not set to null.
+func TestPatchIdentityRequest_Validate(t *testing.T) {
+	t.Parallel()
+	absent := request.Optional[string]{}
+	null := request.Optional[string]{Set: true, Null: true}
+	tests := []struct {
+		name        string
+		req         PatchIdentityRequest
+		wantInvalid []string
+	}{
+		{name: "empty", req: PatchIdentityRequest{Username: absent, DisplayName: absent}},
+		{name: "username", req: PatchIdentityRequest{Username: request.Optional[string]{Value: "ada", Set: true}}},
+		{
+			name: "null", req: PatchIdentityRequest{Username: null, DisplayName: null},
+			wantInvalid: []string{"displayName", "username"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := tt.req.Validate()
+
+			if len(tt.wantInvalid) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			assert.ElementsMatch(t, tt.wantInvalid, invalidMembers(err))
 		})
 	}
 }

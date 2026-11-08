@@ -367,6 +367,72 @@ func (_c *MockIdentityRepository_ListMemberships_Call) RunAndReturn(run func(ctx
 	return _c
 }
 
+// Patch provides a mock function for the type MockIdentityRepository
+func (_mock *MockIdentityRepository) Patch(ctx context.Context, patch repository.IdentityPatch) (repository.IdentityRecord, error) {
+	ret := _mock.Called(ctx, patch)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Patch")
+	}
+
+	var r0 repository.IdentityRecord
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.IdentityPatch) (repository.IdentityRecord, error)); ok {
+		return returnFunc(ctx, patch)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.IdentityPatch) repository.IdentityRecord); ok {
+		r0 = returnFunc(ctx, patch)
+	} else {
+		r0 = ret.Get(0).(repository.IdentityRecord)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.IdentityPatch) error); ok {
+		r1 = returnFunc(ctx, patch)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockIdentityRepository_Patch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Patch'
+type MockIdentityRepository_Patch_Call struct {
+	*mock.Call
+}
+
+// Patch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - patch repository.IdentityPatch
+func (_e *MockIdentityRepository_Expecter) Patch(ctx any, patch any) *MockIdentityRepository_Patch_Call {
+	return &MockIdentityRepository_Patch_Call{Call: _e.mock.On("Patch", ctx, patch)}
+}
+
+func (_c *MockIdentityRepository_Patch_Call) Run(run func(ctx context.Context, patch repository.IdentityPatch)) *MockIdentityRepository_Patch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 repository.IdentityPatch
+		if args[1] != nil {
+			arg1 = args[1].(repository.IdentityPatch)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockIdentityRepository_Patch_Call) Return(identityRecord repository.IdentityRecord, err error) *MockIdentityRepository_Patch_Call {
+	_c.Call.Return(identityRecord, err)
+	return _c
+}
+
+func (_c *MockIdentityRepository_Patch_Call) RunAndReturn(run func(ctx context.Context, patch repository.IdentityPatch) (repository.IdentityRecord, error)) *MockIdentityRepository_Patch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Update provides a mock function for the type MockIdentityRepository
 func (_mock *MockIdentityRepository) Update(ctx context.Context, rec repository.IdentityRecord) (repository.IdentityRecord, error) {
 	ret := _mock.Called(ctx, rec)

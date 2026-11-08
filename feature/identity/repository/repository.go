@@ -24,6 +24,9 @@ type IdentityRepository interface {
 	// Update overwrites the username, display name, UpdatedBy and UpdatedAt of the record with
 	// rec.ID and returns it as stored. CreatedBy and CreatedAt are immutable and ignored.
 	Update(ctx context.Context, rec IdentityRecord) (IdentityRecord, error)
+	// Patch overwrites the fields that patch sets, UpdatedBy and UpdatedAt of the record with patch.ID and
+	// returns it as stored. It writes no other column, so that concurrent patches of other fields are kept.
+	Patch(ctx context.Context, patch IdentityPatch) (IdentityRecord, error)
 	// Delete removes the record with the given ID.
 	Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -116,6 +119,28 @@ func (r *PostgresIdentityRepository) Update(ctx context.Context, rec IdentityRec
 	)
 	if err != nil {
 		return IdentityRecord{}, fmt.Errorf("update identity: %w", translateError(err))
+	}
+
+	return stored, nil
+}
+
+// Patch overwrites the fields that patch sets, UpdatedBy and UpdatedAt of the record with patch.ID and
+// returns it as stored. It writes no other column, so that concurrent patches of other fields are kept.
+func (r *PostgresIdentityRepository) Patch(ctx context.Context, patch IdentityPatch) (IdentityRecord, error) {
+	var stored IdentityRecord
+	// COALESCE keeps a column whose field is nil, which only works while the columns are NOT NULL: a
+	// nullable one needs to tell "unchanged" from "set to NULL" with a parameter of its own.
+	err := r.db.GetContext(ctx, &stored, `
+		UPDATE identities
+		SET username = COALESCE($2::text, username),
+			display_name = COALESCE($3::text, display_name),
+			updated_by = $4, updated_at = $5
+		WHERE id = $1
+		RETURNING `+identityColumns,
+		patch.ID, patch.Username, patch.DisplayName, patch.UpdatedBy, patch.UpdatedAt,
+	)
+	if err != nil {
+		return IdentityRecord{}, fmt.Errorf("patch identity: %w", translateError(err))
 	}
 
 	return stored, nil

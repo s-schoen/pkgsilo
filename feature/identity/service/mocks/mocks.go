@@ -334,6 +334,84 @@ func (_c *MockIdentityService_List_Call) RunAndReturn(run func(ctx context.Conte
 	return _c
 }
 
+// Patch provides a mock function for the type MockIdentityService
+func (_mock *MockIdentityService) Patch(ctx context.Context, actor uuid.UUID, id uuid.UUID, patch service.IdentityPatch) (service.Identity, error) {
+	ret := _mock.Called(ctx, actor, id, patch)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Patch")
+	}
+
+	var r0 service.Identity
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, service.IdentityPatch) (service.Identity, error)); ok {
+		return returnFunc(ctx, actor, id, patch)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, service.IdentityPatch) service.Identity); ok {
+		r0 = returnFunc(ctx, actor, id, patch)
+	} else {
+		r0 = ret.Get(0).(service.Identity)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID, service.IdentityPatch) error); ok {
+		r1 = returnFunc(ctx, actor, id, patch)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockIdentityService_Patch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Patch'
+type MockIdentityService_Patch_Call struct {
+	*mock.Call
+}
+
+// Patch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - actor uuid.UUID
+//   - id uuid.UUID
+//   - patch service.IdentityPatch
+func (_e *MockIdentityService_Expecter) Patch(ctx any, actor any, id any, patch any) *MockIdentityService_Patch_Call {
+	return &MockIdentityService_Patch_Call{Call: _e.mock.On("Patch", ctx, actor, id, patch)}
+}
+
+func (_c *MockIdentityService_Patch_Call) Run(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID, patch service.IdentityPatch)) *MockIdentityService_Patch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
+		var arg3 service.IdentityPatch
+		if args[3] != nil {
+			arg3 = args[3].(service.IdentityPatch)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockIdentityService_Patch_Call) Return(identity service.Identity, err error) *MockIdentityService_Patch_Call {
+	_c.Call.Return(identity, err)
+	return _c
+}
+
+func (_c *MockIdentityService_Patch_Call) RunAndReturn(run func(ctx context.Context, actor uuid.UUID, id uuid.UUID, patch service.IdentityPatch) (service.Identity, error)) *MockIdentityService_Patch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Replace provides a mock function for the type MockIdentityService
 func (_mock *MockIdentityService) Replace(ctx context.Context, actor uuid.UUID, id uuid.UUID, in service.IdentityInput) (service.Identity, error) {
 	ret := _mock.Called(ctx, actor, id, in)

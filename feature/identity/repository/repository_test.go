@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -248,6 +249,109 @@ func TestPostgresIdentityRepository_Update_DuplicateUsername(t *testing.T) {
 
 	grace.Username = "ada"
 	_, err = repo.Update(t.Context(), grace)
+
+	assert.ErrorIs(t, err, ErrDuplicateUsername)
+}
+
+func TestPostgresIdentityRepository_Patch(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		patch func(p *IdentityPatch)
+		want  func(rec *IdentityRecord)
+	}{
+		{
+			name:  "username",
+			patch: func(p *IdentityPatch) { p.Username = new("ada-lovelace") },
+			want:  func(rec *IdentityRecord) { rec.Username = "ada-lovelace" },
+		},
+		{
+			name:  "display name",
+			patch: func(p *IdentityPatch) { p.DisplayName = new("Ada Lovelace") },
+			want:  func(rec *IdentityRecord) { rec.DisplayName = "Ada Lovelace" },
+		},
+		{
+			name: "both",
+			patch: func(p *IdentityPatch) {
+				p.Username, p.DisplayName = new("ada-lovelace"), new("Ada Lovelace")
+			},
+			want: func(rec *IdentityRecord) { rec.Username, rec.DisplayName = "ada-lovelace", "Ada Lovelace" },
+		},
+		{name: "none", patch: func(*IdentityPatch) {}, want: func(*IdentityRecord) {}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := newTestRepo(t)
+			rec := newRecord("ada", baseTime)
+			_, err := repo.Insert(t.Context(), rec)
+			require.NoError(t, err)
+
+			patch := IdentityPatch{ID: rec.ID, UpdatedBy: uuid.NewV4(), UpdatedAt: baseTime.Add(time.Hour)}
+			tt.patch(&patch)
+			want := rec
+			want.UpdatedBy, want.UpdatedAt = patch.UpdatedBy, patch.UpdatedAt
+			tt.want(&want)
+
+			stored, err := repo.Patch(t.Context(), patch)
+			require.NoError(t, err)
+			assert.Equal(t, want, stored)
+
+			got, err := repo.Get(t.Context(), rec.ID)
+			require.NoError(t, err)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+// TestPostgresIdentityRepository_Patch_Concurrent checks that concurrent patches of different fields both
+// survive, which reading the record, changing it and writing it back wouldn't guarantee.
+func TestPostgresIdentityRepository_Patch_Concurrent(t *testing.T) {
+	t.Parallel()
+	repo := newTestRepo(t)
+	rec := newRecord("ada", baseTime)
+	_, err := repo.Insert(t.Context(), rec)
+	require.NoError(t, err)
+
+	patches := []IdentityPatch{
+		{ID: rec.ID, Username: new("ada-lovelace"), UpdatedBy: uuid.NewV4(), UpdatedAt: baseTime},
+		{ID: rec.ID, DisplayName: new("Ada Lovelace"), UpdatedBy: uuid.NewV4(), UpdatedAt: baseTime},
+	}
+	var wg sync.WaitGroup
+	errs := make([]error, len(patches))
+	for i, patch := range patches {
+		wg.Go(func() { _, errs[i] = repo.Patch(t.Context(), patch) })
+	}
+	wg.Wait()
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+
+	got, err := repo.Get(t.Context(), rec.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "ada-lovelace", got.Username)
+	assert.Equal(t, "Ada Lovelace", got.DisplayName)
+}
+
+func TestPostgresIdentityRepository_Patch_NotFound(t *testing.T) {
+	t.Parallel()
+	repo := newTestRepo(t)
+
+	_, err := repo.Patch(t.Context(), IdentityPatch{ID: uuid.NewV4(), DisplayName: new("Ada")})
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresIdentityRepository_Patch_DuplicateUsername(t *testing.T) {
+	t.Parallel()
+	repo := newTestRepo(t)
+	_, err := repo.Insert(t.Context(), newRecord("ada", baseTime))
+	require.NoError(t, err)
+	grace := newRecord("grace", baseTime)
+	_, err = repo.Insert(t.Context(), grace)
+	require.NoError(t, err)
+
+	_, err = repo.Patch(t.Context(), IdentityPatch{ID: grace.ID, Username: new("ada")})
 
 	assert.ErrorIs(t, err, ErrDuplicateUsername)
 }

@@ -66,6 +66,25 @@ func (r ReplaceIdentityRequest) toInput() service.IdentityInput {
 	return service.IdentityInput{Username: r.Username, DisplayName: r.DisplayName}
 }
 
+// PatchIdentityRequest is the body of a request that changes some settable fields of an identity, a JSON
+// Merge Patch: a member that it leaves out stays unchanged.
+type PatchIdentityRequest struct {
+	Username    request.Optional[string] `json:"username"`
+	DisplayName request.Optional[string] `json:"displayName"`
+}
+
+// Validate reports the invalid members of r as validation.Errors.
+func (r PatchIdentityRequest) Validate() error {
+	return validation.ValidateStruct(&r,
+		validation.Field(&r.Username, request.IfSet(usernameRules...)),
+		validation.Field(&r.DisplayName, request.IfSet(displayNameRules...)),
+	)
+}
+
+func (r PatchIdentityRequest) toPatch() service.IdentityPatch {
+	return service.IdentityPatch{Username: r.Username.Pointer(), DisplayName: r.DisplayName.Pointer()}
+}
+
 // IdentityResponse is the representation of an identity in responses. A field that the caller may not
 // read is absent.
 type IdentityResponse struct {

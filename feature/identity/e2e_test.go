@@ -6,6 +6,9 @@ package identity_test
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -29,6 +32,10 @@ var (
 	fieldsDenied     = envelope.DefineProblemType("fields-denied", "Fields denied", http.StatusForbidden)
 	invalidBody      = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
 	forbidden        = envelope.ProblemType{Type: "about:blank", Title: "Forbidden", Status: http.StatusForbidden}
+	badRequest       = envelope.ProblemType{Type: "about:blank", Title: "Bad Request", Status: http.StatusBadRequest}
+	unsupportedMedia = envelope.ProblemType{
+		Type: "about:blank", Title: "Unsupported Media Type", Status: http.StatusUnsupportedMediaType,
+	}
 )
 
 const identitiesPath = "/api/v1/identities"
@@ -560,4 +567,137 @@ func TestIdentities_CreateUnreadable(t *testing.T) {
 	got := apitest.DecodeResource[identity](api.Get(carolPath), http.StatusOK)
 	assert.Equal(t, envelope.Visible("carol"), got.Username)
 	assert.Equal(t, envelope.Visible(ada.ID), got.CreatedBy)
+}
+
+// TestIdentities_Patch changes ada field by field with JSON Merge Patches, as admin:
+//
+//  1. Create ada and grace: 201 for each.
+//  2. Patch ada's display name: 200 with the new display name, her username kept and the update time
+//     advanced.
+//  3. Patch ada with an empty object: 200 with ada as step 2 left her, the update time included.
+//  4. Patch ada's username to null: 422 invalid-body pointing to username. To a number: 400 naming
+//     username. Patch her with application/json: 415 naming application/merge-patch+json in Accept-Patch.
+//     Get her: as step 2 left her.
+//  5. Patch ada's username to grace: 409 username-taken, the same as replacing it.
+//  6. Patch an identity that doesn't exist: 404 identity-not-found.
+func TestIdentities_Patch(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada := apitest.DecodeResource[identity](
+		api.Post(identitiesPath, `{"username":"ada","displayName":"Ada"}`), http.StatusCreated)
+	adaPath := identitiesPath + "/" + ada.ID.String()
+	api.Post(identitiesPath, `{"username":"grace","displayName":"Grace Hopper"}`).AssertStatus(http.StatusCreated)
+
+	// 2. Patch the display name.
+	patched := apitest.DecodeResource[identity](api.Patch(adaPath, `{"displayName":"Ada Lovelace"}`), http.StatusOK)
+	assert.Equal(t, envelope.Visible("Ada Lovelace"), patched.DisplayName)
+	assert.Equal(t, ada.Username, patched.Username, "a member that the patch leaves out must not change")
+	assert.True(t, patched.UpdatedAt.Value.After(ada.UpdatedAt.Value), "the update time must advance")
+
+	// 3. Patch nothing.
+	assert.Equal(t, patched, apitest.DecodeResource[identity](api.Patch(adaPath, `{}`), http.StatusOK))
+
+	// 4. Patch with invalid bodies.
+	resp := api.Patch(adaPath, `{"username":null}`)
+	resp.AssertProblemType(invalidBody)
+	assert.Contains(t, resp.Body.String(), `"pointer":"#/username"`)
+	resp = api.Patch(adaPath, `{"username":5}`)
+	resp.AssertProblemType(badRequest)
+	assert.Contains(t, resp.Body.String(), `The member \"username\" must be of type string.`)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, adaPath,
+		strings.NewReader(`{"displayName":"Ada"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp = api.Do(req)
+	resp.AssertProblemType(unsupportedMedia)
+	assert.Equal(t, "application/merge-patch+json", resp.Header().Get("Accept-Patch"))
+	assert.Equal(t, patched, apitest.DecodeResource[identity](api.Get(adaPath), http.StatusOK))
+
+	// 5. Patch to a taken username.
+	api.Patch(adaPath, `{"username":"grace"}`).AssertProblemType(usernameTaken)
+
+	// 6. Patch a missing identity.
+	api.Patch(identitiesPath+"/"+uuid.NewV4().String(), `{}`).AssertProblemType(identityNotFound)
+}
+
+// TestIdentities_PatchConcurrently checks that patches of different fields at the same time both survive,
+// rather than one of them writing back the other's old value:
+//
+//  1. Create ada: 201.
+//  2. Patch her username and, at the same time, her display name: 200 for both.
+//  3. Get her: the new username and the new display name.
+func TestIdentities_PatchConcurrently(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada := apitest.DecodeResource[identity](
+		api.Post(identitiesPath, `{"username":"ada","displayName":"Ada"}`), http.StatusCreated)
+	adaPath := identitiesPath + "/" + ada.ID.String()
+
+	// 2. Patch both fields at once.
+	bodies := []string{`{"username":"ada-lovelace"}`, `{"displayName":"Ada Lovelace"}`}
+	resps := make([]*apitest.Response, len(bodies))
+	var wg sync.WaitGroup
+	for i, body := range bodies {
+		wg.Go(func() { resps[i] = api.Patch(adaPath, body) })
+	}
+	wg.Wait()
+	for _, resp := range resps {
+		resp.AssertStatus(http.StatusOK)
+	}
+
+	// 3. Get.
+	got := apitest.DecodeResource[identity](api.Get(adaPath), http.StatusOK)
+	assert.Equal(t, envelope.Visible("ada-lovelace"), got.Username)
+	assert.Equal(t, envelope.Visible("Ada Lovelace"), got.DisplayName)
+}
+
+// TestIdentities_PatchOneField checks that a caller who may set some fields of an identity can patch those,
+// but not the others, and still can't replace it:
+//
+//  1. Create ada and grace, each with an API key: 201 for each.
+//  2. Add a policy that lets every identity update itself, but forbids changing usernames: 201.
+//  3. As ada, patch her display name: 200 with the new display name.
+//  4. As ada, patch her username, and her username and display name: 403 fields-denied pointing to username
+//     alone for both, and, as admin, ada is as step 3 left her, so nothing was written.
+//  5. As ada, replace ada with her current username: 403 fields-denied pointing to username.
+//  6. As ada, patch grace, whom she can't read, with a display name and with an empty object: the same 404
+//     identity-not-found, to the byte, as for an identity that doesn't exist.
+func TestIdentities_PatchOneField(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	adaPath := identitiesPath + "/" + ada.ID.String()
+	grace, _ := apptest.NewIdentity(api, "grace")
+	gracePath := identitiesPath + "/" + grace.ID.String()
+	missingPath := identitiesPath + "/" + uuid.NewV4().String()
+
+	// 2. Add the policy.
+	addPolicy(t, api, `permit (principal, action in Action::"identity:update", resource)
+			when { resource == principal };
+		forbid (principal, action == Action::"identity:update:username", resource);`)
+
+	// 3. Patch the display name.
+	patched := apitest.DecodeResource[identity](asAda.Patch(adaPath, `{"displayName":"Ada Lovelace"}`), http.StatusOK)
+	assert.Equal(t, envelope.Visible("Ada Lovelace"), patched.DisplayName)
+	assert.Equal(t, envelope.Visible(ada.ID), patched.UpdatedBy)
+
+	// 4. Patch the username.
+	assertFieldsDenied(t, asAda.Patch(adaPath, `{"username":"ada-lovelace"}`), "#/username")
+	assertFieldsDenied(t, asAda.Patch(adaPath, `{"username":"ada-lovelace","displayName":"Countess"}`), "#/username")
+	assert.Equal(t, patched, apitest.DecodeResource[identity](api.Get(adaPath), http.StatusOK))
+
+	// 5. Replace.
+	assertFieldsDenied(t, asAda.Put(adaPath, `{"username":"ada","displayName":"Countess"}`), "#/username")
+
+	// 6. Patch grace.
+	for _, body := range []string{`{"displayName":"Grace"}`, `{}`} {
+		hidden := asAda.Patch(gracePath, body)
+		hidden.AssertProblemType(identityNotFound)
+		assert.Equal(t, asAda.Patch(missingPath, body).Body.String(), hidden.Body.String(), body)
+	}
 }
