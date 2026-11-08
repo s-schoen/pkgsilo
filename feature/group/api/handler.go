@@ -49,7 +49,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groups, err := h.service.List(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, page.Offset, page.Limit)
+	groups, err := h.service.List(r.Context(), authn.Actor(r), page.Offset, page.Limit)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -69,7 +69,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.service.Create(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, body.toInput())
+	group, err := h.service.Create(r.Context(), authn.Actor(r), body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -84,7 +84,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.service.Get(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id)
+	group, err := h.service.Get(r.Context(), authn.Actor(r), id)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -104,7 +104,7 @@ func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.service.Replace(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, body.toInput())
+	group, err := h.service.Replace(r.Context(), authn.Actor(r), id, body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -124,7 +124,7 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.service.Patch(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, body.toPatch())
+	group, err := h.service.Patch(r.Context(), authn.Actor(r), id, body.toPatch())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -139,7 +139,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id); err != nil {
+	if err := h.service.Delete(r.Context(), authn.Actor(r), id); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
@@ -159,7 +159,7 @@ func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	members, err := h.service.ListMembers(
-		r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, page.Offset, page.Limit)
+		r.Context(), authn.Actor(r), id, page.Offset, page.Limit)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -188,7 +188,7 @@ func (h *Handler) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.AddMember(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, identityID); err != nil {
+	if err := h.service.AddMember(r.Context(), authn.Actor(r), id, identityID); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
@@ -207,7 +207,7 @@ func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.service.RemoveMember(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, identityID)
+	err := h.service.RemoveMember(r.Context(), authn.Actor(r), id, identityID)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -227,7 +227,7 @@ func (h *Handler) memberID(
 		return identityID, true
 	}
 
-	if _, err := h.service.Get(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, groupID); err != nil {
+	if _, err := h.service.Get(r.Context(), authn.Actor(r), groupID); err != nil {
 		h.writeError(w, r, err)
 		return uuid.UUID{}, false
 	}

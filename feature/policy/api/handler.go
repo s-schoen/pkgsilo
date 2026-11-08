@@ -45,7 +45,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	policies, err := h.service.List(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, page.Offset, page.Limit)
+	policies, err := h.service.List(r.Context(), authn.Actor(r), page.Offset, page.Limit)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -65,7 +65,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	policy, err := h.service.Create(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, body.toInput())
+	policy, err := h.service.Create(r.Context(), authn.Actor(r), body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -80,7 +80,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	policy, err := h.service.Get(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id)
+	policy, err := h.service.Get(r.Context(), authn.Actor(r), id)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -100,7 +100,7 @@ func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	policy, err := h.service.Replace(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, body.toInput())
+	policy, err := h.service.Replace(r.Context(), authn.Actor(r), id, body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -120,7 +120,7 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	policy, err := h.service.Patch(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id, body.toPatch())
+	policy, err := h.service.Patch(r.Context(), authn.Actor(r), id, body.toPatch())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -135,7 +135,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), authn.PrincipalFrom(r.Context()).IdentityID, id); err != nil {
+	if err := h.service.Delete(r.Context(), authn.Actor(r), id); err != nil {
 		h.writeError(w, r, err)
 		return
 	}

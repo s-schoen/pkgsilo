@@ -62,6 +62,14 @@ func PrincipalFrom(ctx context.Context) Principal {
 	return principal
 }
 
+// Actor returns the identity that a request that passed Require is authenticated as, which its handler
+// passes to the service as the actor. A service takes the actor as a parameter and never reads it from
+// the context, so that callers without a request, such as the first start, pass their own. It panics
+// like PrincipalFrom if there is no principal.
+func Actor(r *http.Request) uuid.UUID {
+	return PrincipalFrom(r.Context()).IdentityID
+}
+
 // Require returns middleware that passes on only requests with a valid credential of one of the
 // given authentication methods, with the principal for PrincipalFrom in the context and for the logs
 // of the request. It panics if there are no methods.
