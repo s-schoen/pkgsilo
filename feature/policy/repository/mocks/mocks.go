@@ -244,6 +244,74 @@ func (_c *MockPolicyRepository_ListExistingGroups_Call) RunAndReturn(run func(ct
 	return _c
 }
 
+// ListExistingIdentities provides a mock function for the type MockPolicyRepository
+func (_mock *MockPolicyRepository) ListExistingIdentities(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	ret := _mock.Called(ctx, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListExistingIdentities")
+	}
+
+	var r0 []uuid.UUID
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uuid.UUID) ([]uuid.UUID, error)); ok {
+		return returnFunc(ctx, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uuid.UUID) []uuid.UUID); ok {
+		r0 = returnFunc(ctx, ids)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]uuid.UUID)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPolicyRepository_ListExistingIdentities_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListExistingIdentities'
+type MockPolicyRepository_ListExistingIdentities_Call struct {
+	*mock.Call
+}
+
+// ListExistingIdentities is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ids []uuid.UUID
+func (_e *MockPolicyRepository_Expecter) ListExistingIdentities(ctx any, ids any) *MockPolicyRepository_ListExistingIdentities_Call {
+	return &MockPolicyRepository_ListExistingIdentities_Call{Call: _e.mock.On("ListExistingIdentities", ctx, ids)}
+}
+
+func (_c *MockPolicyRepository_ListExistingIdentities_Call) Run(run func(ctx context.Context, ids []uuid.UUID)) *MockPolicyRepository_ListExistingIdentities_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPolicyRepository_ListExistingIdentities_Call) Return(uUIDs []uuid.UUID, err error) *MockPolicyRepository_ListExistingIdentities_Call {
+	_c.Call.Return(uUIDs, err)
+	return _c
+}
+
+func (_c *MockPolicyRepository_ListExistingIdentities_Call) RunAndReturn(run func(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)) *MockPolicyRepository_ListExistingIdentities_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Write provides a mock function for the type MockPolicyRepository
 func (_mock *MockPolicyRepository) Write(ctx context.Context, fn func(w repository.PolicyWriter) error) error {
 	ret := _mock.Called(ctx, fn)
@@ -584,6 +652,142 @@ func (_c *MockPolicyWriter_ListAll_Call) Return(policyRecords []repository.Polic
 }
 
 func (_c *MockPolicyWriter_ListAll_Call) RunAndReturn(run func(ctx context.Context) ([]repository.PolicyRecord, error)) *MockPolicyWriter_ListAll_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListExistingGroups provides a mock function for the type MockPolicyWriter
+func (_mock *MockPolicyWriter) ListExistingGroups(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	ret := _mock.Called(ctx, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListExistingGroups")
+	}
+
+	var r0 []uuid.UUID
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uuid.UUID) ([]uuid.UUID, error)); ok {
+		return returnFunc(ctx, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uuid.UUID) []uuid.UUID); ok {
+		r0 = returnFunc(ctx, ids)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]uuid.UUID)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPolicyWriter_ListExistingGroups_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListExistingGroups'
+type MockPolicyWriter_ListExistingGroups_Call struct {
+	*mock.Call
+}
+
+// ListExistingGroups is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ids []uuid.UUID
+func (_e *MockPolicyWriter_Expecter) ListExistingGroups(ctx any, ids any) *MockPolicyWriter_ListExistingGroups_Call {
+	return &MockPolicyWriter_ListExistingGroups_Call{Call: _e.mock.On("ListExistingGroups", ctx, ids)}
+}
+
+func (_c *MockPolicyWriter_ListExistingGroups_Call) Run(run func(ctx context.Context, ids []uuid.UUID)) *MockPolicyWriter_ListExistingGroups_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPolicyWriter_ListExistingGroups_Call) Return(uUIDs []uuid.UUID, err error) *MockPolicyWriter_ListExistingGroups_Call {
+	_c.Call.Return(uUIDs, err)
+	return _c
+}
+
+func (_c *MockPolicyWriter_ListExistingGroups_Call) RunAndReturn(run func(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)) *MockPolicyWriter_ListExistingGroups_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListExistingIdentities provides a mock function for the type MockPolicyWriter
+func (_mock *MockPolicyWriter) ListExistingIdentities(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	ret := _mock.Called(ctx, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListExistingIdentities")
+	}
+
+	var r0 []uuid.UUID
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uuid.UUID) ([]uuid.UUID, error)); ok {
+		return returnFunc(ctx, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uuid.UUID) []uuid.UUID); ok {
+		r0 = returnFunc(ctx, ids)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]uuid.UUID)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPolicyWriter_ListExistingIdentities_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListExistingIdentities'
+type MockPolicyWriter_ListExistingIdentities_Call struct {
+	*mock.Call
+}
+
+// ListExistingIdentities is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ids []uuid.UUID
+func (_e *MockPolicyWriter_Expecter) ListExistingIdentities(ctx any, ids any) *MockPolicyWriter_ListExistingIdentities_Call {
+	return &MockPolicyWriter_ListExistingIdentities_Call{Call: _e.mock.On("ListExistingIdentities", ctx, ids)}
+}
+
+func (_c *MockPolicyWriter_ListExistingIdentities_Call) Run(run func(ctx context.Context, ids []uuid.UUID)) *MockPolicyWriter_ListExistingIdentities_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPolicyWriter_ListExistingIdentities_Call) Return(uUIDs []uuid.UUID, err error) *MockPolicyWriter_ListExistingIdentities_Call {
+	_c.Call.Return(uUIDs, err)
+	return _c
+}
+
+func (_c *MockPolicyWriter_ListExistingIdentities_Call) RunAndReturn(run func(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)) *MockPolicyWriter_ListExistingIdentities_Call {
 	_c.Call.Return(run)
 	return _c
 }

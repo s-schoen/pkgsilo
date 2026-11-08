@@ -206,7 +206,7 @@ func TestPolicies_NameTaken(t *testing.T) {
 // TestPolicies_Invalid checks that a policy with a mistake is rejected, with a reason, both when it's
 // created and when it replaces a valid one:
 //
-//  1. Create the group maintainers, and a valid policy to replace: 201 for both.
+//  1. Create the group maintainers, the identity ada, and a valid policy to replace: 201 for each.
 //  2. For each mistake, create a policy with it: 422 invalid-policy with the reason in the detail.
 //  3. Replace the valid policy with it: the same 422.
 //  4. Get the valid policy, and list the policies: the valid policy unchanged, and no policy named after the
@@ -219,6 +219,7 @@ func TestPolicies_Invalid(t *testing.T) {
 
 	// 1. Create.
 	maintainers := addGroup(api, "maintainers")
+	ada, _ := apptest.NewIdentity(api, "ada")
 	valid := addPolicy(t, api, "valid",
 		`permit (principal in Group::"`+maintainers+`", action in Action::"read", resource);`)
 	validPath := policiesPath + "/" + valid.ID.String()
@@ -278,6 +279,21 @@ func TestPolicies_Invalid(t *testing.T) {
 			name:   "group ID that isn't a UUID",
 			source: `forbid (principal in Group::"maintainers", action, resource);`,
 			reason: `the group "maintainers" does not exist`,
+		},
+		{
+			name:   "group ID in uppercase",
+			source: `forbid (principal in Group::"` + strings.ToUpper(maintainers) + `", action, resource);`,
+			reason: `the group ID "` + strings.ToUpper(maintainers) + `" never matches`,
+		},
+		{
+			name:   "identity that doesn't exist",
+			source: `forbid (principal == Identity::"` + uuid.NewV4().String() + `", action, resource);`,
+			reason: "does not exist",
+		},
+		{
+			name:   "identity ID in uppercase",
+			source: `forbid (principal == Identity::"` + strings.ToUpper(ada.ID.String()) + `", action, resource);`,
+			reason: `the identity ID "` + strings.ToUpper(ada.ID.String()) + `" never matches`,
 		},
 		{
 			name: "group that doesn't exist, next to one that does",

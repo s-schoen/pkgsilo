@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"slices"
 	"time"
 	"uuid"
 
@@ -18,8 +17,9 @@ import (
 // Saving a policy checks its source first, and returns an *InvalidPolicyError, without storing anything,
 // if it has a mistake: if it's too large or can't be parsed, if it holds no statements or would take all
 // policies over 1,000 statements, if a statement doesn't match the schema or tests for an undeclared
-// attribute with has, or if it references a group that doesn't exist. The source is checked after the
-// actor was allowed to write, so that it reveals no groups to others.
+// attribute with has, or if it references a group or identity that doesn't exist or whose ID isn't written
+// in lowercase with hyphens, which would never match. The source is checked after the actor was allowed to
+// write, so that it reveals no groups or identities to others.
 //
 // Every policy that it returns holds only the fields that the actor may read, and the ID.
 type PolicyService interface {
@@ -85,7 +85,7 @@ func (s *policyService) Create(ctx context.Context, actor uuid.UUID, in PolicyIn
 		return Policy{}, fmt.Errorf("create policy: %w", err)
 	}
 
-	source, err := s.checkSource(ctx, in.Source)
+	source, err := s.checker.checkWithReferences(ctx, s.repo, in.Source)
 	if err != nil {
 		return Policy{}, fmt.Errorf("create policy: %w", err)
 	}
@@ -192,7 +192,7 @@ func (s *policyService) Replace(ctx context.Context, actor, id uuid.UUID, in Pol
 		return Policy{}, fmt.Errorf("replace policy: %w", err)
 	}
 
-	source, err := s.checkSource(ctx, in.Source)
+	source, err := s.checker.checkWithReferences(ctx, s.repo, in.Source)
 	if err != nil {
 		return Policy{}, fmt.Errorf("replace policy: %w", err)
 	}
@@ -332,33 +332,11 @@ func (s *policyService) getReadable(
 	return rec, nil
 }
 
-// checkSource runs the checks of the source that don't depend on the other policies, including that the
-// groups it references exist.
-func (s *policyService) checkSource(ctx context.Context, source string) (checkedSource, error) {
-	checked, err := s.checker.check(source)
-	if err != nil {
-		return checkedSource{}, err
-	}
-	if len(checked.groups) == 0 {
-		return checked, nil
-	}
-
-	existing, err := s.repo.ListExistingGroups(ctx, checked.groups)
-	if err != nil {
-		return checkedSource{}, fmt.Errorf("check groups: %w", err)
-	}
-	for _, group := range checked.groups {
-		if !slices.Contains(existing, group) {
-			return checkedSource{}, missingGroup(group.String())
-		}
-	}
-
-	return checked, nil
-}
-
 // checkPatched runs the checks of a saved policy on the source of the policy with the given ID that results
 // from the patch, even if the patch keeps it. It runs in the write, which holds every other policy write until
-// the commit, so that the source it reads is the one that's stored.
+// the commit, so that the source it reads is the one that's stored. It looks up the references on the
+// writer too: the write holds a connection and the lock that other writes wait for with theirs, so that a
+// lookup on the pool could wait for a connection that never frees.
 func (s *policyService) checkPatched(
 	ctx context.Context, w repository.PolicyWriter, id uuid.UUID, patch PolicyPatch,
 ) error {
@@ -371,7 +349,7 @@ func (s *policyService) checkPatched(
 		source = *patch.Source
 	}
 
-	checked, err := s.checkSource(ctx, source)
+	checked, err := s.checker.checkWithReferences(ctx, w, source)
 	if err != nil {
 		return err
 	}
