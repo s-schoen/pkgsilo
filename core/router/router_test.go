@@ -1,18 +1,23 @@
 package router
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/middleware"
 	"pkgsilo/test/loggertest"
+	"pkgsilo/test/telemetrytest"
 )
 
 func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
@@ -154,4 +159,116 @@ func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
 	assert.Contains(t, panicEntry["panic"], "envelope: encode response")
 	assert.NotEmpty(t, panicEntry["request_id"])
 	assert.Equal(t, requestEntry["request_id"], panicEntry["request_id"])
+}
+
+func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
+	t.Parallel()
+	noop := func(http.ResponseWriter, *http.Request) {}
+	sub := chi.NewRouter()
+	sub.Get("/{itemID}", noop)
+	sub.Get("/missing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+		wantRoute  string
+	}{
+		{
+			name: "nested mounted route", method: http.MethodGet, path: "/api/v1/things/7/items/42",
+			wantStatus: http.StatusOK, wantRoute: "/api/v1/things/{thingID}/items/{itemID}",
+		},
+		{
+			name: "404 of a matched route", method: http.MethodGet, path: "/api/v1/things/7/items/missing",
+			wantStatus: http.StatusNotFound, wantRoute: "/api/v1/things/{thingID}/items/missing",
+		},
+		{name: "no route", method: http.MethodGet, path: "/does-not-exist", wantStatus: http.StatusNotFound},
+		{
+			name: "no route in a subrouter", method: http.MethodGet, path: "/api/v1/things/7/items/42/more",
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name: "method not allowed", method: http.MethodPost, path: "/api/v1/things/7/items/42",
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name: "unknown method", method: "BREW", path: "/api/v1/things/7/items/42",
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name: "panic", method: http.MethodGet, path: "/panic",
+			wantStatus: http.StatusInternalServerError, wantRoute: "/panic",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			metrics := telemetrytest.New(t)
+			r := New(Options{MeterProvider: metrics.MeterProvider()}, loggertest.Discard())
+			r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
+			r.Route("/api/v1", func(r chi.Router) { r.Mount("/things/{thingID}/items", sub) })
+
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, nil))
+			require.Equal(t, tt.wantStatus, rec.Code)
+
+			wantMethod := tt.method
+			if tt.method == "BREW" {
+				wantMethod = "_OTHER"
+			}
+			want := []attribute.KeyValue{
+				semconv.HTTPRequestMethodKey.String(wantMethod),
+				semconv.HTTPResponseStatusCode(tt.wantStatus),
+				semconv.NetworkProtocolName("http"),
+				semconv.NetworkProtocolVersion("1.1"),
+				semconv.URLScheme("http"),
+			}
+			if tt.wantRoute != "" {
+				want = append(want, semconv.HTTPRoute(tt.wantRoute))
+			}
+			duration := telemetrytest.HistogramPoints[float64](t, metrics, "http.server.request.duration")
+			require.Len(t, duration, 1)
+			assert.ElementsMatch(t, want, duration[0].Attributes.ToSlice())
+			assert.EqualValues(t, 1, duration[0].Count)
+			for _, name := range []string{"http.server.request.body.size", "http.server.response.body.size"} {
+				points := telemetrytest.HistogramPoints[int64](t, metrics, name)
+				require.Len(t, points, 1, name)
+				assert.ElementsMatch(t, want, points[0].Attributes.ToSlice(), name)
+				assert.EqualValues(t, 1, points[0].Count, name)
+			}
+		})
+	}
+}
+
+func TestNew_RecordsBodySizes(t *testing.T) {
+	t.Parallel()
+	metrics := telemetrytest.New(t)
+	r := New(Options{MeterProvider: metrics.MeterProvider()}, loggertest.Discard())
+	r.Post("/echo", func(w http.ResponseWriter, req *http.Request) { _, _ = io.Copy(w, req.Body) })
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/echo", strings.NewReader("hello")))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	for _, name := range []string{"http.server.request.body.size", "http.server.response.body.size"} {
+		points := telemetrytest.HistogramPoints[int64](t, metrics, name)
+		require.Len(t, points, 1, name)
+		assert.EqualValues(t, 5, points[0].Sum, name)
+	}
+}
+
+func TestNew_SkipsUnmeasuredPaths(t *testing.T) {
+	t.Parallel()
+	metrics := telemetrytest.New(t)
+	r := New(Options{MeterProvider: metrics.MeterProvider(), UnmeasuredPaths: []string{"/api/v1/health"}},
+		loggertest.Discard())
+	r.Get("/api/v1/health", func(http.ResponseWriter, *http.Request) {})
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/health", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	_, recorded := metrics.Metric(t, "http.server.request.duration")
+	assert.False(t, recorded)
 }

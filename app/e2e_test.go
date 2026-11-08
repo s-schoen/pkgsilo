@@ -8,24 +8,48 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/telemetry"
+	identityapi "pkgsilo/feature/identity/api"
+	"pkgsilo/test/apitest"
 	"pkgsilo/test/apptest"
 )
 
 // TestMetrics checks that the metrics listener serves what the app records:
 //
-//  1. Scrape the metrics: 200 in the Prometheus text format, with target_info describing the service
-//     pkgsilo and a Go runtime series.
+//  1. List the identities: 200.
+//  2. Get the first one: 200.
+//  3. Check the health: 200.
+//  4. Scrape the metrics: 200 in the Prometheus text format, with target_info describing the service
+//     pkgsilo, a Go runtime series, and the request durations of steps 1 and 2 under their route
+//     patterns, without the host they were sent to. Step 3 isn't measured.
 func TestMetrics(t *testing.T) {
 	t.Parallel()
-	_, metrics := apptest.NewWithMetrics(t)
+	api, metrics := apptest.NewWithMetrics(t)
 
-	// 1. Scrape.
+	// 1. List.
+	identities := apitest.DecodeCollection[identityapi.IdentityResponse](
+		api.Get("/api/v1/identities"), http.StatusOK).Data
+	require.NotEmpty(t, identities)
+
+	// 2. Get.
+	api.Get("/api/v1/identities/" + identities[0].ID.String()).AssertStatus(http.StatusOK)
+
+	// 3. Check the health.
+	api.Anonymous().Get("/api/v1/health").AssertStatus(http.StatusOK)
+
+	// 4. Scrape.
 	scrape := metrics.Get(telemetry.MetricsPath)
 	scrape.AssertStatus(http.StatusOK)
 	assert.Contains(t, scrape.Header().Get("Content-Type"), "text/plain")
 	body := scrape.Body.String()
 	assert.Regexp(t, `(?m)^target_info\{[^}]*service_name="pkgsilo"[^}]*\} 1$`, body)
 	assert.Regexp(t, `(?m)^go_goroutine_count(_\w+)?\{`, body)
+	for _, route := range []string{`/api/v1/identities`, `/api/v1/identities/\{id\}`} {
+		assert.Regexp(t, `(?m)^http_server_request_duration_seconds_count\{http_request_method="GET",`+
+			`http_response_status_code="200",http_route="`+route+`",[^}]*\} 1$`, body)
+	}
+	assert.NotRegexp(t, `(?m)^http_server_\w+\{[^}]*(server_address|server_port)=`, body)
+	assert.NotContains(t, body, "/api/v1/health")
 }
