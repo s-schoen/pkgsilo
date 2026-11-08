@@ -170,3 +170,27 @@ func TestPrincipalFrom_PanicsWithoutPrincipal(t *testing.T) {
 		authn.PrincipalFrom(t.Context())
 	})
 }
+
+func TestActor_ReturnsThePrincipalsIdentity(t *testing.T) {
+	t.Parallel()
+	id := uuid.NewV7()
+	authenticator := newAuthenticator(t, "key")
+	authenticator.EXPECT().Authenticate(mock.Anything).Return(authn.Principal{IdentityID: id}, nil)
+
+	var got uuid.UUID
+	h := authn.Require(loggertest.Discard(), authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = authn.Actor(r)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	assert.Equal(t, id, got)
+}
+
+func TestActor_PanicsWithoutPrincipal(t *testing.T) {
+	t.Parallel()
+
+	assert.PanicsWithValue(t, "authn: no principal in the context: the route is not behind Require", func() {
+		authn.Actor(httptest.NewRequest(http.MethodGet, "/", nil))
+	})
+}

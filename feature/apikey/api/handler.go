@@ -51,7 +51,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	keys, err := h.service.List(r.Context(), actor(r), identity, page.Offset, page.Limit)
+	keys, err := h.service.List(r.Context(), authn.Actor(r), identity, page.Offset, page.Limit)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -76,7 +76,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := h.service.Create(r.Context(), actor(r), identity, body.toInput())
+	key, err := h.service.Create(r.Context(), authn.Actor(r), identity, body.toInput())
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -98,7 +98,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := h.service.Get(r.Context(), actor(r), identity, id)
+	key, err := h.service.Get(r.Context(), authn.Actor(r), identity, id)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -118,17 +118,12 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), actor(r), identity, id); err != nil {
+	if err := h.service.Delete(r.Context(), authn.Actor(r), identity, id); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// actor returns the identity that the request is authenticated as.
-func actor(r *http.Request) uuid.UUID {
-	return authn.PrincipalFrom(r.Context()).IdentityID
 }
 
 // identityID returns the ID of the API keys' identity from the request path, answering one that
