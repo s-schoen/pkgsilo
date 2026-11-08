@@ -55,7 +55,7 @@ func TestOpen_PoolMetrics(t *testing.T) {
 		byState(t, telemetrytest.SumPoints[int64](t, rec, "db.client.connection.count")))
 	assert.Equal(t, int64(db.Stats().MaxOpenConnections),
 		value(t, telemetrytest.SumPoints[int64](t, rec, "db.client.connection.max")))
-	assert.Zero(t, value(t, telemetrytest.SumPoints[int64](t, rec, "db.client.connection.waits")))
+	assert.Zero(t, value(t, telemetrytest.SumPoints[int64](t, rec, "pkgsilo.database.connection.waits")))
 
 	require.NoError(t, conn.Close())
 
@@ -76,7 +76,8 @@ func TestOpen_PoolMetricsWaits(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	queried := make(chan error)
+	// Buffered, so that the query never blocks on a test that has failed before receiving.
+	queried := make(chan error, 1)
 	go func() {
 		var n int
 		queried <- db.GetContext(t.Context(), &n, "SELECT 1")
@@ -86,9 +87,9 @@ func TestOpen_PoolMetricsWaits(t *testing.T) {
 	require.NoError(t, held[0].Close())
 	require.NoError(t, <-queried)
 
-	assert.Equal(t, int64(1), value(t, telemetrytest.SumPoints[int64](t, rec, "db.client.connection.waits")))
+	assert.Equal(t, int64(1), value(t, telemetrytest.SumPoints[int64](t, rec, "pkgsilo.database.connection.waits")))
 	assert.GreaterOrEqual(t,
-		value(t, telemetrytest.SumPoints[float64](t, rec, "db.client.connection.wait_duration")), 0.01)
+		value(t, telemetrytest.SumPoints[float64](t, rec, "pkgsilo.database.connection.wait_duration")), 0.01)
 	for _, conn := range held[1:] {
 		require.NoError(t, conn.Close())
 	}
@@ -106,7 +107,7 @@ func TestOpen_PoolMetricsStopOnClose(t *testing.T) {
 
 	for _, name := range []string{
 		"db.client.connection.count", "db.client.connection.max",
-		"db.client.connection.waits", "db.client.connection.wait_duration",
+		"pkgsilo.database.connection.waits", "pkgsilo.database.connection.wait_duration",
 	} {
 		_, ok := rec.Metric(t, name)
 		assert.False(t, ok, name)
