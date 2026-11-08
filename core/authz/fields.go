@@ -3,6 +3,7 @@ package authz
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -46,6 +47,27 @@ func NewFieldActions(group string, fields ...string) FieldActions {
 // Fields returns the names of the fields, in the order of their declaration.
 func (f FieldActions) Fields() []string {
 	return append([]string(nil), f.fields...)
+}
+
+// Only returns the actions of the given fields, in the order of their declaration, for a write that sets
+// only some of them, such as a POST that leaves out an optional field. It panics on a field that isn't
+// declared, which is a bug in the caller: checking nothing for it would let it be written unchecked.
+func (f FieldActions) Only(fields ...string) FieldActions {
+	for _, field := range fields {
+		if !slices.Contains(f.fields, field) {
+			panic(fmt.Sprintf("authz: no action declared for the field %q", field))
+		}
+	}
+
+	var only FieldActions
+	for i, field := range f.fields {
+		if slices.Contains(fields, field) {
+			only.fields = append(only.fields, field)
+			only.actions = append(only.actions, f.actions[i])
+		}
+	}
+
+	return only
 }
 
 // Check checks the action of setting every field on the resource, as a write that sets them all needs. It

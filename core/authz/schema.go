@@ -13,6 +13,10 @@ import (
 type Declaration struct {
 	// Type is the Cedar entity type of the resources, such as Identity.
 	Type string
+	// Owned declares that each resource belongs to an identity, which policies refer to as resource.owner,
+	// such as an API key. Every resource of the type must then carry its Resource.Owner. Group and
+	// Identity can't be owned.
+	Owned bool
 	// Actions are the actions on the resources that aren't field actions.
 	Actions []Action
 	// Fields are the field actions of the writes of the resources.
@@ -25,8 +29,9 @@ type Declaration struct {
 // as the resource. The action groups that the actions are members of are declared as actions that apply to
 // nothing, since they're never requested themselves.
 //
-// No entity type has attributes, since no resource of a decision carries any: an attribute that the schema
-// declared would pass validation and then fail every decision.
+// The only attribute is the owner of the types declared as Owned, which every resource of them carries: an
+// attribute that the schema declared and a resource lacked would pass validation and then fail every
+// decision. Secrets never become attributes, since a policy could reveal them through its decisions.
 func Schema(declarations ...Declaration) string {
 	var b strings.Builder
 	writeEntityTypes(&b, declarations)
@@ -44,17 +49,30 @@ func Schema(declarations ...Declaration) string {
 	return b.String()
 }
 
-// writeEntityTypes writes the entity types of the schema to b: Group, Identity and each declared type once.
+// writeEntityTypes writes the entity types of the schema to b: Group, Identity and each declared type once,
+// with an owner if any of its declarations is Owned.
 func writeEntityTypes(b *strings.Builder, declarations []Declaration) {
 	b.WriteString("entity " + GroupType + ";\n")
 	b.WriteString("entity " + IdentityType + " in [" + GroupType + "];\n")
 
-	written := []string{GroupType, IdentityType}
+	var declared []string
+	owned := map[string]bool{}
 	for _, declaration := range declarations {
-		if !slices.Contains(written, declaration.Type) {
-			written = append(written, declaration.Type)
-			b.WriteString("entity " + declaration.Type + ";\n")
+		if declaration.Type == GroupType || declaration.Type == IdentityType {
+			continue
 		}
+		if !slices.Contains(declared, declaration.Type) {
+			declared = append(declared, declaration.Type)
+		}
+		owned[declaration.Type] = owned[declaration.Type] || declaration.Owned
+	}
+
+	for _, entityType := range declared {
+		b.WriteString("entity " + entityType)
+		if owned[entityType] {
+			b.WriteString(" { " + OwnerAttribute + ": " + IdentityType + " }")
+		}
+		b.WriteString(";\n")
 	}
 }
 
