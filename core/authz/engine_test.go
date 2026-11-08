@@ -128,6 +128,9 @@ func TestEngine_SeededPolicies(t *testing.T) {
 	ada := insertIdentity(t, db)
 	grace := insertIdentity(t, db)
 	otherAction := NewAction("identity:delete")
+	readKey := NewAction("apikey:read", ActionGroupRead)
+	deleteKey := NewAction("apikey:delete")
+	createKeyName := NewAction("apikey:create:name", "apikey:create")
 
 	tests := []struct {
 		name     string
@@ -147,6 +150,12 @@ func TestEngine_SeededPolicies(t *testing.T) {
 		{"the system actor has no access", uuid.Nil(), testAction, identityResource(ada), false},
 		{"the system actor reads itself only", uuid.Nil(), testAction, identityResource(uuid.Nil()), true},
 		{"the system actor does nothing else", uuid.Nil(), otherAction, identityResource(uuid.Nil()), false},
+		{"an identity reads its own api keys", ada, readKey, ownedResource(ada), true},
+		{"an identity deletes its own api keys", ada, deleteKey, ownedResource(ada), true},
+		{"an identity creates its own api keys", ada, createKeyName, ownedResource(ada), true},
+		{"an identity doesn't read others' api keys", ada, readKey, ownedResource(grace), false},
+		{"an identity doesn't delete others' api keys", ada, deleteKey, ownedResource(grace), false},
+		{"an identity doesn't create others' api keys", ada, createKeyName, ownedResource(grace), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -239,6 +248,58 @@ func TestEngine_PrincipalInGroupResource(t *testing.T) {
 
 	assertCan(t, true, engine, member, testAction, resource)
 	assertCan(t, false, engine, outsider, testAction, resource)
+}
+
+// ownedResource returns a resource of an owned type that belongs to the identity with the given groups.
+func ownedResource(owner uuid.UUID, ownerGroups ...uuid.UUID) Resource {
+	return Resource{Type: "APIKey", ID: uuid.NewV4(), Owner: &Owner{ID: owner, Groups: ownerGroups}}
+}
+
+// TestEngine_Owner checks that policies can refer to the owner of a resource, and to the owner's groups,
+// so that a forbid on them works.
+func TestEngine_Owner(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	ada := insertIdentity(t, db)
+	grace := insertIdentity(t, db)
+	carol := insertIdentity(t, db)
+	secret := insertGroup(t, db, grace)
+	removeSeededPolicies(t, db)
+	addPolicy(t, db, `
+		permit (principal, action, resource) when { resource has owner && resource.owner == principal };
+		permit (principal == Identity::"`+ada.String()+`", action, resource is APIKey);
+		forbid (principal, action, resource is APIKey) when { resource.owner in Group::"`+secret.String()+`" };
+	`)
+	engine := New(db)
+
+	assertCan(t, true, engine, carol, testAction, ownedResource(carol))
+	assertCan(t, false, engine, carol, testAction, ownedResource(ada))
+	assertCan(t, true, engine, ada, testAction, ownedResource(carol))
+	assertCan(t, false, engine, ada, testAction, ownedResource(grace, secret))
+	assertCan(t, false, engine, grace, testAction, ownedResource(grace, secret))
+	// Without its groups, the owner doesn't match the forbid, which is why a resource must carry them.
+	assertCan(t, true, engine, ada, testAction, ownedResource(grace))
+}
+
+// TestEngine_MissingOwner checks that a policy on the owner of a resource that lacks one fails the decision
+// instead of skipping the policy.
+func TestEngine_MissingOwner(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	ada := insertIdentity(t, db)
+	removeSeededPolicies(t, db)
+	addPolicy(t, db, `
+		permit (principal, action, resource);
+		forbid (principal, action, resource is APIKey) when { resource.owner == principal };
+	`)
+
+	decider, err := New(db).For(t.Context(), ada)
+	require.NoError(t, err)
+
+	can, err := decider.Can(testAction, Resource{Type: "APIKey", ID: uuid.NewV4()})
+
+	assert.False(t, can)
+	assert.Error(t, err)
 }
 
 func TestEngine_EvaluationError(t *testing.T) {

@@ -61,3 +61,24 @@ func TestSchema_None(t *testing.T) {
 
 	assert.Equal(t, "entity Group;\nentity Identity in [Group];\n", Schema())
 }
+
+// TestSchema_Owned checks that the resources of an owned type have their owner as an attribute, whichever of
+// the type's declarations says so.
+func TestSchema_Owned(t *testing.T) {
+	t.Parallel()
+
+	got := Schema(
+		Declaration{Type: "APIKey", Actions: []Action{NewAction("apikey:read")}},
+		Declaration{Type: "APIKey", Owned: true},
+		Declaration{Type: "Policy"},
+	)
+
+	assert.Equal(t, []string{
+		`entity Group;`,
+		`entity Identity in [Group];`,
+		`entity APIKey { owner: Identity };`,
+		`entity Policy;`,
+		`action "apikey:read" appliesTo { principal: Identity, resource: APIKey, context: {} };`,
+		``,
+	}, strings.Split(got, "\n"))
+}

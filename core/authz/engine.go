@@ -113,10 +113,18 @@ var _ Decider = (*decider)(nil)
 
 // Can reports whether the policies allow the principal the action on the resource.
 func (d *decider) Can(action Action, resource Resource) (bool, error) {
+	entities := requestEntities{list: [4]types.Entity{d.principal, action.entity}, n: 3}
 	entity := toEntity(resource.Type, resource.ID, resource.Groups)
+	if owner := resource.Owner; owner != nil {
+		// The owner is an entity of its own, so that Cedar finds its groups.
+		ownerEntity := toEntity(IdentityType, owner.ID, owner.Groups)
+		entity.Attributes = types.NewRecord(types.RecordMap{OwnerAttribute: ownerEntity.UID})
+		entities.list[3] = ownerEntity
+		entities.n = 4
+	}
+	entities.list[2] = entity
 
-	decision, diagnostic := cedar.Authorize(d.policies,
-		requestEntities{d.principal, action.entity, entity},
+	decision, diagnostic := cedar.Authorize(d.policies, entities,
 		cedar.Request{Principal: d.principal.UID, Action: action.entity.UID, Resource: entity.UID},
 	)
 	if len(diagnostic.Errors) > 0 {
@@ -131,13 +139,19 @@ func (d *decider) Can(action Action, resource Resource) (bool, error) {
 	return decision == cedar.Allow, nil
 }
 
-// requestEntities holds the entities of one decision, for Cedar to look up. Building it instead of a map
-// keeps checking the many rows of a list cheap.
-type requestEntities [3]types.Entity
+// requestEntities holds the entities of one decision, for Cedar to look up: the principal, the action, the
+// resource and, if it has one, the resource's owner. Building it instead of a map keeps checking the many
+// rows of a list cheap.
+type requestEntities struct {
+	list [4]types.Entity
+	// n is the number of entities in list.
+	n int
+}
 
-// Get returns the entity with the given ID.
+// Get returns the entity with the given ID. If the principal owns the resource, both entities have the
+// same ID and groups, so it doesn't matter which one it returns.
 func (e requestEntities) Get(uid types.EntityUID) (types.Entity, bool) {
-	for _, entity := range e {
+	for _, entity := range e.list[:e.n] {
 		if entity.UID == uid {
 			return entity, true
 		}

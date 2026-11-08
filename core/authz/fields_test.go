@@ -90,3 +90,51 @@ func TestFieldsDeniedError(t *testing.T) {
 	require.EqualError(t, err, "access denied to fields username, displayName")
 	assert.ErrorIs(t, err, ErrDenied)
 }
+
+func TestFieldActions_Only(t *testing.T) {
+	t.Parallel()
+	resource := Resource{Type: IdentityType, ID: uuid.NewV4()}
+	tests := []struct {
+		name   string
+		fields []string
+		want   []Action
+	}{
+		{name: "none", fields: nil, want: nil},
+		{name: "one", fields: []string{"displayName"}, want: []Action{testFields.actions[1]}},
+		// In the order of their declaration, so that a denial lists them like Check does.
+		{name: "all, in another order", fields: []string{"displayName", "username"}, want: testFields.actions},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var checked []Action
+			decider := deciderFunc(func(action Action, got Resource) (bool, error) {
+				assert.Equal(t, resource, got)
+				checked = append(checked, action)
+
+				return false, nil
+			})
+
+			err := testFields.Only(tt.fields...).Check(decider, resource)
+
+			assert.Equal(t, tt.want, checked)
+			if tt.want == nil {
+				require.NoError(t, err)
+				return
+			}
+			var denied *FieldsDeniedError
+			require.ErrorAs(t, err, &denied)
+			assert.Equal(t, testFields.Only(tt.fields...).Fields(), denied.Fields)
+		})
+	}
+}
+
+// TestFieldActions_Only_UndeclaredField checks that a field without an action is a bug that fails loudly,
+// instead of being written unchecked.
+func TestFieldActions_Only_UndeclaredField(t *testing.T) {
+	t.Parallel()
+
+	assert.PanicsWithValue(t, `authz: no action declared for the field "email"`, func() {
+		testFields.Only("username", "email")
+	})
+}

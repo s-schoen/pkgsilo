@@ -35,6 +35,9 @@ const (
 	// ActionGroupRead is the action group that bundles all reading actions, for policies such as a
 	// read-only audit group.
 	ActionGroupRead = "read"
+	// OwnerAttribute is the attribute of the resources of a type declared as Owned that holds the identity
+	// they belong to, for policies such as `resource.owner == principal`.
+	OwnerAttribute = "owner"
 
 	actionType types.EntityType = "Action"
 )
@@ -70,6 +73,17 @@ type Resource struct {
 	// Groups holds the groups that the resource is a member of. A resource that can be a group member
 	// must always carry its groups: without them, `resource in Group::"…"` silently doesn't match, and
 	// a forbid written that way allows what it should deny.
+	Groups []uuid.UUID
+	// Owner is the identity that the resource belongs to, which a resource of a type declared as Owned must
+	// always carry, and others never: a policy that refers to an owner that a resource lacks fails every
+	// decision on it.
+	Owner *Owner
+}
+
+// Owner is the identity that a resource belongs to. It must always carry the identity's groups, for the
+// same reason as Resource.Groups: without them, `resource.owner in Group::"…"` silently doesn't match.
+type Owner struct {
+	ID     uuid.UUID
 	Groups []uuid.UUID
 }
 
