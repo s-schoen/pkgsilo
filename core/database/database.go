@@ -29,14 +29,24 @@ type Querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// InTx runs fn in a transaction on q. On a *sqlx.DB, it begins one, which commits if fn returns nil and
-// rolls back otherwise. On anything else, such as a *sqlx.Tx, fn takes part in the transaction that q
-// already is, which its owner commits or rolls back. This lets a repository that needs a transaction take
-// part in its caller's. InTx returns fn's error unchanged.
+// txBeginner begins transactions, as *sqlx.DB does.
+type txBeginner interface {
+	BeginTxx(ctx context.Context, opts *sql.TxOptions) (*sqlx.Tx, error)
+}
+
+// InTx runs fn in a transaction on q. On a *sqlx.Tx, fn takes part in the transaction that q already is,
+// which its owner commits or rolls back. This lets a repository that needs a transaction take part in its
+// caller's. On anything that begins transactions, such as a *sqlx.DB, it begins one, which commits if fn
+// returns nil and rolls back otherwise. Any other Querier is an error, without running fn, since fn would
+// otherwise run without a transaction. InTx returns fn's error unchanged.
 func InTx(ctx context.Context, q Querier, fn func(tx Querier) error) error {
-	db, ok := q.(*sqlx.DB)
+	if tx, ok := q.(*sqlx.Tx); ok {
+		return fn(tx)
+	}
+
+	db, ok := q.(txBeginner)
 	if !ok {
-		return fn(q)
+		return fmt.Errorf("run in transaction: %T neither is a transaction nor begins one", q)
 	}
 
 	tx, err := db.BeginTxx(ctx, nil)

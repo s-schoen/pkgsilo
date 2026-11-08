@@ -96,3 +96,25 @@ func TestInTx_TxErrorLeavesTransactionOpen(t *testing.T) {
 	require.NoError(t, tx.Commit(), "the caller's transaction must still be open")
 	assert.Equal(t, 1, countRows(t, db))
 }
+
+// wrappedQuerier is a Querier that wraps another, such as an instrumented connection pool, and neither is a
+// transaction nor begins one.
+type wrappedQuerier struct {
+	database.Querier
+}
+
+// TestInTx_OtherQuerierFails checks that a Querier that neither is a transaction nor begins one is an error,
+// instead of running fn without a transaction.
+func TestInTx_OtherQuerierFails(t *testing.T) {
+	t.Parallel()
+	ran := false
+
+	err := database.InTx(t.Context(), wrappedQuerier{}, func(database.Querier) error {
+		ran = true
+
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.False(t, ran, "fn must not run without a transaction")
+}
