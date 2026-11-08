@@ -3,6 +3,7 @@
 package request
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/json"
 	"errors"
@@ -19,28 +20,71 @@ import (
 	"pkgsilo/core/envelope"
 )
 
-// MaxBodyBytes is the largest request body DecodeJSON accepts.
+// MaxBodyBytes is the largest request body DecodeJSON and DecodeMergePatch accept.
 const MaxBodyBytes = 1 << 20
+
+// Media types of request bodies.
+const (
+	jsonMediaType = "application/json"
+	// MergePatchMediaType is the media type of a JSON Merge Patch (RFC 7396), which DecodeMergePatch takes.
+	MergePatchMediaType = "application/merge-patch+json"
+)
 
 // DecodeJSON decodes the JSON request body into dst, which must be a pointer, and validates it.
 //
 // On failure it writes the problem response and returns false: 415 when the body isn't
-// application/json, 413 when it exceeds MaxBodyBytes, 400 when it isn't a single JSON value
-// matching dst and 422 with the invalid members when dst fails validation. It panics when dst
+// application/json, 413 when it exceeds MaxBodyBytes, 400 when it isn't a single JSON object
+// matching dst, null included, and 422 with the invalid members when dst fails validation. It panics when dst
 // isn't a pointer or a validation rule is misconfigured: bugs in the caller, not in the request.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst validation.Validatable) bool {
-	contentType := r.Header.Get("Content-Type")
-	if mediaType, _, err := mime.ParseMediaType(contentType); err != nil || mediaType != "application/json" {
+	if !hasMediaType(r, jsonMediaType) {
 		envelope.WriteProblem(w, envelope.UnsupportedMediaTypeProblem.New(envelope.Occurrence{
 			Detail: "The request body must be application/json.",
 		}))
 		return false
 	}
 
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
+	return decode(w, r, dst)
+}
+
+// DecodeMergePatch decodes the JSON Merge Patch (RFC 7396) in the request body into dst, which must be a
+// pointer to a struct, and validates it. Each member of dst is an Optional, so that a member that the patch
+// leaves out stays unchanged, and is validated with IfSet, unless null has a meaning of its own.
+//
+// It answers a failure like DecodeJSON, except that the body must be application/merge-patch+json, which
+// the 415 problem names in the Accept-Patch header. The body must be a JSON object too: RFC 7396 lets any
+// other value, such as null, replace the whole target, which no endpoint allows.
+func DecodeMergePatch(w http.ResponseWriter, r *http.Request, dst validation.Validatable) bool {
+	if !hasMediaType(r, MergePatchMediaType) {
+		w.Header().Set("Accept-Patch", MergePatchMediaType)
+		envelope.WriteProblem(w, envelope.UnsupportedMediaTypeProblem.New(envelope.Occurrence{
+			Detail: "The request body must be " + MergePatchMediaType + ".",
+		}))
+		return false
+	}
+
+	return decode(w, r, dst)
+}
+
+// hasMediaType reports whether the request body has the media type, whatever its parameters.
+func hasMediaType(r *http.Request, want string) bool {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	return err == nil && mediaType == want
+}
+
+// decode decodes the request body, which must be a single JSON object, into dst and validates it, like
+// DecodeJSON.
+func decode(w http.ResponseWriter, r *http.Request, dst validation.Validatable) bool {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
+	if err != nil {
+		writeDecodeProblem(w, err, body, dst)
+		return false
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		writeDecodeProblem(w, err)
+		writeDecodeProblem(w, err, body, dst)
 		return false
 	}
 	// A second value, even an empty one, makes the body ambiguous.
@@ -48,7 +92,12 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst validation.Validatab
 		if err == nil {
 			err = errTrailingData
 		}
-		writeDecodeProblem(w, err)
+		writeDecodeProblem(w, err, body, dst)
+		return false
+	}
+	// null decodes into a struct without an error, and changes nothing.
+	if !bytes.HasPrefix(bytes.TrimLeft(body, " \t\r\n"), []byte("{")) {
+		writeDecodeProblem(w, errNotObject, body, dst)
 		return false
 	}
 
@@ -76,9 +125,13 @@ func EnsureEmptyBody(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-var errTrailingData = errors.New("trailing data after JSON value")
+var (
+	errTrailingData = errors.New("trailing data after JSON value")
+	errNotObject    = errors.New("JSON value is not an object")
+)
 
-func writeDecodeProblem(w http.ResponseWriter, err error) {
+// writeDecodeProblem answers err, which decoding body into dst failed with.
+func writeDecodeProblem(w http.ResponseWriter, err error, body []byte, dst any) {
 	var (
 		maxBytesErr *http.MaxBytesError
 		syntaxErr   *json.SyntaxError
@@ -100,8 +153,10 @@ func writeDecodeProblem(w http.ResponseWriter, err error) {
 		detail = "The request body must not be empty."
 	case errors.As(err, &syntaxErr), errors.Is(err, io.ErrUnexpectedEOF):
 		detail = "The request body is not valid JSON."
-	case errors.As(err, &typeErr) && typeErr.Field != "":
-		detail = fmt.Sprintf("The member %q must be of type %s.", typeErr.Field, jsonType(typeErr.Type))
+	case errors.As(err, &typeErr):
+		if member, ok := typeErrorMember(typeErr, body, dst); ok {
+			detail = fmt.Sprintf("The member %q must be of type %s.", member, jsonType(typeErr.Type))
+		}
 	default:
 		// encoding/json reports unknown members only through the message.
 		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
@@ -110,6 +165,39 @@ func writeDecodeProblem(w http.ResponseWriter, err error) {
 	}
 
 	envelope.WriteProblem(w, envelope.BadRequestProblem.New(envelope.Occurrence{Detail: detail}))
+}
+
+// typeErrorMember returns the member of the JSON object body whose value typeErr reports, from decoding body
+// into dst. encoding/json names it, except in an error that a field's own UnmarshalJSON returns, such as
+// Optional's: then it's the member whose value doesn't decode into its field of dst, a pointer to a struct.
+// It reports false if it finds none.
+func typeErrorMember(typeErr *json.UnmarshalTypeError, body []byte, dst any) (string, bool) {
+	if typeErr.Field != "" {
+		return typeErr.Field, true
+	}
+
+	t := reflect.TypeOf(dst)
+	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
+		return "", false
+	}
+
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(body, &members); err != nil {
+		return "", false
+	}
+
+	for field := range t.Elem().Fields() {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		value, ok := members[name]
+		if !ok {
+			continue
+		}
+		if err := json.Unmarshal(value, reflect.New(field.Type).Interface()); err != nil {
+			return name, true
+		}
+	}
+
+	return "", false
 }
 
 // jsonType names the JSON type that decodes into a Go value of type t.
