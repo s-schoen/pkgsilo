@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -148,6 +149,75 @@ func TestHandler_Replace(t *testing.T) {
 	api.Put(adaPath, adaBody).AssertResource(adaJSON)
 }
 
+func TestHandler_Patch(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		body  string
+		patch service.IdentityPatch
+	}{
+		{name: "username", body: `{"username":"ada"}`, patch: service.IdentityPatch{Username: new("ada")}},
+		{
+			name: "display name", body: `{"displayName":"Ada Lovelace"}`,
+			patch: service.IdentityPatch{DisplayName: new("Ada Lovelace")},
+		},
+		{
+			name: "both", body: adaBody,
+			patch: service.IdentityPatch{Username: new("ada"), DisplayName: new("Ada Lovelace")},
+		},
+		{name: "none", body: `{}`, patch: service.IdentityPatch{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			api, svc := newTestClient(t, loggertest.Discard())
+			svc.EXPECT().Patch(mock.Anything, apitest.Actor, ada.ID, tt.patch).Return(ada, nil)
+
+			api.Patch(adaPath, tt.body).AssertResource(adaJSON)
+		})
+	}
+}
+
+// TestHandler_Patch_InvalidBody checks that a member of a patch may be left out, but not set to null or to
+// an invalid value.
+func TestHandler_Patch_InvalidBody(t *testing.T) {
+	t.Parallel()
+	// The mock fails the test if the service is called.
+	api, _ := newTestClient(t, loggertest.Discard())
+
+	api.Patch(adaPath, `{"username":"ab","displayName":null}`).AssertInvalidBody(
+		envelope.ValidationError{Pointer: "#/displayName", Detail: "cannot be null"},
+		envelope.ValidationError{Pointer: "#/username", Detail: "the length must be between 3 and 64"},
+	)
+}
+
+// TestHandler_Patch_WrongType checks that a member of the wrong JSON type is named, though encoding/json
+// doesn't name it for an optional member.
+func TestHandler_Patch_WrongType(t *testing.T) {
+	t.Parallel()
+	api, _ := newTestClient(t, loggertest.Discard())
+
+	api.Patch(adaPath, `{"username":5}`).AssertProblem(envelope.BadRequestProblem.New(envelope.Occurrence{
+		Detail: `The member "username" must be of type string.`,
+	}))
+}
+
+// TestHandler_Patch_JSON checks that a patch must be a JSON Merge Patch, so that a client can't mistake a
+// partial body for a replacement.
+func TestHandler_Patch_JSON(t *testing.T) {
+	t.Parallel()
+	api, _ := newTestClient(t, loggertest.Discard())
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, adaPath, strings.NewReader(adaBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp := api.Do(req)
+
+	resp.AssertProblem(envelope.UnsupportedMediaTypeProblem.New(envelope.Occurrence{
+		Detail: "The request body must be application/merge-patch+json.",
+	}))
+	assert.Equal(t, "application/merge-patch+json", resp.Header().Get("Accept-Patch"))
+}
+
 func TestHandler_Delete(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
@@ -188,6 +258,7 @@ func TestHandler_SettableMembersHaveActions(t *testing.T) {
 	}{
 		{name: "create", body: reflect.TypeFor[CreateIdentityRequest](), actions: service.CreatableFields()},
 		{name: "replace", body: reflect.TypeFor[ReplaceIdentityRequest](), actions: service.UpdatableFields()},
+		{name: "patch", body: reflect.TypeFor[PatchIdentityRequest](), actions: service.UpdatableFields()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -205,7 +276,7 @@ func TestHandler_SettableMembersHaveActions(t *testing.T) {
 
 func TestHandler_InvalidID(t *testing.T) {
 	t.Parallel()
-	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
 			api, _ := newTestClient(t, loggertest.Discard())
@@ -247,6 +318,12 @@ func TestHandler_ServiceErrors(t *testing.T) {
 				svc.EXPECT().Replace(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(service.Identity{}, err)
 			},
 		}
+		patch = endpoint{
+			method: http.MethodPatch, target: adaPath, body: adaBody,
+			expect: func(svc *mocks.MockIdentityService, err error) {
+				svc.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(service.Identity{}, err)
+			},
+		}
 		del = endpoint{
 			method: http.MethodDelete, target: adaPath,
 			expect: func(svc *mocks.MockIdentityService, err error) {
@@ -281,6 +358,10 @@ func TestHandler_ServiceErrors(t *testing.T) {
 		{name: "replace username taken", endpoint: replace, err: takenErr, want: usernameTakenProblem},
 		{name: "replace fields denied", endpoint: replace, err: fieldsDeniedErr, want: fieldsDenied},
 		{name: "replace unexpected", endpoint: replace, err: unexpectedErr, want: internal},
+		{name: "patch not found", endpoint: patch, err: notFoundErr, want: IdentityNotFoundProblem},
+		{name: "patch username taken", endpoint: patch, err: takenErr, want: usernameTakenProblem},
+		{name: "patch fields denied", endpoint: patch, err: fieldsDeniedErr, want: fieldsDenied},
+		{name: "patch unexpected", endpoint: patch, err: unexpectedErr, want: internal},
 		{name: "delete not found", endpoint: del, err: notFoundErr, want: IdentityNotFoundProblem},
 		{name: "delete denied", endpoint: del, err: deniedErr, want: forbiddenProblem},
 		{name: "delete unexpected", endpoint: del, err: unexpectedErr, want: internal},

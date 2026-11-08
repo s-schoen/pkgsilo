@@ -53,8 +53,8 @@ func CreatableFields() []string {
 	return createFields.Fields()
 }
 
-// UpdatableFields returns the names of the fields that replacing an identity sets, each of which has an
-// identity:update:<field> action.
+// UpdatableFields returns the names of the fields that replacing an identity sets, and patching it may set,
+// each of which has an identity:update:<field> action.
 func UpdatableFields() []string {
 	return updateFields.Fields()
 }
@@ -77,6 +77,12 @@ type IdentityService interface {
 	// actor may not read is reported like a missing one. It returns an *authz.FieldsDeniedError, without
 	// writing anything, if the actor may not set any of the fields, even to their current values.
 	Replace(ctx context.Context, actor, id uuid.UUID, in IdentityInput) (Identity, error)
+	// Patch overwrites the fields that the patch sets of the identity with the given ID, and keeps the
+	// others, even if they change concurrently. An identity that the actor may not read is reported like a
+	// missing one. It returns an *authz.FieldsDeniedError, without writing anything, if the actor may not
+	// set any of the fields that the patch sets. A patch that sets no field writes nothing, so that the
+	// identity is returned as it is.
+	Patch(ctx context.Context, actor, id uuid.UUID, patch IdentityPatch) (Identity, error)
 	// Delete removes the identity with the given ID. An identity that the actor may not read is reported
 	// like a missing one, and one that it may read but not delete with authz.ErrDenied.
 	Delete(ctx context.Context, actor, id uuid.UUID) error
@@ -225,6 +231,46 @@ func (s *identityService) Replace(ctx context.Context, actor, id uuid.UUID, in I
 	})
 	if err != nil {
 		return Identity{}, fmt.Errorf("replace identity: %w", translateError(err))
+	}
+
+	return toIdentity(rec, fields), nil
+}
+
+func (s *identityService) Patch(ctx context.Context, actor, id uuid.UUID, patch IdentityPatch) (Identity, error) {
+	decider, err := s.authorizer.For(ctx, actor)
+	if err != nil {
+		return Identity{}, fmt.Errorf("patch identity: %w", err)
+	}
+
+	rec, resource, err := s.getReadable(ctx, decider, id)
+	if err != nil {
+		return Identity{}, fmt.Errorf("patch identity: %w", err)
+	}
+
+	// Patching sets only the fields in the patch, so only those are checked.
+	if err := updateFields.Only(patch.fields()...).Check(decider, resource); err != nil {
+		return Identity{}, fmt.Errorf("patch identity: %w", err)
+	}
+
+	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
+	fields, err := readFields.Readable(decider, resource)
+	if err != nil {
+		return Identity{}, fmt.Errorf("patch identity: %w", err)
+	}
+
+	if len(patch.fields()) == 0 {
+		return toIdentity(rec, fields), nil
+	}
+
+	rec, err = s.repo.Patch(ctx, repository.IdentityPatch{
+		ID:          id,
+		Username:    patch.Username,
+		DisplayName: patch.DisplayName,
+		UpdatedBy:   actor,
+		UpdatedAt:   s.now(),
+	})
+	if err != nil {
+		return Identity{}, fmt.Errorf("patch identity: %w", translateError(err))
 	}
 
 	return toIdentity(rec, fields), nil

@@ -27,6 +27,7 @@ var (
 	now   = time.Date(2026, time.October, 24, 12, 0, 0, 0, time.UTC)
 	actor = uuid.MustParse("6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b")
 	input = IdentityInput{Username: "ada", DisplayName: "Ada Lovelace"}
+	patch = IdentityPatch{Username: new("ada"), DisplayName: new("Ada Lovelace")}
 
 	// stored is a record as the repository returns it, with a distinct value in every field.
 	stored = repository.IdentityRecord{
@@ -540,6 +541,83 @@ func TestIdentityService_Replace_FieldsDenied(t *testing.T) {
 	assert.Equal(t, []string{"username"}, denied.Fields)
 }
 
+func TestIdentityService_Patch(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		patch IdentityPatch
+		// fields are the fields that the patch sets, each of which must be checked.
+		fields []string
+	}{
+		{name: "username", patch: IdentityPatch{Username: new("ada")}, fields: []string{"username"}},
+		{name: "display name", patch: IdentityPatch{DisplayName: new("Ada")}, fields: []string{"displayName"}},
+		{name: "both", patch: patch, fields: []string{"username", "displayName"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			svc, repo := newTestServiceWith(t, authorizer)
+			expectReadable(repo, decider)
+			// The mock fails the test if a field that the patch doesn't set is checked.
+			for _, field := range tt.fields {
+				decider.EXPECT().Can(authz.NewAction("identity:update:"+field, "identity:update"), storedResource).
+					Return(true, nil).Once()
+			}
+			servicetest.ExpectReadableFields(decider, readFields, storedResource, "username")
+			repo.EXPECT().Patch(mock.Anything, repository.IdentityPatch{
+				ID:          stored.ID,
+				Username:    tt.patch.Username,
+				DisplayName: tt.patch.DisplayName,
+				UpdatedBy:   actor,
+				UpdatedAt:   now,
+			}).Return(stored, nil)
+
+			got, err := svc.Patch(t.Context(), actor, stored.ID, tt.patch)
+			require.NoError(t, err)
+
+			// The response to a write is masked like a read.
+			assert.Equal(t, Identity{ID: stored.ID, Username: authz.Visible("grace")}, got)
+		})
+	}
+}
+
+// TestIdentityService_Patch_Empty checks that a patch that sets no field returns the identity as it is,
+// with no write and no write decision, so that its update time doesn't change.
+func TestIdentityService_Patch_Empty(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The mocks fail the test on a write decision or a write.
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	expectAllFieldsReadable(decider, storedResource)
+
+	got, err := svc.Patch(t.Context(), actor, stored.ID, IdentityPatch{})
+	require.NoError(t, err)
+
+	assert.Equal(t, storedIdentity, got)
+}
+
+// TestIdentityService_Patch_FieldsDenied checks that a denial lists every denied field of the patch and
+// writes nothing.
+func TestIdentityService_Patch_FieldsDenied(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The mock fails the test if the repository patches anything.
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	decider.EXPECT().Can(authz.NewAction("identity:update:username", "identity:update"), storedResource).
+		Return(false, nil)
+	decider.EXPECT().Can(authz.NewAction("identity:update:displayName", "identity:update"), storedResource).
+		Return(true, nil)
+
+	_, err := svc.Patch(t.Context(), actor, stored.ID, patch)
+
+	var denied *authz.FieldsDeniedError
+	require.ErrorAs(t, err, &denied)
+	assert.Equal(t, []string{"username"}, denied.Fields)
+}
+
 func TestIdentityService_Delete(t *testing.T) {
 	t.Parallel()
 	authorizer, decider := newDeciding(t)
@@ -573,6 +651,10 @@ func TestIdentityService_Writes_Hidden(t *testing.T) {
 	calls := map[string]func(*identityService) error{
 		"replace": func(svc *identityService) error {
 			_, err := svc.Replace(t.Context(), actor, stored.ID, input)
+			return err
+		},
+		"patch": func(svc *identityService) error {
+			_, err := svc.Patch(t.Context(), actor, stored.ID, patch)
 			return err
 		},
 		"delete": func(svc *identityService) error {
@@ -646,6 +728,22 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 		_, err := svc.Replace(ctx, actor, stored.ID, input)
 		return err
 	}
+	patchGet := func(
+		ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error,
+	) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.IdentityRecord{}, repoErr)
+		_, err := svc.Patch(ctx, actor, stored.ID, patch)
+		return err
+	}
+	patchCall := func(
+		ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error,
+	) error {
+		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+		repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil)
+		repo.EXPECT().Patch(mock.Anything, mock.Anything).Return(repository.IdentityRecord{}, repoErr)
+		_, err := svc.Patch(ctx, actor, stored.ID, patch)
+		return err
+	}
 	delGet := func(ctx context.Context, svc *identityService, repo *mocks.MockIdentityRepository, repoErr error) error {
 		repo.EXPECT().Get(mock.Anything, stored.ID).Return(repository.IdentityRecord{}, repoErr)
 		return svc.Delete(ctx, actor, stored.ID)
@@ -677,6 +775,11 @@ func TestIdentityService_TranslatesRepositoryErrors(t *testing.T) {
 		{name: "replace not found", call: replace, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
 		{name: "replace username taken", call: replace, repoErr: repository.ErrDuplicateUsername, wantErr: ErrUsernameTaken},
 		{name: "replace unexpected", call: replace, repoErr: errDB, wantErr: errDB},
+		{name: "patch get not found", call: patchGet, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
+		{name: "patch get unexpected", call: patchGet, repoErr: errDB, wantErr: errDB},
+		{name: "patch not found", call: patchCall, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
+		{name: "patch username taken", call: patchCall, repoErr: repository.ErrDuplicateUsername, wantErr: ErrUsernameTaken},
+		{name: "patch unexpected", call: patchCall, repoErr: errDB, wantErr: errDB},
 		{name: "delete get not found", call: delGet, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
 		{name: "delete get unexpected", call: delGet, repoErr: errDB, wantErr: errDB},
 		{name: "delete not found", call: del, repoErr: repository.ErrNotFound, wantErr: ErrIdentityNotFound},
@@ -715,6 +818,10 @@ func TestIdentityService_AuthorizationFails(t *testing.T) {
 		},
 		"replace": func(svc *identityService) error {
 			_, err := svc.Replace(t.Context(), actor, stored.ID, input)
+			return err
+		},
+		"patch": func(svc *identityService) error {
+			_, err := svc.Patch(t.Context(), actor, stored.ID, patch)
 			return err
 		},
 		"delete": func(svc *identityService) error {
@@ -772,7 +879,7 @@ func TestIdentityService_AuthorizationFails(t *testing.T) {
 			})
 		}
 		// The write decisions, after the actor was allowed to read the identity.
-		if name == "replace" || name == "delete" {
+		if name == "replace" || name == "patch" || name == "delete" {
 			t.Run(name+" no write decision", func(t *testing.T) {
 				t.Parallel()
 				authorizer, decider := newDeciding(t)
