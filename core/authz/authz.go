@@ -10,6 +10,19 @@
 // resources, and Group, which identities and other resources are members of. Their features declare their
 // actions like any other, but core names the types, since every decision and the schema use them. Every
 // other resource type is a feature's own and never appears here.
+//
+// # Accepted risks
+//
+//   - Timing: a list checks all rows of its type, so its response time reveals a rough total row count of
+//     that type, though not where the hidden rows sit. Likewise, a hidden object takes slightly longer to
+//     answer than a missing one, which only helps a caller who already holds its ID. Never add a filter or
+//     search parameter on a field the caller can't read: it turns this into "does this exact value exist?",
+//     which has been attacked remotely against row-level security
+//     (https://doi.org/10.1145/3588943).
+//   - Uniqueness conflicts: a taken unique value, such as a username, reveals that it exists even if the
+//     caller can't see the object.
+//   - Lockout: a bad policy, or removing the last administrator, can lock everyone out. There's no bypass,
+//     last-member guard or dry run. Recovery means fixing the data directly in the database.
 package authz
 
 import (
@@ -93,9 +106,10 @@ type Authorizer interface {
 
 // Decider decides what one actor may do.
 type Decider interface {
-	// Can reports whether the actor may do the action to the resource. Any policy that fails to evaluate
-	// results in an error and never in access, since Cedar skips such a policy: a forbid that errors
-	// would otherwise allow what it should deny.
+	// Can reports whether the actor may do the action to the resource. A forbid that fails to evaluate
+	// results in an error and never in access, since Cedar skips such a statement, so that it would
+	// otherwise allow what it should deny. A permit that fails to evaluate grants nothing, without an error,
+	// so that one broken permit can't fail every decision.
 	Can(action Action, resource Resource) (bool, error)
 }
 

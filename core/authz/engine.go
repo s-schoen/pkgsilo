@@ -130,16 +130,27 @@ func (d *decider) Can(action Action, resource Resource) (bool, error) {
 	decision, diagnostic := cedar.Authorize(d.policies, entities,
 		cedar.Request{Principal: d.principal.UID, Action: action.entity.UID, Resource: entity.UID},
 	)
-	if len(diagnostic.Errors) > 0 {
-		errs := make([]error, len(diagnostic.Errors))
-		for i, diagnosticErr := range diagnostic.Errors {
-			errs[i] = errors.New(diagnosticErr.String())
-		}
-
-		return false, fmt.Errorf("decide %s on %s: %w", action.entity.UID, entity.UID, errors.Join(errs...))
+	if err := d.forbidErrors(diagnostic.Errors); err != nil {
+		return false, fmt.Errorf("decide %s on %s: %w", action.entity.UID, entity.UID, err)
 	}
 
 	return decision == cedar.Allow, nil
+}
+
+// forbidErrors joins the errors of the forbid statements that failed to evaluate. Cedar skips a statement
+// that fails, which is safe for a permit, since it then grants nothing, but lets a forbid's denial pass. The
+// errors of permits are thus dropped, so that one broken permit doesn't fail every decision, including
+// those needed to delete it.
+func (d *decider) forbidErrors(diagnosticErrs []types.DiagnosticError) error {
+	var errs []error
+	for _, diagnosticErr := range diagnosticErrs {
+		if statement := d.policies.Get(diagnosticErr.PolicyID); statement != nil && statement.Effect() == cedar.Permit {
+			continue
+		}
+		errs = append(errs, errors.New(diagnosticErr.String()))
+	}
+
+	return errors.Join(errs...)
 }
 
 // requestEntities holds the entities of one decision, for Cedar to look up: the principal, the action, the
