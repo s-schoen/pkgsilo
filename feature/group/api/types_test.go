@@ -8,6 +8,8 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"pkgsilo/core/request"
 )
 
 func TestGroupRequests_Validate(t *testing.T) {
@@ -34,6 +36,7 @@ func TestGroupRequests_Validate(t *testing.T) {
 			requests := map[string]validation.Validatable{
 				"create":  CreateGroupRequest{Name: tt.groupName},
 				"replace": ReplaceGroupRequest{Name: tt.groupName},
+				"patch":   PatchGroupRequest{Name: request.Optional[string]{Value: tt.groupName, Set: true}},
 			}
 			for kind, req := range requests {
 				err := req.Validate()

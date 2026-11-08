@@ -567,6 +567,72 @@ func (_c *MockGroupRepository_ListMembers_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// Patch provides a mock function for the type MockGroupRepository
+func (_mock *MockGroupRepository) Patch(ctx context.Context, patch repository.GroupPatch) (repository.GroupRecord, error) {
+	ret := _mock.Called(ctx, patch)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Patch")
+	}
+
+	var r0 repository.GroupRecord
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.GroupPatch) (repository.GroupRecord, error)); ok {
+		return returnFunc(ctx, patch)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.GroupPatch) repository.GroupRecord); ok {
+		r0 = returnFunc(ctx, patch)
+	} else {
+		r0 = ret.Get(0).(repository.GroupRecord)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.GroupPatch) error); ok {
+		r1 = returnFunc(ctx, patch)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockGroupRepository_Patch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Patch'
+type MockGroupRepository_Patch_Call struct {
+	*mock.Call
+}
+
+// Patch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - patch repository.GroupPatch
+func (_e *MockGroupRepository_Expecter) Patch(ctx any, patch any) *MockGroupRepository_Patch_Call {
+	return &MockGroupRepository_Patch_Call{Call: _e.mock.On("Patch", ctx, patch)}
+}
+
+func (_c *MockGroupRepository_Patch_Call) Run(run func(ctx context.Context, patch repository.GroupPatch)) *MockGroupRepository_Patch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 repository.GroupPatch
+		if args[1] != nil {
+			arg1 = args[1].(repository.GroupPatch)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGroupRepository_Patch_Call) Return(groupRecord repository.GroupRecord, err error) *MockGroupRepository_Patch_Call {
+	_c.Call.Return(groupRecord, err)
+	return _c
+}
+
+func (_c *MockGroupRepository_Patch_Call) RunAndReturn(run func(ctx context.Context, patch repository.GroupPatch) (repository.GroupRecord, error)) *MockGroupRepository_Patch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Update provides a mock function for the type MockGroupRepository
 func (_mock *MockGroupRepository) Update(ctx context.Context, rec repository.GroupRecord) (repository.GroupRecord, error) {
 	ret := _mock.Called(ctx, rec)

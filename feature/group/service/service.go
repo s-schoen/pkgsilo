@@ -48,8 +48,8 @@ func CreatableFields() []string {
 	return createFields.Fields()
 }
 
-// UpdatableFields returns the names of the fields that replacing a group sets, each of which has a
-// group:update:<field> action.
+// UpdatableFields returns the names of the fields that replacing a group sets, and patching it may set, each
+// of which has a group:update:<field> action.
 func UpdatableFields() []string {
 	return updateFields.Fields()
 }
@@ -73,6 +73,11 @@ type GroupService interface {
 	// *authz.FieldsDeniedError, without writing anything, if the actor may not set any of the fields, even
 	// to their current values.
 	Replace(ctx context.Context, actor, id uuid.UUID, in GroupInput) (Group, error)
+	// Patch overwrites the fields that the patch sets of the group with the given ID, and keeps the others,
+	// even if they change concurrently. It returns an *authz.FieldsDeniedError, without writing anything, if
+	// the actor may not set any of the fields that the patch sets. A patch that sets no field writes
+	// nothing, so that the group is returned as it is.
+	Patch(ctx context.Context, actor, id uuid.UUID, patch GroupPatch) (Group, error)
 	// Delete removes the group with the given ID and its memberships.
 	Delete(ctx context.Context, actor, id uuid.UUID) error
 	// AddMember makes the identity a member of the group. Adding a member again changes nothing. An
@@ -215,6 +220,45 @@ func (s *groupService) Replace(ctx context.Context, actor, id uuid.UUID, in Grou
 	})
 	if err != nil {
 		return Group{}, fmt.Errorf("replace group: %w", translateError(err))
+	}
+
+	return toGroup(rec, fields), nil
+}
+
+func (s *groupService) Patch(ctx context.Context, actor, id uuid.UUID, patch GroupPatch) (Group, error) {
+	decider, err := s.authorizer.For(ctx, actor)
+	if err != nil {
+		return Group{}, fmt.Errorf("patch group: %w", err)
+	}
+
+	rec, err := s.getReadable(ctx, decider, id)
+	if err != nil {
+		return Group{}, fmt.Errorf("patch group: %w", err)
+	}
+
+	// Patching sets only the fields in the patch, so only those are checked.
+	if err := updateFields.Only(patch.fields()...).Check(decider, toResource(id)); err != nil {
+		return Group{}, fmt.Errorf("patch group: %w", err)
+	}
+
+	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
+	fields, err := readFields.Readable(decider, toResource(id))
+	if err != nil {
+		return Group{}, fmt.Errorf("patch group: %w", err)
+	}
+
+	if len(patch.fields()) == 0 {
+		return toGroup(rec, fields), nil
+	}
+
+	rec, err = s.repo.Patch(ctx, repository.GroupPatch{
+		ID:        id,
+		Name:      patch.Name,
+		UpdatedBy: actor,
+		UpdatedAt: s.now(),
+	})
+	if err != nil {
+		return Group{}, fmt.Errorf("patch group: %w", translateError(err))
 	}
 
 	return toGroup(rec, fields), nil
