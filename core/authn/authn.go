@@ -76,7 +76,8 @@ type Principal struct {
 
 // Authenticator checks the credentials of one authentication method on a request.
 type Authenticator interface {
-	// Method returns the name of the authentication method, for the Principal and the logs.
+	// Method returns the name of the authentication method, for the Principal, the logs and the
+	// metrics. Require reads it once, when it's built.
 	Method() string
 	// Authenticate returns the principal that the request's credential belongs to. Require sets the
 	// principal's Method, so that an implementation only sets IdentityID.
@@ -129,22 +130,23 @@ func Require(
 	if len(authenticators) == 0 {
 		panic("authn: Require needs at least one authenticator")
 	}
-	attempts := newAttempts(meterProvider)
-
+	methods := make([]string, len(authenticators))
 	challenges := make([]string, len(authenticators))
 	for i, authenticator := range authenticators {
+		methods[i] = authenticator.Method()
 		challenges[i] = authenticator.Challenge()
 	}
+	attempts := newAttempts(meterProvider, methods)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			for _, authenticator := range authenticators {
+			for i, authenticator := range authenticators {
 				principal, err := authenticator.Authenticate(r)
 
 				switch {
 				case err == nil:
-					principal.Method = authenticator.Method()
-					attempts.succeeded(r.Context(), principal.Method)
+					principal.Method = methods[i]
+					attempts.succeeded(r.Context(), i)
 					middleware.AddLogAttrs(r.Context(),
 						slog.String("identity_id", principal.IdentityID.String()),
 						slog.String("auth_method", principal.Method),
@@ -156,16 +158,16 @@ func Require(
 					continue
 				case errors.Is(err, ErrInvalidCredentials):
 					reason := rejectionReason(err)
-					attempts.rejected(r.Context(), authenticator.Method(), reason)
+					attempts.rejected(r.Context(), i, reason)
 					logger.InfoContext(r.Context(), "authentication rejected",
-						"auth_method", authenticator.Method(), "reason", reason, "error", err)
+						"auth_method", methods[i], "reason", reason, "error", err)
 					writeUnauthorized(w, challenges)
 
 					return
 				default:
-					attempts.failed(r.Context(), authenticator.Method())
+					attempts.failed(r.Context(), i)
 					logger.ErrorContext(r.Context(), "authentication failed",
-						"auth_method", authenticator.Method(), "error", err)
+						"auth_method", methods[i], "error", err)
 					envelope.WriteProblem(w, envelope.InternalServerErrorProblem.New(envelope.Occurrence{}))
 
 					return

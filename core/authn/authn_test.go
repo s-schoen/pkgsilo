@@ -36,8 +36,6 @@ func newAuthenticator(t *testing.T, method string) *mocks.MockAuthenticator {
 	return authenticator
 }
 
-// serve sends a request through Require to a handler, and returns the response and the principal
-// that the handler got, which is nil if it didn't run.
 // served is what serve observed of one request.
 type served struct {
 	rec       *httptest.ResponseRecorder
@@ -45,6 +43,8 @@ type served struct {
 	metrics   *telemetrytest.Recorder
 }
 
+// serve sends a request through Require to a handler, and returns the response and the principal
+// that the handler got, which is nil if it didn't run.
 func serve(t *testing.T, logger *slog.Logger, authenticators ...authn.Authenticator) served {
 	t.Helper()
 
