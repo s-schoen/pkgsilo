@@ -60,6 +60,8 @@ var (
 
 	maintainers = uuid.MustParse("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f")
 	reviewers   = uuid.MustParse("4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a")
+	ada         = uuid.MustParse("5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b")
+	grace       = uuid.MustParse("6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c")
 
 	errDB = errors.New("connection refused")
 )
@@ -355,6 +357,27 @@ func TestPolicyService_Create_InvalidSource(t *testing.T) {
 			source: `permit (principal in Group::"admins", action, resource);`,
 			reason: `the group "admins" does not exist`,
 		},
+		{
+			name:   "group ID in uppercase",
+			source: `forbid (principal in Group::"3C4D5E6F-7A8B-4C9D-8E0F-1A2B3C4D5E6F", action, resource);`,
+			reason: `the group ID "3C4D5E6F-7A8B-4C9D-8E0F-1A2B3C4D5E6F" never matches, ` +
+				`since IDs are written in lowercase with hyphens, as "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f"`,
+		},
+		{
+			name:   "group ID in braces",
+			source: `forbid (principal in Group::"{3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f}", action, resource);`,
+			reason: `the group ID "{3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f}" never matches`,
+		},
+		{
+			name:   "identity ID that isn't a UUID",
+			source: `forbid (principal == Identity::"ada", action, resource);`,
+			reason: `the identity "ada" does not exist`,
+		},
+		{
+			name:   "identity ID without hyphens",
+			source: `forbid (principal, action, resource) when { principal == Identity::"5e6f7a8b9c0d4e1f8a2b3c4d5e6f7a8b" };`,
+			reason: `the identity ID "5e6f7a8b9c0d4e1f8a2b3c4d5e6f7a8b" never matches`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -378,31 +401,45 @@ func TestPolicyService_Create_InvalidSource(t *testing.T) {
 	}
 }
 
-// TestPolicyService_Create_Groups checks that every group that the source references, in its scope or its
-// conditions, must exist, and that they're looked up in one query.
-func TestPolicyService_Create_Groups(t *testing.T) {
+// TestPolicyService_Create_References checks that every group and identity that the source references, in its
+// scope or its conditions, must exist, and that each kind is looked up in one query.
+func TestPolicyService_Create_References(t *testing.T) {
 	t.Parallel()
 	source := `permit (principal in Group::"` + maintainers.String() + `", action, resource)
-		when { principal in [Group::"` + reviewers.String() + `", Group::"` + maintainers.String() + `"] };`
+		when { principal in [Group::"` + reviewers.String() + `", Group::"` + maintainers.String() + `"] };
+		forbid (principal == Identity::"` + ada.String() + `", action, resource)
+		when { resource == Identity::"` + grace.String() + `" };`
 	tests := []struct {
-		name     string
-		existing []uuid.UUID
-		reason   string
+		name                        string
+		existingGroups, existingIDs []uuid.UUID
+		reason                      string
 	}{
-		{name: "all exist", existing: []uuid.UUID{reviewers, maintainers}},
 		{
-			name:     "one missing",
-			existing: []uuid.UUID{maintainers},
-			reason:   `the group "` + reviewers.String() + `" does not exist`,
+			name:           "all exist",
+			existingGroups: []uuid.UUID{reviewers, maintainers},
+			existingIDs:    []uuid.UUID{grace, ada},
 		},
-		{name: "none exists", reason: `the group "` + maintainers.String() + `" does not exist`},
+		{
+			name:           "one group missing",
+			existingGroups: []uuid.UUID{maintainers},
+			reason:         `the group "` + reviewers.String() + `" does not exist`,
+		},
+		{name: "no group exists", reason: `the group "` + maintainers.String() + `" does not exist`},
+		{
+			name:           "one identity missing",
+			existingGroups: []uuid.UUID{reviewers, maintainers},
+			existingIDs:    []uuid.UUID{ada},
+			reason:         `the identity "` + grace.String() + `" does not exist`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			svc, repo, writer := newTestService(t)
 			repo.EXPECT().ListExistingGroups(mock.Anything, []uuid.UUID{maintainers, reviewers}).
-				Return(tt.existing, nil).Once()
+				Return(tt.existingGroups, nil).Once()
+			repo.EXPECT().ListExistingIdentities(mock.Anything, []uuid.UUID{ada, grace}).
+				Return(tt.existingIDs, nil).Maybe()
 			if tt.reason == "" {
 				expectWrite(repo, writer)
 				writer.EXPECT().ListAll(mock.Anything).Return(nil, nil)
@@ -755,10 +792,12 @@ func TestPolicyService_Patch_FieldsDenied(t *testing.T) {
 
 // TestPolicyService_Patch_ChecksMergedSource checks that the source that results from a patch is checked like
 // a saved one, even if the patch keeps it, and that it's the source read in the write, which no other policy
-// write can change until the commit.
+// write can change until the commit. The references are looked up in the write too, so that it needs no
+// second connection: the mocks fail the test if the repository looks them up.
 func TestPolicyService_Patch_ChecksMergedSource(t *testing.T) {
 	t.Parallel()
 	missingGroup := `permit (principal in Group::"` + maintainers.String() + `", action, resource);`
+	missingIdentity := `forbid (principal == Identity::"` + ada.String() + `", action, resource);`
 	tests := []struct {
 		name string
 		// current is the source that the write reads.
@@ -775,6 +814,10 @@ func TestPolicyService_Patch_ChecksMergedSource(t *testing.T) {
 			name: "kept source with a deleted group", current: missingGroup, patch: PolicyPatch{Name: new("x")},
 			reason: `the group "` + maintainers.String() + `" does not exist`,
 		},
+		{
+			name: "kept source with a deleted identity", current: missingIdentity, patch: PolicyPatch{Name: new("x")},
+			reason: `the identity "` + ada.String() + `" does not exist`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -782,7 +825,8 @@ func TestPolicyService_Patch_ChecksMergedSource(t *testing.T) {
 			// The mocks fail the test if the writer patches anything.
 			svc, repo, writer := newTestService(t)
 			repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
-			repo.EXPECT().ListExistingGroups(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+			writer.EXPECT().ListExistingGroups(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+			writer.EXPECT().ListExistingIdentities(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 			expectWrite(repo, writer)
 			current := stored
 			current.Source = tt.current
@@ -866,8 +910,10 @@ type repoCall func(ctx context.Context, svc *policyService, repo *mockRepo, w *m
 
 // repoCalls returns the service calls of TestPolicyService_TranslatesRepositoryErrors, by name.
 func repoCalls() map[string]repoCall {
-	// groupSource references a group, for the calls that fail to look it up.
+	// groupSource and identitySource reference a group and an identity, for the calls that fail to look them
+	// up.
 	groupSource := `permit (principal in Group::"` + maintainers.String() + `", action, resource);`
+	identitySource := `permit (principal == Identity::"` + ada.String() + `", action, resource);`
 	readable := func(repo *mocks.MockPolicyRepository) {
 		repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
 	}
@@ -883,6 +929,13 @@ func repoCalls() map[string]repoCall {
 		"create groups": func(ctx context.Context, svc *policyService, repo *mockRepo, _ *mockWriter, repoErr error) error {
 			repo.EXPECT().ListExistingGroups(mock.Anything, mock.Anything).Return(nil, repoErr)
 			_, err := svc.Create(ctx, actor, PolicyInput{Name: "x", Source: groupSource})
+			return err
+		},
+		"create identities": func(
+			ctx context.Context, svc *policyService, repo *mockRepo, _ *mockWriter, repoErr error,
+		) error {
+			repo.EXPECT().ListExistingIdentities(mock.Anything, mock.Anything).Return(nil, repoErr)
+			_, err := svc.Create(ctx, actor, PolicyInput{Name: "x", Source: identitySource})
 			return err
 		},
 		"create count": func(ctx context.Context, svc *policyService, repo *mockRepo, w *mockWriter, repoErr error) error {
@@ -931,6 +984,14 @@ func repoCalls() map[string]repoCall {
 			_, err := svc.Patch(ctx, actor, stored.ID, patch)
 			return err
 		},
+		"patch groups": func(ctx context.Context, svc *policyService, repo *mockRepo, w *mockWriter, repoErr error) error {
+			readable(repo)
+			expectWrite(repo, w)
+			w.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil)
+			w.EXPECT().ListExistingGroups(mock.Anything, mock.Anything).Return(nil, repoErr)
+			_, err := svc.Patch(ctx, actor, stored.ID, PolicyPatch{Source: &groupSource})
+			return err
+		},
 		"patch": func(ctx context.Context, svc *policyService, repo *mockRepo, w *mockWriter, repoErr error) error {
 			readable(repo)
 			expectWrite(repo, w)
@@ -964,6 +1025,7 @@ func TestPolicyService_TranslatesRepositoryErrors(t *testing.T) {
 		{call: "create", repoErr: repository.ErrDuplicateName, wantErr: ErrPolicyNameTaken},
 		{call: "create", repoErr: errDB, wantErr: errDB},
 		{call: "create groups", repoErr: errDB, wantErr: errDB},
+		{call: "create identities", repoErr: errDB, wantErr: errDB},
 		{call: "create count", repoErr: errDB, wantErr: errDB},
 		{call: "create write", repoErr: errDB, wantErr: errDB},
 		{call: "get", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
@@ -979,6 +1041,7 @@ func TestPolicyService_TranslatesRepositoryErrors(t *testing.T) {
 		// The policy was deleted after it was read.
 		{call: "patch load", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
 		{call: "patch load", repoErr: errDB, wantErr: errDB},
+		{call: "patch groups", repoErr: errDB, wantErr: errDB},
 		{call: "patch", repoErr: repository.ErrNotFound, wantErr: ErrPolicyNotFound},
 		{call: "patch", repoErr: repository.ErrDuplicateName, wantErr: ErrPolicyNameTaken},
 		{call: "patch", repoErr: errDB, wantErr: errDB},

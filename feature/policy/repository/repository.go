@@ -16,8 +16,7 @@ type PolicyRepository interface {
 	Get(ctx context.Context, id uuid.UUID) (PolicyRecord, error)
 	// ListAll returns all records, ordered by creation time.
 	ListAll(ctx context.Context) ([]PolicyRecord, error)
-	// ListExistingGroups returns those of the given group IDs that a group has, in one query.
-	ListExistingGroups(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
+	ReferenceLister
 	// Write runs fn in a transaction that first advances the policy revision. This serializes policy
 	// writes, and every instance loads the policies again on its first request after the commit. The
 	// transaction commits if fn returns nil. Otherwise, it rolls back and Write returns an error wrapping fn's.
@@ -31,6 +30,9 @@ type PolicyWriter interface {
 	Get(ctx context.Context, id uuid.UUID) (PolicyRecord, error)
 	// ListAll returns all records, like PolicyRepository.ListAll.
 	ListAll(ctx context.Context) ([]PolicyRecord, error)
+	// ReferenceLister finds the objects that policies reference in the transaction, which holds a
+	// connection of its own, so that it needs no second one.
+	ReferenceLister
 	// Insert stores a new record and returns it as stored.
 	Insert(ctx context.Context, rec PolicyRecord) (PolicyRecord, error)
 	// Update overwrites the name, source, UpdatedBy and UpdatedAt of the record with rec.ID and returns
@@ -41,6 +43,15 @@ type PolicyWriter interface {
 	Patch(ctx context.Context, patch PolicyPatch) (PolicyRecord, error)
 	// Delete removes the record with the given ID.
 	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// ReferenceLister finds the objects of other features that policies reference by ID, each kind in one query.
+// The tables belong to their features.
+type ReferenceLister interface {
+	// ListExistingGroups returns those of the given group IDs that a group has.
+	ListExistingGroups(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
+	// ListExistingIdentities returns those of the given identity IDs that an identity has.
+	ListExistingIdentities(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 }
 
 const policyColumns = "id, name, source, created_by, updated_by, created_at, updated_at"
@@ -71,12 +82,12 @@ func (r *PostgresPolicyRepository) ListAll(ctx context.Context) ([]PolicyRecord,
 
 // ListExistingGroups returns those of the given group IDs that a group has, in one query.
 func (r *PostgresPolicyRepository) ListExistingGroups(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
-	var existing []uuid.UUID
-	if err := r.db.SelectContext(ctx, &existing, `SELECT id FROM groups WHERE id = ANY($1)`, ids); err != nil {
-		return nil, fmt.Errorf("list existing groups: %w", err)
-	}
+	return listExistingGroups(ctx, r.db, ids)
+}
 
-	return existing, nil
+// ListExistingIdentities returns those of the given identity IDs that an identity has, in one query.
+func (r *PostgresPolicyRepository) ListExistingIdentities(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	return listExistingIdentities(ctx, r.db, ids)
 }
 
 // Write runs fn in a transaction that first advances the policy revision. The transaction commits if fn
@@ -113,6 +124,16 @@ func (w postgresPolicyWriter) Get(ctx context.Context, id uuid.UUID) (PolicyReco
 // ListAll returns all records, ordered by creation time.
 func (w postgresPolicyWriter) ListAll(ctx context.Context) ([]PolicyRecord, error) {
 	return listAll(ctx, w.q)
+}
+
+// ListExistingGroups returns those of the given group IDs that a group has, in one query.
+func (w postgresPolicyWriter) ListExistingGroups(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	return listExistingGroups(ctx, w.q, ids)
+}
+
+// ListExistingIdentities returns those of the given identity IDs that an identity has, in one query.
+func (w postgresPolicyWriter) ListExistingIdentities(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	return listExistingIdentities(ctx, w.q, ids)
 }
 
 // Insert stores a new record and returns it as stored.
@@ -212,4 +233,24 @@ func listAll(ctx context.Context, q database.Querier) ([]PolicyRecord, error) {
 	}
 
 	return recs, nil
+}
+
+// listExistingGroups returns those of the given group IDs that q finds a group with.
+func listExistingGroups(ctx context.Context, q database.Querier, ids []uuid.UUID) ([]uuid.UUID, error) {
+	var existing []uuid.UUID
+	if err := q.SelectContext(ctx, &existing, `SELECT id FROM groups WHERE id = ANY($1)`, ids); err != nil {
+		return nil, fmt.Errorf("list existing groups: %w", err)
+	}
+
+	return existing, nil
+}
+
+// listExistingIdentities returns those of the given identity IDs that q finds an identity with.
+func listExistingIdentities(ctx context.Context, q database.Querier, ids []uuid.UUID) ([]uuid.UUID, error) {
+	var existing []uuid.UUID
+	if err := q.SelectContext(ctx, &existing, `SELECT id FROM identities WHERE id = ANY($1)`, ids); err != nil {
+		return nil, fmt.Errorf("list existing identities: %w", err)
+	}
+
+	return existing, nil
 }

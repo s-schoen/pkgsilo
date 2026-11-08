@@ -135,42 +135,107 @@ func TestPostgresPolicyRepository_ListAll(t *testing.T) {
 	assert.Equal(t, []PolicyRecord{first, second, third}, userPolicies(t, got))
 }
 
-func TestPostgresPolicyRepository_ListExistingGroups(t *testing.T) {
-	t.Parallel()
-	repo, db := newTestRepo(t)
-	group, other := uuid.NewV4(), uuid.NewV4()
-	for i, id := range []uuid.UUID{group, other} {
+// insertReferenced stores two groups and two identities, for policies to reference, and returns their IDs.
+// Their tables belong to the group and identity features, so the rows are written directly.
+func insertReferenced(t *testing.T, db *sqlx.DB) (groups, identities []uuid.UUID) {
+	t.Helper()
+
+	groups = []uuid.UUID{uuid.NewV4(), uuid.NewV4()}
+	identities = []uuid.UUID{uuid.NewV4(), uuid.NewV4()}
+	for i := range 2 {
 		_, err := db.ExecContext(t.Context(), `
 			INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
 			VALUES ($1, $2, $1, $1, $3, $3)`,
-			id, []string{"maintainers", "auditors"}[i], baseTime,
+			groups[i], []string{"maintainers", "auditors"}[i], baseTime,
+		)
+		require.NoError(t, err)
+		_, err = db.ExecContext(t.Context(), `
+			INSERT INTO identities (id, username, display_name, created_by, updated_by, created_at, updated_at)
+			VALUES ($1, $2, 'Test', $1, $1, $3, $3)`,
+			identities[i], []string{"ada", "grace"}[i], baseTime,
 		)
 		require.NoError(t, err)
 	}
 
-	tests := []struct {
-		name string
-		ids  []uuid.UUID
-		want []uuid.UUID
-	}{
-		{
-			name: "some exist",
-			ids:  []uuid.UUID{group, uuid.NewV4(), other},
-			want: []uuid.UUID{group, other},
-		},
-		{name: "none exists", ids: []uuid.UUID{uuid.NewV4()}},
-		{name: "no IDs", ids: []uuid.UUID{}},
-		{name: "nil"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := repo.ListExistingGroups(t.Context(), tt.ids)
-			require.NoError(t, err)
+	return groups, identities
+}
 
-			assert.ElementsMatch(t, tt.want, got)
-		})
+// TestPostgresPolicyRepository_ListExisting checks that the repository, and a writer in its transaction, find
+// those of the referenced groups and identities that exist, each kind in its own table.
+func TestPostgresPolicyRepository_ListExisting(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+	groups, identities := insertReferenced(t, db)
+
+	listers := map[string]func(t *testing.T, list func(ReferenceLister)){
+		"repository": func(_ *testing.T, list func(ReferenceLister)) { list(repo) },
+		"writer": func(t *testing.T, list func(ReferenceLister)) {
+			t.Helper()
+			require.NoError(t, repo.Write(t.Context(), func(w PolicyWriter) error {
+				list(w)
+				return nil
+			}))
+		},
 	}
+	kinds := map[string]struct {
+		existing, other []uuid.UUID
+		list            func(ReferenceLister, context.Context, []uuid.UUID) ([]uuid.UUID, error)
+	}{
+		"groups":     {existing: groups, other: identities, list: ReferenceLister.ListExistingGroups},
+		"identities": {existing: identities, other: groups, list: ReferenceLister.ListExistingIdentities},
+	}
+	for listerName, withLister := range listers {
+		for kindName, kind := range kinds {
+			tests := []struct {
+				name string
+				ids  []uuid.UUID
+				want []uuid.UUID
+			}{
+				{
+					name: "some exist",
+					ids:  []uuid.UUID{kind.existing[0], uuid.NewV4(), kind.existing[1]},
+					want: kind.existing,
+				},
+				{name: "none exists", ids: []uuid.UUID{uuid.NewV4()}},
+				{name: "of the other kind", ids: kind.other},
+				{name: "no IDs", ids: []uuid.UUID{}},
+				{name: "nil"},
+			}
+			for _, tt := range tests {
+				t.Run(listerName+"/"+kindName+"/"+tt.name, func(t *testing.T) {
+					t.Parallel()
+					withLister(t, func(l ReferenceLister) {
+						got, err := kind.list(l, t.Context(), tt.ids)
+						require.NoError(t, err)
+
+						assert.ElementsMatch(t, tt.want, got)
+					})
+				})
+			}
+		}
+	}
+}
+
+// TestPostgresPolicyRepository_Writer_ListExistingOnOneConnection checks that a writer finds the referenced
+// objects on the connection of its transaction: with every other connection of the pool taken, a lookup on
+// the pool would wait for one until the context ends.
+func TestPostgresPolicyRepository_Writer_ListExistingOnOneConnection(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+	groups, identities := insertReferenced(t, db)
+	db.SetMaxOpenConns(1)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	err := repo.Write(ctx, func(w PolicyWriter) error {
+		if _, err := w.ListExistingGroups(ctx, groups); err != nil {
+			return err
+		}
+		_, err := w.ListExistingIdentities(ctx, identities)
+		return err
+	})
+
+	require.NoError(t, err)
 }
 
 func TestPostgresPolicyRepository_Update(t *testing.T) {

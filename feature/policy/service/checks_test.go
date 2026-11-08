@@ -66,19 +66,22 @@ func importsExperimentalCedar(path string) (bool, error) {
 	return false, nil
 }
 
-// TestAppendGroupsOfValue checks that the groups inside sets and records count too, each once, and that other
-// entities don't, should Cedar ever hand them over as one value instead of a node for each element.
-func TestAppendGroupsOfValue(t *testing.T) {
+// TestAppendReferencesOfValue checks that the groups and identities inside sets and records count too, each
+// once, and that other entities don't, should Cedar ever hand them over as one value instead of a node for
+// each element.
+func TestAppendReferencesOfValue(t *testing.T) {
 	t.Parallel()
 	group := func(id string) types.EntityUID { return types.NewEntityUID("Group", types.String(id)) }
+	identity := func(id string) types.EntityUID { return types.NewEntityUID("Identity", types.String(id)) }
 
-	got := appendGroupsOfValue([]string{"a"}, types.NewSet(
+	got := appendReferencesOfValue([]types.EntityUID{group("a")}, types.NewSet(
 		group("a"),
 		group("b"),
-		types.NewEntityUID("Identity", "c"),
-		types.NewRecord(types.RecordMap{"d": group("d"), "b": types.NewSet(group("b"))}),
-		types.String("e"),
+		identity("a"),
+		types.NewEntityUID("APIKey", "c"),
+		types.NewRecord(types.RecordMap{"d": group("d"), "b": types.NewSet(group("b"), identity("e"))}),
+		types.String("f"),
 	))
 
-	assert.ElementsMatch(t, []string{"a", "b", "d"}, got)
+	assert.ElementsMatch(t, []types.EntityUID{group("a"), group("b"), identity("a"), group("d"), identity("e")}, got)
 }
