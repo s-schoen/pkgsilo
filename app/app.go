@@ -4,6 +4,7 @@ package app
 import (
 	"log/slog"
 	"net/http"
+	"slices"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
@@ -29,12 +30,19 @@ import (
 	policyservice "pkgsilo/feature/policy/service"
 )
 
+const (
+	// apiPath is the path under which the API is mounted.
+	apiPath = "/api/v1"
+	// healthPath is the path of the health check, under apiPath.
+	healthPath = "/health"
+)
+
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
 // on the router that opts configures. All routes but the health check need an authenticated request.
-// API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger. The
-// metric.MeterProvider is the one that metrics are recorded with, once a component records any.
+// API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger, and
+// metrics are recorded with meterProvider: every request but a health check is measured.
 func NewHandler(
-	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger, _ metric.MeterProvider,
+	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger, meterProvider metric.MeterProvider,
 ) http.Handler {
 	authorizer := authz.New(db)
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
@@ -43,9 +51,11 @@ func NewHandler(
 	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authorizer, apiKeyPepper)
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema())
 
+	opts.MeterProvider = meterProvider
+	opts.UnmeasuredPaths = slices.Concat(opts.UnmeasuredPaths, []string{apiPath + healthPath})
 	r := router.New(opts, logger)
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Mount("/health", healthapi.NewHandler(health, logger).Routes())
+	r.Route(apiPath, func(r chi.Router) {
+		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())
 		r.Group(func(r chi.Router) {
 			r.Use(authn.Require(logger, apikeyapi.NewAuthenticator(apiKeys)))
 			r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
