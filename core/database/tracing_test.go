@@ -194,7 +194,7 @@ func TestInTx_SpanCommitFails(t *testing.T) {
 }
 
 // TestInTx_SpanBeginFails checks that a BEGIN that fails, here on a canceled context, is an error of the
-// transaction.
+// transaction, which has no outcome, since it never began.
 func TestInTx_SpanBeginFails(t *testing.T) {
 	t.Parallel()
 	rec := telemetrytest.New(t)
@@ -208,8 +208,7 @@ func TestInTx_SpanBeginFails(t *testing.T) {
 
 	require.ErrorIs(t, err, context.Canceled)
 	tx := transactionSpan(t, rec.Spans())
-	assert.Equal(t, []attribute.KeyValue{attribute.String("pkgsilo.database.transaction.outcome", "rollback")},
-		tx.Attributes())
+	assert.Empty(t, tx.Attributes())
 	assert.Equal(t, sdktrace.Status{Code: codes.Error, Description: "begin transaction"}, tx.Status())
 }
 
