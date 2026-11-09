@@ -15,4 +15,4 @@ gotestsum = "1.13.0"
 prek = "0.5.9"
 cocogitto = "7.0.0"
 # Runs the GitHub Actions workflows locally (`task ci:push`, `task ci:pr`).
-act = "0.2.94"
+act = "0.2.97"
