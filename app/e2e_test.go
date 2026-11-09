@@ -14,6 +14,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
+	"pkgsilo/core/envelope"
 	"pkgsilo/core/telemetry"
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/test/apitest"
@@ -90,8 +91,13 @@ func TestMetrics(t *testing.T) {
 //  2. Find the spans: one server span named GET /api/v1/identities, which holds the request ID of the
 //     response. The test client isn't a trusted proxy, so the span starts a new trace instead of
 //     continuing the sent one, and links to the sent span.
-//  3. Find the database spans: every one, among them the listing's SELECT on identities, descends from
-//     the server span. The queries of the first start ran outside a request, so they have none.
+//  3. Find the spans of authentication and authorization: under the server span, one
+//     pkgsilo.authn.authenticate with outcome success and method api_key, and one pkgsilo.authz.load.
+//     The server span's enduser.id is the ID of the identity admin, which the listing holds.
+//  4. Find the database spans: every one, among them the listing's SELECT on identities, descends from
+//     the server span. The API key lookup descends from the authentication span, and the policy queries
+//     from the authorization span. The queries of the first start ran outside a request, so they have
+//     none.
 func TestTracing(t *testing.T) {
 	t.Parallel()
 	api, spans := apptest.NewWithTracing(t)
@@ -99,7 +105,7 @@ func TestTracing(t *testing.T) {
 
 	// 1. List.
 	list := api.WithHeader("Traceparent", "00-"+sentTraceID+"-"+sentSpanID+"-01").Get("/api/v1/identities")
-	list.AssertStatus(http.StatusOK)
+	identities := apitest.DecodeCollection[identityapi.IdentityResponse](list, http.StatusOK).Data
 
 	// 2. Find the spans.
 	var servers []sdktrace.ReadOnlySpan
@@ -120,23 +126,73 @@ func TestTracing(t *testing.T) {
 	assert.Equal(t, sentTraceID, server.Links()[0].SpanContext.TraceID().String())
 	assert.Equal(t, sentSpanID, server.Links()[0].SpanContext.SpanID().String())
 
-	// 3. Find the database spans.
+	// 3. Find the spans of authentication and authorization.
+	authnSpan := onlySpan(t, spans.Spans(), "pkgsilo.authn.authenticate")
+	assert.Equal(t, server.SpanContext().SpanID(), authnSpan.Parent().SpanID())
+	authnAttrs := attribute.NewSet(authnSpan.Attributes()...)
+	outcome, _ := authnAttrs.Value("pkgsilo.authn.outcome")
+	assert.Equal(t, "success", outcome.AsString())
+	method, _ := authnAttrs.Value("pkgsilo.authn.method")
+	assert.Equal(t, "api_key", method.AsString())
+	authzSpan := onlySpan(t, spans.Spans(), "pkgsilo.authz.load")
+	assert.Equal(t, server.SpanContext().SpanID(), authzSpan.Parent().SpanID())
+	require.Len(t, identities, 1)
+	assert.Equal(t, envelope.Visible("admin"), identities[0].Username)
+	enduserID, _ := attrs.Value("enduser.id")
+	assert.Equal(t, identities[0].ID.String(), enduserID.AsString())
+
+	// 4. Find the database spans.
 	byID := map[trace.SpanID]sdktrace.ReadOnlySpan{}
 	for _, span := range spans.Spans() {
 		byID[span.SpanContext().SpanID()] = span
 	}
-	var listed bool
+	queries := map[sdktrace.ReadOnlySpan]string{}
 	for _, span := range spans.Spans() {
 		attrs := attribute.NewSet(span.Attributes()...)
 		if !attrs.HasValue("db.system.name") {
 			continue
 		}
 		query, _ := attrs.Value("db.query.text")
-		listed = listed || strings.Contains(query.AsString(), "FROM identities")
+		queries[span] = query.AsString()
 		assert.Truef(t, descendsFrom(span, server, byID), "%s %q doesn't descend from the server span",
 			span.Name(), query.AsString())
 	}
-	assert.True(t, listed, "no span of the query that lists the identities")
+	assert.True(t, hasQueryUnder(queries, "FROM identities", server, byID),
+		"no span of the query that lists the identities")
+	assert.True(t, hasQueryUnder(queries, "FROM api_keys", authnSpan, byID),
+		"no span of the API key lookup under the authentication span")
+	assert.True(t, hasQueryUnder(queries, "FROM policy_revision", authzSpan, byID),
+		"no span of the policy revision query under the authorization span")
+}
+
+// hasQueryUnder reports whether one of the database spans in queries, which maps each to its query text,
+// descends from ancestor and runs a query that contains fragment.
+func hasQueryUnder(
+	queries map[sdktrace.ReadOnlySpan]string, fragment string, ancestor sdktrace.ReadOnlySpan,
+	byID map[trace.SpanID]sdktrace.ReadOnlySpan,
+) bool {
+	for span, query := range queries {
+		if strings.Contains(query, fragment) && descendsFrom(span, ancestor, byID) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// onlySpan returns the span with the given name, failing the test if there's not exactly one.
+func onlySpan(t *testing.T, spans []sdktrace.ReadOnlySpan, name string) sdktrace.ReadOnlySpan {
+	t.Helper()
+
+	var found []sdktrace.ReadOnlySpan
+	for _, span := range spans {
+		if span.Name() == name {
+			found = append(found, span)
+		}
+	}
+	require.Len(t, found, 1, name)
+
+	return found[0]
 }
 
 // descendsFrom reports whether ancestor is the parent of span, or of one of its ancestors in byID.

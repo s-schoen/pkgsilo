@@ -9,7 +9,9 @@ import (
 
 	"github.com/cedar-policy/cedar-go"
 	"github.com/cedar-policy/cedar-go/types"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"pkgsilo/core/database"
 )
@@ -28,6 +30,8 @@ type Engine struct {
 	loaded atomic.Pointer[revisionedPolicies]
 	// decisions counts the decisions of every Decider of the engine.
 	decisions decisions
+	// tracer creates the span of For.
+	tracer trace.Tracer
 }
 
 var _ Authorizer = (*Engine)(nil)
@@ -45,14 +49,33 @@ type policyRecord struct {
 }
 
 // New returns an Engine that reads the policies and the actors' groups from db, and counts its decisions
-// with meterProvider in pkgsilo.authz.decisions, by result only.
-func New(db database.Querier, meterProvider metric.MeterProvider) *Engine {
-	return &Engine{db: db, decisions: newDecisions(meterProvider)}
+// with meterProvider in pkgsilo.authz.decisions, by result only. For runs its queries in a span from
+// tracerProvider.
+func New(db database.Querier, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) *Engine {
+	return &Engine{db: db, decisions: newDecisions(meterProvider), tracer: tracerProvider.Tracer(tracerName)}
 }
 
 // For returns the Decider for the actor, with the current policies and the actor's groups.
+//
+// Its queries nest under the span pkgsilo.authz.load, whose attribute pkgsilo.authz.policies.reloaded tells
+// whether it parsed the policies again. The span's status is Error when a query or the parse fails.
 func (e *Engine) For(ctx context.Context, actor uuid.UUID) (Decider, error) {
-	policies, err := e.currentPolicies(ctx)
+	ctx, span := e.tracer.Start(ctx, loadSpanName)
+	defer span.End()
+
+	decider, err := e.load(ctx, span, actor)
+	if err != nil {
+		span.SetStatus(codes.Error, "load policies and groups")
+
+		return nil, err
+	}
+
+	return decider, nil
+}
+
+// load returns the Decider for the actor, and sets on span whether it parsed the policies again.
+func (e *Engine) load(ctx context.Context, span trace.Span, actor uuid.UUID) (Decider, error) {
+	policies, err := e.currentPolicies(ctx, span)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +89,9 @@ func (e *Engine) For(ctx context.Context, actor uuid.UUID) (Decider, error) {
 	return &decider{policies: policies, principal: toEntity(IdentityType, actor, groups), decisions: e.decisions}, nil
 }
 
-// currentPolicies returns the policies of the current revision, parsing them if that's not the loaded one.
-func (e *Engine) currentPolicies(ctx context.Context) (*cedar.PolicySet, error) {
+// currentPolicies returns the policies of the current revision, parsing them if that's not the loaded one,
+// and sets on span whether it did.
+func (e *Engine) currentPolicies(ctx context.Context, span trace.Span) (*cedar.PolicySet, error) {
 	// Read before the policies: policies newer than their revision only cause another parse, while policies
 	// older than their revision would stay in use.
 	var revision int64
@@ -76,8 +100,11 @@ func (e *Engine) currentPolicies(ctx context.Context) (*cedar.PolicySet, error) 
 	}
 
 	if loaded := e.loaded.Load(); loaded != nil && loaded.revision == revision {
+		span.SetAttributes(reloadedKey.Bool(false))
+
 		return loaded.policies, nil
 	}
+	span.SetAttributes(reloadedKey.Bool(true))
 
 	var recs []policyRecord
 	if err := e.db.SelectContext(ctx, &recs, `SELECT id, source FROM policies`); err != nil {
