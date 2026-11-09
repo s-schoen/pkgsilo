@@ -61,17 +61,19 @@ func InTx(ctx context.Context, q Querier, fn func(ctx context.Context, tx Querie
 
 	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer(tracerName).Start(ctx, transactionSpanName)
 	defer span.End()
-	// A rollback because fn failed isn't an error of the transaction, so only BEGIN and COMMIT set the status.
-	span.SetAttributes(outcomeKey.String(outcomeRollback))
 
 	tx, err := db.BeginTxx(ctx, nil)
 	if err != nil {
+		// No transaction began, so the span has no outcome.
 		span.SetStatus(codes.Error, "begin transaction")
 
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	// Does nothing once the transaction is committed.
 	defer func() { _ = tx.Rollback() }()
+	// The outcome until COMMIT succeeds. A rollback because fn failed isn't an error of the transaction, so
+	// only BEGIN and COMMIT set the status.
+	span.SetAttributes(outcomeKey.String(outcomeRollback))
 
 	if err := fn(ctx, tx); err != nil {
 		return err
