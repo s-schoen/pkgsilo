@@ -46,7 +46,7 @@ func value[N int64 | float64](t *testing.T, points []metricdata.DataPoint[N]) N 
 func TestOpen_PoolMetrics(t *testing.T) {
 	t.Parallel()
 	rec := telemetrytest.New(t)
-	db := databasetest.NewWithMeterProvider(t, rec.MeterProvider())
+	db := databasetest.NewWithProviders(t, rec.MeterProvider(), rec.TracerProvider())
 
 	conn, err := db.Connx(t.Context())
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestOpen_PoolMetrics(t *testing.T) {
 func TestOpen_PoolMetricsWaits(t *testing.T) {
 	t.Parallel()
 	rec := telemetrytest.New(t)
-	db := databasetest.NewWithMeterProvider(t, rec.MeterProvider())
+	db := databasetest.NewWithProviders(t, rec.MeterProvider(), rec.TracerProvider())
 	held := make([]*sql.Conn, db.Stats().MaxOpenConnections)
 	for i := range held {
 		var err error
@@ -100,7 +100,7 @@ func TestOpen_PoolMetricsWaits(t *testing.T) {
 func TestOpen_PoolMetricsStopOnClose(t *testing.T) {
 	t.Parallel()
 	rec := telemetrytest.New(t)
-	db := databasetest.NewWithMeterProvider(t, rec.MeterProvider())
+	db := databasetest.NewWithProviders(t, rec.MeterProvider(), rec.TracerProvider())
 	require.NotNil(t, telemetrytest.SumPoints[int64](t, rec, "db.client.connection.count"))
 
 	require.NoError(t, db.Close())
@@ -117,7 +117,7 @@ func TestOpen_PoolMetricsStopOnClose(t *testing.T) {
 func TestOpen_OperationMetrics(t *testing.T) {
 	t.Parallel()
 	rec := telemetrytest.New(t)
-	db := databasetest.NewWithMeterProvider(t, rec.MeterProvider())
+	db := databasetest.NewWithProviders(t, rec.MeterProvider(), rec.TracerProvider())
 
 	var n int
 	require.NoError(t, db.GetContext(t.Context(), &n, "SELECT 1"))
@@ -135,7 +135,7 @@ func TestOpen_OperationMetrics(t *testing.T) {
 func TestOpen_OperationMetricsErrors(t *testing.T) {
 	t.Parallel()
 	rec := telemetrytest.New(t)
-	db := databasetest.NewWithMeterProvider(t, rec.MeterProvider())
+	db := databasetest.NewWithProviders(t, rec.MeterProvider(), rec.TracerProvider())
 
 	var n int
 	require.Error(t, db.GetContext(t.Context(), &n, "SELECT 1/0"))
@@ -150,7 +150,7 @@ func TestOpen_OperationMetricsErrors(t *testing.T) {
 func TestOpen_OperationMetricsNoRows(t *testing.T) {
 	t.Parallel()
 	rec := telemetrytest.New(t)
-	db := databasetest.NewWithMeterProvider(t, rec.MeterProvider())
+	db := databasetest.NewWithProviders(t, rec.MeterProvider(), rec.TracerProvider())
 
 	var n int
 	require.ErrorIs(t, db.GetContext(t.Context(), &n, "SELECT 1 WHERE false"), sql.ErrNoRows)

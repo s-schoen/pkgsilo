@@ -61,8 +61,8 @@ func insert(t *testing.T, repo *PostgresPolicyRepository, recs ...PolicyRecord) 
 	t.Helper()
 
 	for _, rec := range recs {
-		err := repo.Write(t.Context(), func(w PolicyWriter) error {
-			_, err := w.Insert(t.Context(), rec)
+		err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
+			_, err := w.Insert(ctx, rec)
 			return err
 		})
 		require.NoError(t, err)
@@ -83,9 +83,9 @@ func TestPostgresPolicyRepository_InsertAndGet(t *testing.T) {
 	rec := newRecord("everything", baseTime)
 
 	var stored PolicyRecord
-	err := repo.Write(t.Context(), func(w PolicyWriter) error {
+	err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
 		var err error
-		stored, err = w.Insert(t.Context(), rec)
+		stored, err = w.Insert(ctx, rec)
 		return err
 	})
 	require.NoError(t, err)
@@ -101,8 +101,8 @@ func TestPostgresPolicyRepository_Insert_DuplicateName(t *testing.T) {
 	repo, _ := newTestRepo(t)
 	insert(t, repo, newRecord("everything", baseTime))
 
-	err := repo.Write(t.Context(), func(w PolicyWriter) error {
-		_, err := w.Insert(t.Context(), newRecord("everything", baseTime))
+	err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
+		_, err := w.Insert(ctx, newRecord("everything", baseTime))
 		return err
 	})
 
@@ -171,7 +171,7 @@ func TestPostgresPolicyRepository_ListExisting(t *testing.T) {
 		"repository": func(_ *testing.T, list func(ReferenceLister)) { list(repo) },
 		"writer": func(t *testing.T, list func(ReferenceLister)) {
 			t.Helper()
-			require.NoError(t, repo.Write(t.Context(), func(w PolicyWriter) error {
+			require.NoError(t, repo.Write(t.Context(), func(_ context.Context, w PolicyWriter) error {
 				list(w)
 				return nil
 			}))
@@ -227,7 +227,7 @@ func TestPostgresPolicyRepository_Writer_ListExistingOnOneConnection(t *testing.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	t.Cleanup(cancel)
 
-	err := repo.Write(ctx, func(w PolicyWriter) error {
+	err := repo.Write(ctx, func(ctx context.Context, w PolicyWriter) error {
 		if _, err := w.ListExistingGroups(ctx, groups); err != nil {
 			return err
 		}
@@ -258,9 +258,9 @@ func TestPostgresPolicyRepository_Update(t *testing.T) {
 	want.CreatedBy, want.CreatedAt = rec.CreatedBy, rec.CreatedAt
 
 	var stored PolicyRecord
-	err := repo.Write(t.Context(), func(w PolicyWriter) error {
+	err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
 		var err error
-		stored, err = w.Update(t.Context(), update)
+		stored, err = w.Update(ctx, update)
 		return err
 	})
 	require.NoError(t, err)
@@ -289,8 +289,8 @@ func TestPostgresPolicyRepository_Update_Errors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := repo.Write(t.Context(), func(w PolicyWriter) error {
-				_, err := w.Update(t.Context(), tt.rec)
+			err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
+				_, err := w.Update(ctx, tt.rec)
 				return err
 			})
 
@@ -304,9 +304,9 @@ func patch(t *testing.T, repo *PostgresPolicyRepository, p PolicyPatch) (PolicyR
 	t.Helper()
 
 	var stored PolicyRecord
-	err := repo.Write(t.Context(), func(w PolicyWriter) error {
+	err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
 		var err error
-		stored, err = w.Patch(t.Context(), p)
+		stored, err = w.Patch(ctx, p)
 		return err
 	})
 
@@ -321,10 +321,10 @@ func TestPostgresPolicyRepository_Writer_Get(t *testing.T) {
 
 	var got PolicyRecord
 	var missingErr error
-	err := repo.Write(t.Context(), func(w PolicyWriter) error {
+	err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
 		var err error
-		got, err = w.Get(t.Context(), rec.ID)
-		_, missingErr = w.Get(t.Context(), uuid.NewV4())
+		got, err = w.Get(ctx, rec.ID)
+		_, missingErr = w.Get(ctx, uuid.NewV4())
 		return err
 	})
 
@@ -442,8 +442,8 @@ func TestPostgresPolicyRepository_Delete(t *testing.T) {
 	rec := newRecord("everything", baseTime)
 	insert(t, repo, rec)
 
-	err := repo.Write(t.Context(), func(w PolicyWriter) error {
-		return w.Delete(t.Context(), rec.ID)
+	err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
+		return w.Delete(ctx, rec.ID)
 	})
 	require.NoError(t, err)
 
@@ -455,8 +455,8 @@ func TestPostgresPolicyRepository_Delete_NotFound(t *testing.T) {
 	t.Parallel()
 	repo, _ := newTestRepo(t)
 
-	err := repo.Write(t.Context(), func(w PolicyWriter) error {
-		return w.Delete(t.Context(), uuid.NewV4())
+	err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
+		return w.Delete(ctx, uuid.NewV4())
 	})
 
 	assert.ErrorIs(t, err, ErrNotFound)
@@ -474,8 +474,8 @@ func TestPostgresPolicyRepository_Write_AdvancesRevision(t *testing.T) {
 
 	errFailed := errors.New("check failed")
 	rec := newRecord("nothing", baseTime)
-	err := repo.Write(t.Context(), func(w PolicyWriter) error {
-		if _, err := w.Insert(t.Context(), rec); err != nil {
+	err := repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
+		if _, err := w.Insert(ctx, rec); err != nil {
 			return err
 		}
 		return errFailed
@@ -524,8 +524,8 @@ func TestPostgresPolicyRepository_Write_Serialized(t *testing.T) {
 	release := make(chan struct{})
 	firstDone := make(chan error, 1)
 	go func() {
-		firstDone <- repo.Write(context.WithoutCancel(t.Context()), func(w PolicyWriter) error {
-			if _, err := w.Insert(t.Context(), first); err != nil {
+		firstDone <- repo.Write(context.WithoutCancel(t.Context()), func(ctx context.Context, w PolicyWriter) error {
+			if _, err := w.Insert(ctx, first); err != nil {
 				return err
 			}
 			close(inFirst)
@@ -537,8 +537,8 @@ func TestPostgresPolicyRepository_Write_Serialized(t *testing.T) {
 
 	secondDone := make(chan []PolicyRecord, 1)
 	go func() {
-		_ = repo.Write(t.Context(), func(w PolicyWriter) error {
-			recs, err := w.ListAll(t.Context())
+		_ = repo.Write(t.Context(), func(ctx context.Context, w PolicyWriter) error {
+			recs, err := w.ListAll(ctx)
 			secondDone <- recs
 			return err
 		})

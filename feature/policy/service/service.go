@@ -98,7 +98,7 @@ func (s *policyService) Create(ctx context.Context, actor uuid.UUID, in PolicyIn
 
 	now := s.now()
 	var rec repository.PolicyRecord
-	err = s.repo.Write(ctx, func(w repository.PolicyWriter) error {
+	err = s.repo.Write(ctx, func(ctx context.Context, w repository.PolicyWriter) error {
 		if err := checkTotal(ctx, w, id, source.statements); err != nil {
 			return err
 		}
@@ -204,7 +204,7 @@ func (s *policyService) Replace(ctx context.Context, actor, id uuid.UUID, in Pol
 	}
 
 	var rec repository.PolicyRecord
-	err = s.repo.Write(ctx, func(w repository.PolicyWriter) error {
+	err = s.repo.Write(ctx, func(ctx context.Context, w repository.PolicyWriter) error {
 		if err := checkTotal(ctx, w, id, source.statements); err != nil {
 			return err
 		}
@@ -256,7 +256,7 @@ func (s *policyService) Patch(ctx context.Context, actor, id uuid.UUID, patch Po
 		return toPolicy.Map(rec, fields), nil
 	}
 
-	err = s.repo.Write(ctx, func(w repository.PolicyWriter) error {
+	err = s.repo.Write(ctx, func(ctx context.Context, w repository.PolicyWriter) error {
 		if err := s.checkPatched(ctx, w, id, patch); err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ func (s *policyService) Delete(ctx context.Context, actor, id uuid.UUID) error {
 	}
 
 	// Deleting the administrators policy is allowed too, which can lock everyone out: an accepted risk.
-	err = s.repo.Write(ctx, func(w repository.PolicyWriter) error {
+	err = s.repo.Write(ctx, func(ctx context.Context, w repository.PolicyWriter) error {
 		return w.Delete(ctx, id)
 	})
 	if err != nil {

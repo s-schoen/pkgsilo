@@ -9,6 +9,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestOpen(t *testing.T) {
@@ -26,7 +27,7 @@ func TestOpen(t *testing.T) {
 	url, err := ctr.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
 
-	db, err := Open(ctx, Options{URL: url, MaxConns: 3}, noop.NewMeterProvider())
+	db, err := Open(ctx, Options{URL: url, MaxConns: 3}, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -43,7 +44,9 @@ func TestOpen(t *testing.T) {
 
 func TestOpen_InvalidURL(t *testing.T) {
 	t.Parallel()
-	_, err := Open(t.Context(), Options{URL: "postgres://:invalid", MaxConns: 1}, noop.NewMeterProvider())
+	opts := Options{URL: "postgres://:invalid", MaxConns: 1}
+
+	_, err := Open(t.Context(), opts, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	assert.ErrorContains(t, err, "parse database url")
 }
 
@@ -51,7 +54,7 @@ func TestOpen_Unreachable(t *testing.T) {
 	t.Parallel()
 	opts := Options{URL: "postgres://u:secret@127.0.0.1:1/db?connect_timeout=1", MaxConns: 1}
 
-	_, err := Open(t.Context(), opts, noop.NewMeterProvider())
+	_, err := Open(t.Context(), opts, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	require.ErrorContains(t, err, "ping database")
 	assert.NotContains(t, err.Error(), "secret")
 }

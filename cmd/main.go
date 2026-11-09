@@ -74,7 +74,7 @@ func run() error {
 	otel.SetTracerProvider(tel.TracerProvider())
 
 	db, err := database.Open(ctx, database.Options{URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns},
-		tel.MeterProvider())
+		tel.MeterProvider(), tel.TracerProvider())
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

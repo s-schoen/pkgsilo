@@ -21,6 +21,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"pkgsilo/core/database"
 )
@@ -44,17 +46,19 @@ var (
 )
 
 // New returns a connection to a new database with all migrations applied, so that it holds nothing but
-// the migrations' seeded data. The database is dropped when the test ends. It records no metrics. New
-// skips the test in short mode.
+// the migrations' seeded data. The database is dropped when the test ends. It records no metrics and
+// creates no spans. New skips the test in short mode.
 func New(t *testing.T) *sqlx.DB {
 	t.Helper()
 
-	return NewWithMeterProvider(t, noop.NewMeterProvider())
+	return NewWithProviders(t, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 }
 
-// NewWithMeterProvider is like New, but the connection records its pool and query metrics with provider,
-// as database.Open does.
-func NewWithMeterProvider(t *testing.T, provider metric.MeterProvider) *sqlx.DB {
+// NewWithProviders is like New, but the connection records its pool and query metrics with meterProvider
+// and creates the spans of its queries with tracerProvider, as database.Open does.
+func NewWithProviders(
+	t *testing.T, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
+) *sqlx.DB {
 	t.Helper()
 
 	if testing.Short() {
@@ -81,7 +85,8 @@ func NewWithMeterProvider(t *testing.T, provider metric.MeterProvider) *sqlx.DB 
 		}
 	})
 
-	db, err := database.Open(t.Context(), database.Options{URL: databaseURL(name), MaxConns: 2}, provider)
+	db, err := database.Open(t.Context(), database.Options{URL: databaseURL(name), MaxConns: 2},
+		meterProvider, tracerProvider)
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
@@ -184,7 +189,8 @@ func migrate(ctx context.Context, dbURL string) error {
 		return errors.New("find migrations: no up migrations")
 	}
 
-	db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 1}, noop.NewMeterProvider())
+	db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 1},
+		noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	if err != nil {
 		return fmt.Errorf("open template: %w", err)
 	}
@@ -209,7 +215,8 @@ func migrate(ctx context.Context, dbURL string) error {
 func openWhenReady(ctx context.Context, dbURL string) (*sqlx.DB, error) {
 	deadline := time.Now().Add(readyTimeout)
 	for {
-		db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 4}, noop.NewMeterProvider())
+		db, err := database.Open(ctx, database.Options{URL: dbURL, MaxConns: 4},
+			noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 		if err == nil {
 			return db, nil
 		}

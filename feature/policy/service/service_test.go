@@ -98,8 +98,8 @@ func newTestServiceWith(
 // expectWrite makes the repository run a write with writer, as a transaction would, and return its error.
 func expectWrite(repo *mocks.MockPolicyRepository, writer *mocks.MockPolicyWriter) {
 	repo.EXPECT().Write(mock.Anything, mock.Anything).RunAndReturn(
-		func(_ context.Context, fn func(repository.PolicyWriter) error) error {
-			return fn(writer)
+		func(ctx context.Context, fn func(context.Context, repository.PolicyWriter) error) error {
+			return fn(ctx, writer)
 		},
 	)
 }
