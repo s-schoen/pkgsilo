@@ -128,7 +128,8 @@ func (c *collector) received() map[string]map[string]string {
 	return spans
 }
 
-// scrape returns the metrics that the handler serves, in the Prometheus text format.
+// scrape returns the metrics that the handler serves to a scraper that asks for no format, in the
+// Prometheus text format.
 func scrape(t *testing.T, tel *Telemetry) string {
 	t.Helper()
 
@@ -136,6 +137,20 @@ func scrape(t *testing.T, tel *Telemetry) string {
 	tel.Handler().ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, MetricsPath, nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Header().Get("Content-Type"), "text/plain")
+
+	return rec.Body.String()
+}
+
+// scrapeOpenMetrics returns the metrics that the handler serves to a scraper that asks for OpenMetrics.
+func scrapeOpenMetrics(t *testing.T, tel *Telemetry) string {
+	t.Helper()
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, MetricsPath, nil)
+	req.Header.Set("Accept", "application/openmetrics-text; version=1.0.0")
+	rec := httptest.NewRecorder()
+	tel.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Header().Get("Content-Type"), "application/openmetrics-text")
 
 	return rec.Body.String()
 }
@@ -185,6 +200,31 @@ func TestNew_HTTPServerMetricsDropServerAddress(t *testing.T) {
 	assert.Regexp(t,
 		`(?m)^http_client_request_duration_seconds_count\{[^}]*server_address="attacker.example",server_port="8443"\} 1$`,
 		body)
+}
+
+func TestNew_ExemplarsOfSampledSpans(t *testing.T) {
+	// The default filter, which a developer's environment must not change.
+	t.Setenv("OTEL_METRICS_EXEMPLAR_FILTER", "")
+	tel := newEnabled(t)
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
+	t.Cleanup(func() {
+		//nolint:usetesting // The test's context is already canceled when cleanups run.
+		assert.NoError(t, tracerProvider.Shutdown(context.Background()))
+	})
+	histogram, err := tel.MeterProvider().Meter("pkgsilo/test").Float64Histogram("test.duration", metric.WithUnit("s"))
+	require.NoError(t, err)
+
+	ctx, span := tracerProvider.Tracer("pkgsilo/test").Start(t.Context(), "test.operation")
+	histogram.Record(ctx, 0.5)
+	span.End()
+
+	spanContext := span.SpanContext()
+	exemplar := regexp.MustCompile(`(?m)^test_duration_seconds_bucket\{[^}]*\} 1 # \{([^}]*)\} 0\.5 `)
+	match := exemplar.FindStringSubmatch(scrapeOpenMetrics(t, tel))
+	require.Len(t, match, 2, "no exemplar on test_duration_seconds_bucket")
+	assert.Contains(t, match[1], `trace_id="`+spanContext.TraceID().String()+`"`)
+	assert.Contains(t, match[1], `span_id="`+spanContext.SpanID().String()+`"`)
+	assert.NotContains(t, scrape(t, tel), "trace_id", "the text format carries exemplars")
 }
 
 func TestNew_TargetInfo(t *testing.T) {

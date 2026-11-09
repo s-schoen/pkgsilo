@@ -10,6 +10,9 @@
 // OTEL_EXPORTER_OTLP_HEADERS, OTEL_TRACES_SAMPLER and OTEL_BSP_*, so New sets none of it in code. The
 // exporter connects only when it exports, so an unreachable collector doesn't fail New.
 //
+// The meter provider keeps the SDK's default exemplar filter, trace_based, which OTEL_METRICS_EXEMPLAR_FILTER
+// overrides: a measurement recorded with the context of a sampled span carries its trace and span IDs.
+//
 // Components that record metrics or create spans take the providers as parameters: none of them reads
 // the global ones.
 package telemetry
@@ -145,7 +148,9 @@ func newMeterProvider(ctx context.Context, res *resource.Resource) (*sdkmetric.M
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("GET "+MetricsPath, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+	// OpenMetrics for the scrapers that ask for it, since only it carries the exemplars that the SDK's
+	// default filter attaches to the measurements of sampled spans.
+	mux.Handle("GET "+MetricsPath, promhttp.HandlerFor(registry, promhttp.HandlerOpts{EnableOpenMetrics: true}))
 
 	return provider, mux, nil
 }
@@ -166,7 +171,8 @@ func (t *Telemetry) TracerProvider() trace.TracerProvider {
 }
 
 // Handler returns the handler of the metrics listener: it serves the metrics in the Prometheus
-// exposition formats at GET MetricsPath, and nothing else.
+// exposition formats at GET MetricsPath, and nothing else. A scraper that asks for OpenMetrics gets it,
+// with the trace and span IDs of sampled spans as exemplars; any other gets the text format.
 func (t *Telemetry) Handler() http.Handler {
 	return t.handler
 }
