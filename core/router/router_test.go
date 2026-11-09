@@ -142,6 +142,35 @@ func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
 	assert.Equal(t, requestEntry["request_id"], panicEntry["request_id"])
 }
 
+// TestNew_RecoveredPanicIsOneExceptionOfServerSpan checks that a panic reaches the server span once, through
+// the Recoverer's record, and not again through the error-level record of the 500 that RequestLogger writes.
+func TestNew_RecoveredPanicIsOneExceptionOfServerSpan(t *testing.T) {
+	t.Parallel()
+	tel := telemetrytest.New(t)
+	logger, buf := loggertest.NewJSON()
+	r := New(Options{}, logger, tel.MeterProvider(), tel.TracerProvider())
+	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
+
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/panic", nil))
+
+	spans := tel.Spans()
+	require.Len(t, spans, 1)
+	assert.Equal(t, codes.Error, spans[0].Status().Code)
+	events := spans[0].Events()
+	require.Len(t, events, 1)
+	assert.Equal(t, semconv.ExceptionEventName, events[0].Name)
+	attrs := attribute.NewSet(events[0].Attributes...)
+	message, _ := attrs.Value(semconv.ExceptionMessageKey)
+	assert.Equal(t, "boom", message.AsString())
+
+	entries := loggertest.Entries(t, buf)
+	require.Len(t, entries, 2)
+	for _, entry := range entries {
+		assert.Equal(t, spans[0].SpanContext().TraceID().String(), entry["trace_id"])
+		assert.Equal(t, spans[0].SpanContext().SpanID().String(), entry["span_id"])
+	}
+}
+
 func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
