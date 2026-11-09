@@ -5,6 +5,7 @@ package app_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -89,6 +90,8 @@ func TestMetrics(t *testing.T) {
 //  2. Find the spans: one server span named GET /api/v1/identities, which holds the request ID of the
 //     response. The test client isn't a trusted proxy, so the span starts a new trace instead of
 //     continuing the sent one, and links to the sent span.
+//  3. Find the database spans: every one, among them the listing's SELECT on identities, descends from
+//     the server span. The queries of the first start ran outside a request, so they have none.
 func TestTracing(t *testing.T) {
 	t.Parallel()
 	api, spans := apptest.NewWithTracing(t)
@@ -116,4 +119,38 @@ func TestTracing(t *testing.T) {
 	require.Len(t, server.Links(), 1)
 	assert.Equal(t, sentTraceID, server.Links()[0].SpanContext.TraceID().String())
 	assert.Equal(t, sentSpanID, server.Links()[0].SpanContext.SpanID().String())
+
+	// 3. Find the database spans.
+	byID := map[trace.SpanID]sdktrace.ReadOnlySpan{}
+	for _, span := range spans.Spans() {
+		byID[span.SpanContext().SpanID()] = span
+	}
+	var listed bool
+	for _, span := range spans.Spans() {
+		attrs := attribute.NewSet(span.Attributes()...)
+		if !attrs.HasValue("db.system.name") {
+			continue
+		}
+		query, _ := attrs.Value("db.query.text")
+		listed = listed || strings.Contains(query.AsString(), "FROM identities")
+		assert.Truef(t, descendsFrom(span, server, byID), "%s %q doesn't descend from the server span",
+			span.Name(), query.AsString())
+	}
+	assert.True(t, listed, "no span of the query that lists the identities")
+}
+
+// descendsFrom reports whether ancestor is the parent of span, or of one of its ancestors in byID.
+func descendsFrom(span, ancestor sdktrace.ReadOnlySpan, byID map[trace.SpanID]sdktrace.ReadOnlySpan) bool {
+	for span.Parent().IsValid() {
+		if span.Parent().SpanID() == ancestor.SpanContext().SpanID() {
+			return true
+		}
+		parent, ok := byID[span.Parent().SpanID()]
+		if !ok {
+			return false
+		}
+		span = parent
+	}
+
+	return false
 }

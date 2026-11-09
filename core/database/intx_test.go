@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -24,11 +25,11 @@ func newScratchTable(t *testing.T) *sqlx.DB {
 }
 
 // insertRow returns a function for InTx that inserts a row and then returns err.
-func insertRow(t *testing.T, err error) func(database.Querier) error {
+func insertRow(t *testing.T, err error) func(context.Context, database.Querier) error {
 	t.Helper()
 
-	return func(tx database.Querier) error {
-		_, execErr := tx.ExecContext(t.Context(), `INSERT INTO scratch (n) VALUES (1)`)
+	return func(ctx context.Context, tx database.Querier) error {
+		_, execErr := tx.ExecContext(ctx, `INSERT INTO scratch (n) VALUES (1)`)
 		require.NoError(t, execErr)
 
 		return err
@@ -109,7 +110,7 @@ func TestInTx_OtherQuerierFails(t *testing.T) {
 	t.Parallel()
 	ran := false
 
-	err := database.InTx(t.Context(), wrappedQuerier{}, func(database.Querier) error {
+	err := database.InTx(t.Context(), wrappedQuerier{}, func(context.Context, database.Querier) error {
 		ran = true
 
 		return nil

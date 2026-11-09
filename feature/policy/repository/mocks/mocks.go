@@ -313,7 +313,7 @@ func (_c *MockPolicyRepository_ListExistingIdentities_Call) RunAndReturn(run fun
 }
 
 // Write provides a mock function for the type MockPolicyRepository
-func (_mock *MockPolicyRepository) Write(ctx context.Context, fn func(w repository.PolicyWriter) error) error {
+func (_mock *MockPolicyRepository) Write(ctx context.Context, fn func(ctx context.Context, w repository.PolicyWriter) error) error {
 	ret := _mock.Called(ctx, fn)
 
 	if len(ret) == 0 {
@@ -321,7 +321,7 @@ func (_mock *MockPolicyRepository) Write(ctx context.Context, fn func(w reposito
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, func(w repository.PolicyWriter) error) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, func(ctx context.Context, w repository.PolicyWriter) error) error); ok {
 		r0 = returnFunc(ctx, fn)
 	} else {
 		r0 = ret.Error(0)
@@ -336,20 +336,20 @@ type MockPolicyRepository_Write_Call struct {
 
 // Write is a helper method to define mock.On call
 //   - ctx context.Context
-//   - fn func(w repository.PolicyWriter) error
+//   - fn func(ctx context.Context, w repository.PolicyWriter) error
 func (_e *MockPolicyRepository_Expecter) Write(ctx any, fn any) *MockPolicyRepository_Write_Call {
 	return &MockPolicyRepository_Write_Call{Call: _e.mock.On("Write", ctx, fn)}
 }
 
-func (_c *MockPolicyRepository_Write_Call) Run(run func(ctx context.Context, fn func(w repository.PolicyWriter) error)) *MockPolicyRepository_Write_Call {
+func (_c *MockPolicyRepository_Write_Call) Run(run func(ctx context.Context, fn func(ctx context.Context, w repository.PolicyWriter) error)) *MockPolicyRepository_Write_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 func(w repository.PolicyWriter) error
+		var arg1 func(ctx context.Context, w repository.PolicyWriter) error
 		if args[1] != nil {
-			arg1 = args[1].(func(w repository.PolicyWriter) error)
+			arg1 = args[1].(func(ctx context.Context, w repository.PolicyWriter) error)
 		}
 		run(
 			arg0,
@@ -364,7 +364,7 @@ func (_c *MockPolicyRepository_Write_Call) Return(err error) *MockPolicyReposito
 	return _c
 }
 
-func (_c *MockPolicyRepository_Write_Call) RunAndReturn(run func(ctx context.Context, fn func(w repository.PolicyWriter) error) error) *MockPolicyRepository_Write_Call {
+func (_c *MockPolicyRepository_Write_Call) RunAndReturn(run func(ctx context.Context, fn func(ctx context.Context, w repository.PolicyWriter) error) error) *MockPolicyRepository_Write_Call {
 	_c.Call.Return(run)
 	return _c
 }

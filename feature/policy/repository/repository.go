@@ -20,7 +20,8 @@ type PolicyRepository interface {
 	// Write runs fn in a transaction that first advances the policy revision. This serializes policy
 	// writes, and every instance loads the policies again on its first request after the commit. The
 	// transaction commits if fn returns nil. Otherwise, it rolls back and Write returns an error wrapping fn's.
-	Write(ctx context.Context, fn func(w PolicyWriter) error) error
+	// fn gets the transaction's context, which holds its span, and passes it to the writer.
+	Write(ctx context.Context, fn func(ctx context.Context, w PolicyWriter) error) error
 }
 
 // PolicyWriter reads and writes policy records in the transaction of PolicyRepository.Write.
@@ -92,15 +93,18 @@ func (r *PostgresPolicyRepository) ListExistingIdentities(ctx context.Context, i
 
 // Write runs fn in a transaction that first advances the policy revision. The transaction commits if fn
 // returns nil. Otherwise, it rolls back and Write returns an error wrapping fn's. On a repository of a
-// transaction, fn takes part in that one, which its owner commits or rolls back.
-func (r *PostgresPolicyRepository) Write(ctx context.Context, fn func(w PolicyWriter) error) error {
-	err := database.InTx(ctx, r.db, func(tx database.Querier) error {
+// transaction, fn takes part in that one, which its owner commits or rolls back. fn gets the context of
+// database.InTx.
+func (r *PostgresPolicyRepository) Write(
+	ctx context.Context, fn func(ctx context.Context, w PolicyWriter) error,
+) error {
+	err := database.InTx(ctx, r.db, func(ctx context.Context, tx database.Querier) error {
 		// The row lock that this takes holds every other policy write until the commit.
 		if _, err := tx.ExecContext(ctx, `UPDATE policy_revision SET revision = revision + 1`); err != nil {
 			return fmt.Errorf("advance policy revision: %w", err)
 		}
 
-		return fn(postgresPolicyWriter{q: tx})
+		return fn(ctx, postgresPolicyWriter{q: tx})
 	})
 	if err != nil {
 		return fmt.Errorf("write policies: %w", err)

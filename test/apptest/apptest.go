@@ -91,14 +91,14 @@ func NewInstance(t *testing.T, api *apitest.Client, db *sqlx.DB) *apitest.Client
 
 // newApp returns a client for the application on a new database with all migrations applied and the
 // first start done, and that database. The client authenticates as admin. As in cmd/main.go, the
-// application and its database record their metrics with the same provider, and the application creates
-// its spans with tracerProvider.
+// application and its database record their metrics with meterProvider and create their spans with
+// tracerProvider.
 func newApp(
 	t *testing.T, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
 ) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
-	db := databasetest.NewWithMeterProvider(t, meterProvider)
+	db := databasetest.NewWithProviders(t, meterProvider, tracerProvider)
 
 	key, err := app.Bootstrap(t.Context(), db, []byte(apiKeyPepper))
 	require.NoError(t, err)
