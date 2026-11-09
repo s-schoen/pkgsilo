@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"pkgsilo/core/authn"
 	"pkgsilo/core/router"
@@ -136,7 +137,7 @@ func TestAuthenticator_Logs(t *testing.T) {
 			svc := mocks.NewMockAPIKeyService(t)
 			svc.EXPECT().Authenticate(mock.Anything, presentedKey).Return(authenticatedKey, tt.err)
 			logger, buf := loggertest.NewJSON()
-			r := router.New(router.Options{}, logger, noop.NewMeterProvider())
+			r := router.New(router.Options{}, logger, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 			r.With(authn.Require(logger, noop.NewMeterProvider(), NewAuthenticator(svc))).
 				Get("/", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 

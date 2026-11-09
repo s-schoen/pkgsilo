@@ -12,8 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric/noop"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/trace"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/middleware"
@@ -23,7 +27,7 @@ import (
 
 func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
 	t.Parallel()
-	r := New(Options{}, loggertest.Discard(), noop.NewMeterProvider())
+	r := New(Options{}, loggertest.Discard(), noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	// chi only builds the middleware chain once at least one route exists.
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
@@ -39,7 +43,7 @@ func TestNew_MiddlewareAppliesToUnmatchedRoutes(t *testing.T) {
 
 func TestNew_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
-	r := New(Options{}, loggertest.Discard(), noop.NewMeterProvider())
+	r := New(Options{}, loggertest.Discard(), noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	nothing := func(http.ResponseWriter, *http.Request) {}
 	r.Get("/root", nothing)
 	r.Delete("/root", nothing)
@@ -80,7 +84,7 @@ func TestNew_MethodNotAllowed(t *testing.T) {
 
 func TestNew_MountedSubrouterNotFound(t *testing.T) {
 	t.Parallel()
-	r := New(Options{}, loggertest.Discard(), noop.NewMeterProvider())
+	r := New(Options{}, loggertest.Discard(), noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	sub := chi.NewRouter()
 	sub.Get("/", func(http.ResponseWriter, *http.Request) {})
 	r.Mount("/sub", sub)
@@ -102,7 +106,7 @@ func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
 	r := New(Options{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}}, logger,
-		noop.NewMeterProvider())
+		noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	r.Get("/", func(http.ResponseWriter, *http.Request) {})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -118,7 +122,7 @@ func TestNew_LogsClientIPFromTrustedProxy(t *testing.T) {
 func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
-	r := New(Options{}, logger, noop.NewMeterProvider())
+	r := New(Options{}, logger, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
 
 	rec := httptest.NewRecorder()
@@ -141,7 +145,7 @@ func TestNew_RecoveredPanicIsLoggedAs500(t *testing.T) {
 func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
-	r := New(Options{}, logger, noop.NewMeterProvider())
+	r := New(Options{}, logger, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 	r.Get("/unencodable", func(w http.ResponseWriter, _ *http.Request) {
 		envelope.WriteResource(w, make(chan int))
 	})
@@ -163,7 +167,8 @@ func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
 	assert.Equal(t, requestEntry["request_id"], panicEntry["request_id"])
 }
 
-func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
+// TestNew_RecordsHTTPServerTelemetry checks the metrics and the server span of each request.
+func TestNew_RecordsHTTPServerTelemetry(t *testing.T) {
 	t.Parallel()
 	sub := chi.NewRouter()
 	sub.Get("/{itemID}", func(http.ResponseWriter, *http.Request) {})
@@ -230,8 +235,8 @@ func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			metrics := telemetrytest.New(t)
-			r := New(Options{}, loggertest.Discard(), metrics.MeterProvider())
+			tel := telemetrytest.New(t)
+			r := New(Options{}, loggertest.Discard(), tel.MeterProvider(), tel.TracerProvider())
 			r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
 			r.Get("/files/*", func(http.ResponseWriter, *http.Request) {})
 			r.Route("/api/v1", func(r chi.Router) {
@@ -243,9 +248,9 @@ func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
 			r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, nil))
 			require.Equal(t, tt.wantStatus, rec.Code)
 
-			wantMethod := tt.method
+			wantMethod, wantSpanName := tt.method, tt.method
 			if tt.method == "BREW" {
-				wantMethod = "_OTHER"
+				wantMethod, wantSpanName = "_OTHER", "HTTP"
 			}
 			want := []attribute.KeyValue{
 				semconv.HTTPRequestMethodKey.String(wantMethod),
@@ -256,17 +261,39 @@ func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
 			}
 			if tt.wantRoute != "" {
 				want = append(want, semconv.HTTPRoute(tt.wantRoute))
+				wantSpanName += " " + tt.wantRoute
 			}
-			duration := telemetrytest.HistogramPoints[float64](t, metrics, "http.server.request.duration")
+			duration := telemetrytest.HistogramPoints[float64](t, tel, "http.server.request.duration")
 			require.Len(t, duration, 1)
 			assert.ElementsMatch(t, want, duration[0].Attributes.ToSlice())
 			assert.EqualValues(t, 1, duration[0].Count)
 			for _, name := range []string{"http.server.request.body.size", "http.server.response.body.size"} {
-				points := telemetrytest.HistogramPoints[int64](t, metrics, name)
+				points := telemetrytest.HistogramPoints[int64](t, tel, name)
 				require.Len(t, points, 1, name)
 				assert.ElementsMatch(t, want, points[0].Attributes.ToSlice(), name)
 				assert.EqualValues(t, 1, points[0].Count, name)
 			}
+
+			spans := tel.Spans()
+			require.Len(t, spans, 1)
+			span := spans[0]
+			assert.Equal(t, wantSpanName, span.Name())
+			assert.Equal(t, trace.SpanKindServer, span.SpanKind())
+			attrs := attribute.NewSet(span.Attributes()...)
+			for _, kv := range want[:2] {
+				got, ok := attrs.Value(kv.Key)
+				if assert.True(t, ok, kv.Key) {
+					assert.Equal(t, kv.Value, got, kv.Key)
+				}
+			}
+			route, ok := attrs.Value(semconv.HTTPRouteKey)
+			assert.Equal(t, tt.wantRoute != "", ok)
+			assert.Equal(t, tt.wantRoute, route.AsString())
+			wantCode := codes.Unset
+			if tt.wantStatus >= http.StatusInternalServerError {
+				wantCode = codes.Error
+			}
+			assert.Equal(t, wantCode, span.Status().Code)
 		})
 	}
 }
@@ -274,7 +301,7 @@ func TestNew_RecordsHTTPServerMetrics(t *testing.T) {
 func TestNew_RecordsBodySizes(t *testing.T) {
 	t.Parallel()
 	metrics := telemetrytest.New(t)
-	r := New(Options{}, loggertest.Discard(), metrics.MeterProvider())
+	r := New(Options{}, loggertest.Discard(), metrics.MeterProvider(), tracenoop.NewTracerProvider())
 	r.Post("/echo", func(w http.ResponseWriter, req *http.Request) { _, _ = io.Copy(w, req.Body) })
 
 	rec := httptest.NewRecorder()
@@ -307,24 +334,139 @@ func TestNew_SkipsUnmeasuredPaths(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
 			t.Parallel()
-			metrics := telemetrytest.New(t)
-			r := New(Options{UnmeasuredPaths: []string{"/api/v1/health"}}, loggertest.Discard(), metrics.MeterProvider())
+			tel := telemetrytest.New(t)
+			r := New(Options{UnmeasuredPaths: []string{"/api/v1/health"}}, loggertest.Discard(), tel.MeterProvider(),
+				tel.TracerProvider())
 			r.Mount("/api/v1/health", health)
 
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.path, nil))
 			require.Equal(t, tt.wantStatus, rec.Code)
 
-			_, measured := metrics.Metric(t, "http.server.request.duration")
+			_, measured := tel.Metric(t, "http.server.request.duration")
 			assert.Equal(t, tt.wantMeasured, measured)
+			assert.Equal(t, tt.wantMeasured, len(tel.Spans()) == 1, "span recorded")
 		})
 	}
+}
+
+// TestNew_ContinuesTracesOfTrustedProxiesOnly checks that the server span continues the trace of a
+// traceparent sent by a trusted proxy, and starts a new trace linked to the sent span otherwise.
+func TestNew_ContinuesTracesOfTrustedProxiesOnly(t *testing.T) {
+	t.Parallel()
+	traceID, err := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
+	require.NoError(t, err)
+	spanID, err := trace.SpanIDFromHex("00f067aa0ba902b7")
+	require.NoError(t, err)
+	sent := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled, Remote: true,
+	})
+
+	tests := map[string]struct {
+		remoteAddr  string
+		wantTrusted bool
+	}{
+		"untrusted peer": {remoteAddr: "198.51.100.1:1234"},
+		"trusted peer":   {remoteAddr: "10.0.0.1:1234", wantTrusted: true},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tel := telemetrytest.New(t)
+			r := New(Options{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}},
+				loggertest.Discard(), tel.MeterProvider(), tel.TracerProvider())
+			var gotBaggage baggage.Baggage
+			r.Get("/", func(_ http.ResponseWriter, r *http.Request) { gotBaggage = baggage.FromContext(r.Context()) })
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+			req.RemoteAddr = tt.remoteAddr
+			req.Header.Set("Traceparent", "00-"+sent.TraceID().String()+"-"+sent.SpanID().String()+"-01")
+			req.Header.Set("Baggage", "tenant=spoofed")
+			r.ServeHTTP(httptest.NewRecorder(), req)
+
+			assert.Zero(t, gotBaggage.Len(), "baggage isn't propagated")
+			spans := tel.Spans()
+			require.Len(t, spans, 1)
+			span := spans[0]
+			if tt.wantTrusted {
+				assert.Equal(t, sent.TraceID(), span.SpanContext().TraceID())
+				assert.True(t, span.Parent().Equal(sent), "parent is the sent span")
+				assert.Empty(t, span.Links())
+			} else {
+				assert.NotEqual(t, sent.TraceID(), span.SpanContext().TraceID())
+				assert.False(t, span.Parent().IsValid(), "no parent")
+				require.Len(t, span.Links(), 1)
+				assert.True(t, span.Links()[0].SpanContext.Equal(sent), "links to the sent span")
+			}
+		})
+	}
+}
+
+// TestNew_SpanClientAddressIgnoresUntrustedForwardedFor checks that a client that isn't a trusted proxy
+// can't set the span's client.address with X-Forwarded-For, and that a trusted proxy can.
+func TestNew_SpanClientAddressIgnoresUntrustedForwardedFor(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		remoteAddr  string
+		wantAddress string
+	}{
+		"untrusted peer": {remoteAddr: "198.51.100.1:1234", wantAddress: "198.51.100.1"},
+		"trusted peer":   {remoteAddr: "10.0.0.1:1234", wantAddress: "203.0.113.7"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tel := telemetrytest.New(t)
+			r := New(Options{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}},
+				loggertest.Discard(), tel.MeterProvider(), tel.TracerProvider())
+			r.Get("/", func(http.ResponseWriter, *http.Request) {})
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+			req.RemoteAddr = tt.remoteAddr
+			req.Header.Set("X-Forwarded-For", "203.0.113.7")
+			r.ServeHTTP(httptest.NewRecorder(), req)
+
+			spans := tel.Spans()
+			require.Len(t, spans, 1)
+			attrs := attribute.NewSet(spans[0].Attributes()...)
+			address, ok := attrs.Value(semconv.ClientAddressKey)
+			require.True(t, ok, "client.address is set")
+			assert.Equal(t, tt.wantAddress, address.AsString())
+		})
+	}
+}
+
+func TestNew_SpanHoldsRequestID(t *testing.T) {
+	t.Parallel()
+	tel := telemetrytest.New(t)
+	r := New(Options{}, loggertest.Discard(), tel.MeterProvider(), tel.TracerProvider())
+	r.Get("/", func(http.ResponseWriter, *http.Request) {})
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+
+	spans := tel.Spans()
+	require.Len(t, spans, 1)
+	attrs := attribute.NewSet(spans[0].Attributes()...)
+	id, ok := attrs.Value("pkgsilo.request.id")
+	require.True(t, ok, "pkgsilo.request.id is set")
+	assert.NotEmpty(t, id.AsString())
+	assert.Equal(t, rec.Header().Get(middleware.RequestIDHeader), id.AsString())
 }
 
 func TestNew_PanicsWithoutMeterProvider(t *testing.T) {
 	t.Parallel()
 
 	assert.PanicsWithValue(t, "router: New needs a meter provider", func() {
-		New(Options{}, loggertest.Discard(), nil)
+		New(Options{}, loggertest.Discard(), nil, tracenoop.NewTracerProvider())
+	})
+}
+
+func TestNew_PanicsWithoutTracerProvider(t *testing.T) {
+	t.Parallel()
+
+	assert.PanicsWithValue(t, "router: New needs a tracer provider", func() {
+		New(Options{}, loggertest.Discard(), noop.NewMeterProvider(), nil)
 	})
 }
