@@ -11,7 +11,10 @@ import (
 	"net/http"
 	"uuid"
 
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/middleware"
@@ -124,8 +127,14 @@ func Actor(r *http.Request) uuid.UUID {
 // ErrInvalidCredentials) and error. Any other error of a method is logged at error level and answered
 // with a 500. Every request is counted with meterProvider in pkgsilo.authn.attempts, by outcome, method
 // and reason.
+//
+// The methods run in the span pkgsilo.authn.authenticate from tracerProvider, so that their queries nest
+// under it. It has the attributes of pkgsilo.authn.attempts, and its status is Error only when a method
+// fails. A request that passes sets enduser.id to its identity's ID on the span that its context held
+// before, the request's server span.
 func Require(
-	logger *slog.Logger, meterProvider metric.MeterProvider, authenticators ...Authenticator,
+	logger *slog.Logger, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
+	authenticators ...Authenticator,
 ) func(http.Handler) http.Handler {
 	if len(authenticators) == 0 {
 		panic("authn: Require needs at least one authenticator")
@@ -136,48 +145,83 @@ func Require(
 		methods[i] = authenticator.Method()
 		challenges[i] = authenticator.Challenge()
 	}
-	attempts := newAttempts(meterProvider, methods)
+	base := requireHandler{
+		logger:         logger,
+		authenticators: authenticators,
+		methods:        methods,
+		challenges:     challenges,
+		attempts:       newAttempts(meterProvider, methods),
+		tracer:         tracerProvider.Tracer(tracerName),
+	}
 
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			for i, authenticator := range authenticators {
-				principal, err := authenticator.Authenticate(r)
+		h := base
+		h.next = next
 
-				switch {
-				case err == nil:
-					principal.Method = methods[i]
-					attempts.succeeded(r.Context(), i)
-					middleware.AddLogAttrs(r.Context(),
-						slog.String("identity_id", principal.IdentityID.String()),
-						slog.String("auth_method", principal.Method),
-					)
-					next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey{}, principal)))
-
-					return
-				case errors.Is(err, ErrNoCredentials):
-					continue
-				case errors.Is(err, ErrInvalidCredentials):
-					reason := rejectionReason(err)
-					attempts.rejected(r.Context(), i, reason)
-					logger.InfoContext(r.Context(), "authentication rejected",
-						"auth_method", methods[i], "reason", reason, "error", err)
-					writeUnauthorized(w, challenges)
-
-					return
-				default:
-					attempts.failed(r.Context(), i)
-					logger.ErrorContext(r.Context(), "authentication failed",
-						"auth_method", methods[i], "error", err)
-					envelope.WriteProblem(w, envelope.InternalServerErrorProblem.New(envelope.Occurrence{}))
-
-					return
-				}
-			}
-
-			attempts.missing(r.Context())
-			writeUnauthorized(w, challenges)
-		})
+		return h
 	}
+}
+
+// requireHandler is the middleware of Require in front of next.
+type requireHandler struct {
+	logger         *slog.Logger
+	authenticators []Authenticator
+	// methods and challenges hold what each authenticator returned, at its index.
+	methods    []string
+	challenges []string
+	attempts   attempts
+	tracer     trace.Tracer
+	next       http.Handler
+}
+
+func (h requireHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	// Each outcome ends the span before it responds, so that the span covers the authentication only.
+	spanCtx, span := h.tracer.Start(ctx, authenticateSpanName)
+	spanReq := r.WithContext(spanCtx)
+
+	for i, authenticator := range h.authenticators {
+		principal, err := authenticator.Authenticate(spanReq)
+
+		switch {
+		case err == nil:
+			principal.Method = h.methods[i]
+			h.attempts.succeeded(ctx, span, i)
+			span.End()
+			trace.SpanFromContext(ctx).SetAttributes(semconv.EnduserID(principal.IdentityID.String()))
+			middleware.AddLogAttrs(ctx,
+				slog.String("identity_id", principal.IdentityID.String()),
+				slog.String("auth_method", principal.Method),
+			)
+			h.next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, principalKey{}, principal)))
+
+			return
+		case errors.Is(err, ErrNoCredentials):
+			continue
+		case errors.Is(err, ErrInvalidCredentials):
+			reason := rejectionReason(err)
+			h.attempts.rejected(ctx, span, i, reason)
+			span.End()
+			h.logger.InfoContext(ctx, "authentication rejected",
+				"auth_method", h.methods[i], "reason", reason, "error", err)
+			writeUnauthorized(w, h.challenges)
+
+			return
+		default:
+			h.attempts.failed(ctx, span, i)
+			span.SetStatus(codes.Error, "authentication failed")
+			span.End()
+			// Logged with the request's context, so that the error reaches its server span.
+			h.logger.ErrorContext(ctx, "authentication failed", "auth_method", h.methods[i], "error", err)
+			envelope.WriteProblem(w, envelope.InternalServerErrorProblem.New(envelope.Occurrence{}))
+
+			return
+		}
+	}
+
+	h.attempts.missing(ctx, span)
+	span.End()
+	writeUnauthorized(w, h.challenges)
 }
 
 // writeUnauthorized answers a request without a valid credential.

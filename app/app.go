@@ -48,7 +48,7 @@ func NewHandler(
 	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger, meterProvider metric.MeterProvider,
 	tracerProvider trace.TracerProvider,
 ) http.Handler {
-	authorizer := authz.New(db, meterProvider)
+	authorizer := authz.New(db, meterProvider, tracerProvider)
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db), authorizer)
 	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db), authorizer)
@@ -60,7 +60,7 @@ func NewHandler(
 	r.Route(apiPath, func(r chi.Router) {
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())
 		r.Group(func(r chi.Router) {
-			r.Use(authn.Require(logger, meterProvider, apikeyapi.NewAuthenticator(apiKeys)))
+			r.Use(authn.Require(logger, meterProvider, tracerProvider, apikeyapi.NewAuthenticator(apiKeys)))
 			r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
 			r.Mount("/identities/{identityID}/api-keys", apikeyapi.NewHandler(apiKeys, logger).Routes())
 			r.Mount("/groups", groupapi.NewHandler(groups, logger).Routes())
