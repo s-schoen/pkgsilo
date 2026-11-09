@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -8,9 +9,21 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// requestRecordKey marks the context with which RequestLogger logs a request.
+type requestRecordKey struct{}
+
+// IsRequestRecord reports whether ctx is the context with which RequestLogger logged a request. That
+// record only repeats the response's status, which the request's span holds already, so the logger
+// records no exception on the span for it, even at error level.
+func IsRequestRecord(ctx context.Context) bool {
+	marked, _ := ctx.Value(requestRecordKey{}).(bool)
+	return marked
+}
+
 // RequestLogger logs every request once it has been handled. Responses with a 5xx status
 // are logged at error level. The request ID and the attributes of AddLogAttrs are added by the
-// logger's context handler.
+// logger's context handler. The record is no exception of the request's span (see IsRequestRecord):
+// the error that caused a 5xx is logged, and so recorded, where it happened.
 func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +44,7 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 				level = slog.LevelError
 			}
 
-			logger.LogAttrs(ctx, level, "request",
+			logger.LogAttrs(context.WithValue(ctx, requestRecordKey{}, true), level, "request",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.Int("status", status),
