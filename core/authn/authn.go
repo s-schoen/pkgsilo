@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"uuid"
 
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/trace"
@@ -130,8 +129,9 @@ func Actor(r *http.Request) uuid.UUID {
 //
 // The methods run in the span pkgsilo.authn.authenticate from tracerProvider, so that their queries nest
 // under it. It has the attributes of pkgsilo.authn.attempts, and its status is Error only when a method
-// fails. A request that passes sets enduser.id to its identity's ID on the span that its context held
-// before, the request's server span.
+// fails or panics. A method that panics counts as failed, and its panic goes on to the Recoverer. A
+// request that passes sets enduser.id to its identity's ID on the span that its context held before, the
+// request's server span.
 func Require(
 	logger *slog.Logger, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
 	authenticators ...Authenticator,
@@ -175,53 +175,72 @@ type requireHandler struct {
 }
 
 func (h requireHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// The request's context, with its server span, rather than the authentication's, which has ended.
 	ctx := r.Context()
-	// Each outcome ends the span before it responds, so that the span covers the authentication only.
-	spanCtx, span := h.tracer.Start(ctx, authenticateSpanName)
-	spanReq := r.WithContext(spanCtx)
+	principal, method, err := h.authenticate(r)
 
-	for i, authenticator := range h.authenticators {
-		principal, err := authenticator.Authenticate(spanReq)
+	switch {
+	case err == nil:
+		trace.SpanFromContext(ctx).SetAttributes(semconv.EnduserID(principal.IdentityID.String()))
+		middleware.AddLogAttrs(ctx,
+			slog.String("identity_id", principal.IdentityID.String()),
+			slog.String("auth_method", principal.Method),
+		)
+		h.next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, principalKey{}, principal)))
+	case errors.Is(err, ErrNoCredentials):
+		writeUnauthorized(w, h.challenges)
+	case errors.Is(err, ErrInvalidCredentials):
+		h.logger.InfoContext(ctx, "authentication rejected",
+			"auth_method", h.methods[method], "reason", rejectionReason(err), "error", err)
+		writeUnauthorized(w, h.challenges)
+	default:
+		h.logger.ErrorContext(ctx, "authentication failed", "auth_method", h.methods[method], "error", err)
+		envelope.WriteProblem(w, envelope.InternalServerErrorProblem.New(envelope.Occurrence{}))
+	}
+}
+
+// authenticate asks the methods in turn until one recognizes the request's credential, in the span
+// pkgsilo.authn.authenticate, and records the attempt with the span's context, so that its exemplar names
+// the span. It returns what that method returned, with the principal's Method set, and the method's index,
+// or ErrNoCredentials if no method recognized a credential.
+//
+// The span ends before authenticate returns, so that it covers the authentication only. It also ends when
+// a method panics, which counts as the method's failure, before the panic goes on to the Recoverer.
+func (h requireHandler) authenticate(r *http.Request) (principal Principal, method int, err error) {
+	ctx, span := h.tracer.Start(r.Context(), authenticateSpanName)
+	r = r.WithContext(ctx)
+	recorded := false
+	defer func() {
+		if !recorded {
+			h.attempts.failed(ctx, span, method)
+		}
+		span.End()
+	}()
+
+	for method = range h.authenticators {
+		principal, err = h.authenticators[method].Authenticate(r)
+		if errors.Is(err, ErrNoCredentials) {
+			continue
+		}
 
 		switch {
 		case err == nil:
-			principal.Method = h.methods[i]
-			h.attempts.succeeded(ctx, span, i)
-			span.End()
-			trace.SpanFromContext(ctx).SetAttributes(semconv.EnduserID(principal.IdentityID.String()))
-			middleware.AddLogAttrs(ctx,
-				slog.String("identity_id", principal.IdentityID.String()),
-				slog.String("auth_method", principal.Method),
-			)
-			h.next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, principalKey{}, principal)))
-
-			return
-		case errors.Is(err, ErrNoCredentials):
-			continue
+			principal.Method = h.methods[method]
+			h.attempts.succeeded(ctx, span, method)
 		case errors.Is(err, ErrInvalidCredentials):
-			reason := rejectionReason(err)
-			h.attempts.rejected(ctx, span, i, reason)
-			span.End()
-			h.logger.InfoContext(ctx, "authentication rejected",
-				"auth_method", h.methods[i], "reason", reason, "error", err)
-			writeUnauthorized(w, h.challenges)
-
-			return
+			h.attempts.rejected(ctx, span, method, rejectionReason(err))
 		default:
-			h.attempts.failed(ctx, span, i)
-			span.SetStatus(codes.Error, "authentication failed")
-			span.End()
-			// Logged with the request's context, so that the error reaches its server span.
-			h.logger.ErrorContext(ctx, "authentication failed", "auth_method", h.methods[i], "error", err)
-			envelope.WriteProblem(w, envelope.InternalServerErrorProblem.New(envelope.Occurrence{}))
-
-			return
+			h.attempts.failed(ctx, span, method)
 		}
+		recorded = true
+
+		return principal, method, err //nolint:wrapcheck // Unchanged, for ServeHTTP to tell the outcomes apart.
 	}
 
 	h.attempts.missing(ctx, span)
-	span.End()
-	writeUnauthorized(w, h.challenges)
+	recorded = true
+
+	return Principal{}, 0, ErrNoCredentials
 }
 
 // writeUnauthorized answers a request without a valid credential.

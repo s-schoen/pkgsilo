@@ -122,7 +122,7 @@ func stringAttrs(kvs []attribute.KeyValue) map[string]string {
 }
 
 // assertAttempts asserts that pkgsilo.authn.attempts counted exactly one request, with the attributes want,
-// and that the span pkgsilo.authn.authenticate has the same attributes.
+// and that the span pkgsilo.authn.authenticate has the same attributes and is the exemplar of the count.
 func assertAttempts(t *testing.T, got served, want map[string]string) {
 	t.Helper()
 
@@ -130,7 +130,11 @@ func assertAttempts(t *testing.T, got served, want map[string]string) {
 	require.Len(t, points, 1)
 	assert.Equal(t, int64(1), points[0].Value)
 	assert.Equal(t, want, stringAttrs(points[0].Attributes.ToSlice()), "the metric's attributes")
-	assert.Equal(t, want, stringAttrs(got.authnSpan(t).Attributes()), "the span's attributes")
+	span := got.authnSpan(t)
+	assert.Equal(t, want, stringAttrs(span.Attributes()), "the span's attributes")
+	require.Len(t, points[0].Exemplars, 1)
+	assert.Equal(t, span.SpanContext().SpanID(), trace.SpanID(points[0].Exemplars[0].SpanID),
+		"the exemplar names the span")
 }
 
 // assertNotPassed asserts that the span pkgsilo.authn.authenticate of a request that didn't pass has the
@@ -296,6 +300,35 @@ func TestRequire_AnswersOtherErrorsWith500(t *testing.T) {
 	assertAttempts(t, got, map[string]string{
 		"pkgsilo.authn.outcome": "error",
 		"pkgsilo.authn.method":  "first",
+	})
+	assertNotPassed(t, got, codes.Error)
+	assert.Equal(t, "authentication failed", got.authnSpan(t).Status().Description)
+}
+
+// TestRequire_EndsTheSpanOfAPanickingMethod checks that a method that panics counts as failed and that its
+// span ends, so that the spans of its queries keep their parent, while the panic goes on to the Recoverer.
+func TestRequire_EndsTheSpanOfAPanickingMethod(t *testing.T) {
+	t.Parallel()
+	first := newAuthenticator(t, "first")
+	first.EXPECT().Authenticate(mock.Anything).Return(authn.Principal{}, authn.ErrNoCredentials)
+	second := newAuthenticator(t, "second")
+	second.EXPECT().Authenticate(mock.Anything).RunAndReturn(func(*http.Request) (authn.Principal, error) {
+		panic("boom")
+	})
+	got := served{telemetry: telemetrytest.New(t)}
+	h := authn.Require(loggertest.Discard(), got.telemetry.MeterProvider(), got.telemetry.TracerProvider(),
+		first, second)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("the handler ran") }))
+	ctx, parent := got.telemetry.TracerProvider().Tracer("pkgsilo/test").Start(t.Context(), "parent")
+	got.parent = parent.SpanContext()
+
+	assert.PanicsWithValue(t, "boom", func() {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil))
+	})
+	parent.End()
+
+	assertAttempts(t, got, map[string]string{
+		"pkgsilo.authn.outcome": "error",
+		"pkgsilo.authn.method":  "second",
 	})
 	assertNotPassed(t, got, codes.Error)
 	assert.Equal(t, "authentication failed", got.authnSpan(t).Status().Description)
