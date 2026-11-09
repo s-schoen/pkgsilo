@@ -5,7 +5,7 @@ go 1.27.0
 toolchain go1.27.3
 
 require (
-	github.com/caarlos0/env/v11 v11.4.1
+	github.com/caarlos0/env/v11 v11.4.2
 	github.com/cedar-policy/cedar-go v1.9.0
 	github.com/exaring/otelpgx v0.13.0
 	github.com/go-chi/chi/v5 v5.5.0

@@ -12,8 +12,8 @@ github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d h1:Byv0BzEl
 github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
-github.com/caarlos0/env/v11 v11.4.1 h1:fYwH0sWEsBSMPG7t4e/PEfTFzrWrpjyygXyUnWiSwEw=
-github.com/caarlos0/env/v11 v11.4.1/go.mod h1:qupehSf/Y0TUTsxKywqRt/vJjN5nz6vauiYEUUr8P4U=
+github.com/caarlos0/env/v11 v11.4.2 h1:fosEVW/SjFBBzATf+buI6vsAfOzXxPrchST/RNzmBWQ=
+github.com/caarlos0/env/v11 v11.4.2/go.mod h1:sH0CUPGS25jkIKlk2q4qs0c+C7y++K7W3crU70JVB/k=
 github.com/cedar-policy/cedar-go v1.9.0 h1:p6KSbPT0E79gO5mXNdwAqbDPn4ypz7gX5WV0ScLWmFc=
 github.com/cedar-policy/cedar-go v1.9.0/go.mod h1:+pmZnfwQkIUKO9qHzoL2wg8Q6xn7c9le15sexhinvVw=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
