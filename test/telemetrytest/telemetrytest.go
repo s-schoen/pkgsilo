@@ -1,4 +1,4 @@
-// Package telemetrytest records the metrics of a test in memory and reads them back.
+// Package telemetrytest records the metrics and spans of a test in memory and reads them back.
 //
 // It must import nothing from pkgsilo but core/telemetry, so that the internal tests of core packages
 // such as core/router can use it without an import cycle.
@@ -13,15 +13,22 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 
 	"pkgsilo/core/telemetry"
 )
 
-// Recorder is a metric provider with the views of telemetry.New whose only reader is an SDK ManualReader,
-// so that a test reads exactly what its instruments recorded, shared with no other test.
+// Recorder holds a meter provider and a tracer provider that record in memory, shared with no other test.
+// The meter provider has the views of telemetry.New, and its only reader is an SDK ManualReader, so that
+// a test reads exactly what its instruments recorded. The tracer provider samples every span whose parent
+// is sampled or that has none, whatever OTEL_TRACES_SAMPLER says, and keeps the spans once they end.
 type Recorder struct {
-	provider *sdkmetric.MeterProvider
-	reader   *sdkmetric.ManualReader
+	meterProvider  *sdkmetric.MeterProvider
+	reader         *sdkmetric.ManualReader
+	tracerProvider *sdktrace.TracerProvider
+	spans          *tracetest.SpanRecorder
 }
 
 // New returns a Recorder, shut down at the end of the test.
@@ -29,18 +36,33 @@ func New(t *testing.T) *Recorder {
 	t.Helper()
 
 	reader := sdkmetric.NewManualReader()
-	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader), sdkmetric.WithView(telemetry.Views()...))
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader), sdkmetric.WithView(telemetry.Views()...))
+	spans := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.AlwaysSample())), sdktrace.WithSpanProcessor(spans))
 	t.Cleanup(func() {
 		//nolint:usetesting // The test's context is already canceled when cleanups run.
-		assert.NoError(t, provider.Shutdown(context.Background()))
+		ctx := context.Background()
+		assert.NoError(t, tracerProvider.Shutdown(ctx))
+		assert.NoError(t, meterProvider.Shutdown(ctx))
 	})
 
-	return &Recorder{provider: provider, reader: reader}
+	return &Recorder{meterProvider: meterProvider, reader: reader, tracerProvider: tracerProvider, spans: spans}
 }
 
-// MeterProvider returns the provider to pass to the component under test.
+// MeterProvider returns the meter provider to pass to the component under test.
 func (r *Recorder) MeterProvider() metric.MeterProvider {
-	return r.provider
+	return r.meterProvider
+}
+
+// TracerProvider returns the tracer provider to pass to the component under test.
+func (r *Recorder) TracerProvider() trace.TracerProvider {
+	return r.tracerProvider
+}
+
+// Spans returns the spans that have ended so far, in the order in which they ended.
+func (r *Recorder) Spans() []sdktrace.ReadOnlySpan {
+	return r.spans.Ended()
 }
 
 // Metric returns the metric with the given name as the provider collects it now, from whichever scope

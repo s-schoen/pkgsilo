@@ -54,14 +54,24 @@ func run() error {
 
 	log.Info("starting pkgsilo", "version", version)
 
-	tel, err := telemetry.New(ctx, telemetry.Options{Enabled: cfg.MetricsEnabled(), ServiceVersion: version})
+	// OpenTelemetry reports its own errors, such as failed exports, to a global handler, which would
+	// otherwise print them with the standard library's log.
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		log.Error("opentelemetry", "error", err)
+	}))
+
+	tel, err := telemetry.New(ctx, telemetry.Options{
+		Metrics: cfg.MetricsEnabled(), Tracing: cfg.TracingEnabled(), ServiceVersion: version,
+	})
 	if err != nil {
 		return fmt.Errorf("set up telemetry: %w", err)
 	}
 	// Deferred first, so that it runs last, once the servers and the database have stopped recording.
 	defer shutDownTelemetry(ctx, log, tel)
-	// Only for third-party code recording metrics: our own code uses the injected provider.
+	// Only for third-party code recording metrics or creating spans: our own code uses the injected
+	// providers. No global propagator: pkgsilo makes no outbound calls to propagate a trace to.
 	otel.SetMeterProvider(tel.MeterProvider())
+	otel.SetTracerProvider(tel.TracerProvider())
 
 	db, err := database.Open(ctx, database.Options{URL: cfg.DatabaseURL, MaxConns: cfg.DatabaseMaxConns},
 		tel.MeterProvider())
@@ -86,7 +96,7 @@ func run() error {
 	}
 
 	h := app.NewHandler(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, db, cfg.APIKeyPepper, log,
-		tel.MeterProvider())
+		tel.MeterProvider(), tel.TracerProvider())
 
 	return serve(ctx, cfg, log, h, tel)
 }
