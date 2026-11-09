@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -117,7 +118,9 @@ func (a attempts) rejected(ctx context.Context, span trace.Span, method int, rea
 	a.record(ctx, span, a.methods[method].rejection[reason])
 }
 
-// failed records an attempt that the method at index method in Require failed to decide.
+// failed records an attempt that the method at index method in Require failed to decide, and sets the span's
+// status to Error.
 func (a attempts) failed(ctx context.Context, span trace.Span, method int) {
 	a.record(ctx, span, a.methods[method].failure)
+	span.SetStatus(codes.Error, "authentication failed")
 }
