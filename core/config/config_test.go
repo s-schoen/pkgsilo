@@ -31,6 +31,8 @@ func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("DATABASE_MAX_CONNS", "")
 	t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
 	t.Setenv("API_KEY_PEPPER", testPepper)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -44,6 +46,7 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Empty(t, cfg.TrustedProxies)
 	assert.Equal(t, "postgres://localhost/pkgsilo", cfg.DatabaseURL)
 	assert.Equal(t, 10, cfg.DatabaseMaxConns)
+	assert.False(t, cfg.TracingEnabled())
 }
 
 func TestLoad_FromEnv(t *testing.T) {
@@ -55,6 +58,8 @@ func TestLoad_FromEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://db.internal/pkgsilo")
 	t.Setenv("DATABASE_MAX_CONNS", "25")
 	t.Setenv("API_KEY_PEPPER", testPepper)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://collector:4318/v1/traces")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -70,6 +75,33 @@ func TestLoad_FromEnv(t *testing.T) {
 	assert.Equal(t, "postgres://db.internal/pkgsilo", cfg.DatabaseURL)
 	assert.Equal(t, 25, cfg.DatabaseMaxConns)
 	assert.Equal(t, Pepper(testPepper), cfg.APIKeyPepper)
+	assert.Equal(t, "http://collector:4318", cfg.OTELExporterOTLPEndpoint)
+	assert.Equal(t, "http://collector:4318/v1/traces", cfg.OTELExporterOTLPTracesEndpoint)
+	assert.True(t, cfg.TracingEnabled())
+}
+
+func TestConfig_TracingEnabled(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		cfg  Config
+		want bool
+	}{
+		"neither":         {cfg: Config{}, want: false},
+		"blank":           {cfg: Config{OTELExporterOTLPEndpoint: " ", OTELExporterOTLPTracesEndpoint: "\t"}, want: false},
+		"endpoint":        {cfg: Config{OTELExporterOTLPEndpoint: "http://collector:4318"}, want: true},
+		"traces endpoint": {cfg: Config{OTELExporterOTLPTracesEndpoint: "http://collector:4318/v1/traces"}, want: true},
+		"both": {
+			cfg:  Config{OTELExporterOTLPEndpoint: "http://a:4318", OTELExporterOTLPTracesEndpoint: "http://b:4318"},
+			want: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.cfg.TracingEnabled())
+		})
+	}
 }
 
 func TestLoad_MetricsOff(t *testing.T) {

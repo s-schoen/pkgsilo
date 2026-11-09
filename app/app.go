@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"pkgsilo/core/authn"
 	"pkgsilo/core/authz"
@@ -44,6 +45,7 @@ const (
 // authentications and authorization decisions.
 func NewHandler(
 	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger, meterProvider metric.MeterProvider,
+	_ trace.TracerProvider,
 ) http.Handler {
 	authorizer := authz.New(db, meterProvider)
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))

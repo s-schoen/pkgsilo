@@ -30,6 +30,11 @@ type Config struct {
 	DatabaseMaxConns int `env:"DATABASE_MAX_CONNS" envDefault:"10"`
 	// APIKeyPepper is the secret key of the stored API key hashes. Changing it invalidates every API key.
 	APIKeyPepper Pepper `env:"API_KEY_PEPPER,notEmpty"`
+	// OTELExporterOTLPEndpoint and OTELExporterOTLPTracesEndpoint are the standard OpenTelemetry variables
+	// of the OTLP exporter's endpoint. Either turns tracing on. The exporter reads them, and every other
+	// OTEL_* variable, itself.
+	OTELExporterOTLPEndpoint       string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	OTELExporterOTLPTracesEndpoint string `env:"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"`
 }
 
 // defaultMetricsAddr is the address of the metrics listener if METRICS_ADDR is unset.
@@ -53,6 +58,13 @@ func Load() (Config, error) {
 // MetricsEnabled reports whether the application serves metrics.
 func (c Config) MetricsEnabled() bool {
 	return c.MetricsAddr != ""
+}
+
+// TracingEnabled reports whether the application exports spans: whether one of the OTLP endpoints is set.
+// Like the exporter, it ignores blank values.
+func (c Config) TracingEnabled() bool {
+	return strings.TrimSpace(c.OTELExporterOTLPEndpoint) != "" ||
+		strings.TrimSpace(c.OTELExporterOTLPTracesEndpoint) != ""
 }
 
 // IsDev reports whether the application runs in the development environment.

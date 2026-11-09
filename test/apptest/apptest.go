@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"pkgsilo/app"
 	"pkgsilo/core/logger"
@@ -89,12 +90,12 @@ func newApp(t *testing.T, meterProvider metric.MeterProvider) (*apitest.Client, 
 	return apitest.NewClient(t, newHandler(t, db, meterProvider)).WithHeader(apiKeyHeader, key), db
 }
 
-// newTelemetry returns the enabled telemetry of an application instance, which is shut down at the end of
-// the test, after the database has been closed.
+// newTelemetry returns the telemetry of an application instance with metrics on, which is shut down at the
+// end of the test, after the database has been closed.
 func newTelemetry(t *testing.T) *telemetry.Telemetry {
 	t.Helper()
 
-	tel, err := telemetry.New(t.Context(), telemetry.Options{Enabled: true, ServiceVersion: "test"})
+	tel, err := telemetry.New(t.Context(), telemetry.Options{Metrics: true, ServiceVersion: "test"})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		//nolint:usetesting // The test's context is already canceled when cleanups run.
@@ -110,7 +111,7 @@ func newHandler(t *testing.T, db *sqlx.DB, meterProvider metric.MeterProvider) h
 	t.Helper()
 
 	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper),
-		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), meterProvider)
+		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), meterProvider, tracenoop.NewTracerProvider())
 }
 
 // NewIdentity creates an identity with the given username and an API key of its own through the client

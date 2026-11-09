@@ -102,6 +102,37 @@ func TestSumPoints_WrongType(t *testing.T) {
 	assert.Contains(t, failed.Messages(), "metric test.seconds is a metricdata.Sum[float64], no sum of int64")
 }
 
+func TestSpans(t *testing.T) {
+	t.Parallel()
+	rec := New(t)
+	tracer := rec.TracerProvider().Tracer("pkgsilo/test")
+
+	ctx, parent := tracer.Start(t.Context(), "test.parent")
+	_, child := tracer.Start(ctx, "test.child")
+	child.End()
+	_, unended := tracer.Start(ctx, "test.unended")
+	parent.End()
+
+	spans := rec.Spans()
+
+	require.Len(t, spans, 2)
+	assert.Equal(t, "test.child", spans[0].Name())
+	assert.Equal(t, "test.parent", spans[1].Name())
+	assert.Equal(t, spans[1].SpanContext().SpanID(), spans[0].Parent().SpanID())
+	assert.True(t, spans[0].SpanContext().IsSampled())
+	unended.End()
+}
+
+func TestNew_SamplesWhateverTheEnvironmentSays(t *testing.T) {
+	t.Setenv("OTEL_TRACES_SAMPLER", "always_off")
+	rec := New(t)
+
+	_, span := rec.TracerProvider().Tracer("pkgsilo/test").Start(t.Context(), "test.operation")
+	span.End()
+
+	assert.Len(t, rec.Spans(), 1)
+}
+
 func TestNew_AppliesTelemetryViews(t *testing.T) {
 	t.Parallel()
 	rec := New(t)
