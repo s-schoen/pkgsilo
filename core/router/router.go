@@ -83,7 +83,12 @@ func New(
 //
 // The span continues the trace of an incoming traceparent only if the request's direct peer is one of
 // opts.TrustedProxies. Any other request starts a new trace that links to the caller's span, so that no
-// client can choose its trace ID or force it to be sampled. Baggage isn't propagated.
+// client can choose its trace ID or force it to be sampled. With tracing off, a request's context holds no
+// span context at all, not even a trusted proxy's, so that no trace reaches the exemplars of its metrics
+// (see serverTracer.Start). Baggage isn't propagated.
+//
+// A 5xx response sets the span's status to Error, without erasing the description of an error that the
+// logger recorded on it (see serverSpan.SetStatus).
 //
 // It must run as a middleware of the root router: chi returns its route context to a pool once
 // the router's ServeHTTP returns, and the route is known only once the request is answered.
@@ -100,7 +105,7 @@ func measure(
 
 	otel := otelhttp.NewMiddleware("http.server",
 		otelhttp.WithMeterProvider(meterProvider),
-		otelhttp.WithTracerProvider(tracerProvider),
+		otelhttp.WithTracerProvider(serverTracerProvider{tracerProvider}),
 		// Never the global propagator, which cmd/main.go leaves unset.
 		otelhttp.WithPropagators(propagation.TraceContext{}),
 		otelhttp.WithPublicEndpointFn(func(r *http.Request) bool { return !trusted.ContainsPeer(r) }),

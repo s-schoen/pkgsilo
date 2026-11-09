@@ -1,6 +1,7 @@
 package router
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric/noop"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
@@ -155,7 +157,7 @@ func TestNew_RecoveredPanicIsOneExceptionOfServerSpan(t *testing.T) {
 
 	spans := tel.Spans()
 	require.Len(t, spans, 1)
-	assert.Equal(t, codes.Error, spans[0].Status().Code)
+	assert.Equal(t, sdktrace.Status{Code: codes.Error, Description: "boom"}, spans[0].Status())
 	events := spans[0].Events()
 	require.Len(t, events, 1)
 	assert.Equal(t, semconv.ExceptionEventName, events[0].Name)
@@ -168,6 +170,43 @@ func TestNew_RecoveredPanicIsOneExceptionOfServerSpan(t *testing.T) {
 	for _, entry := range entries {
 		assert.Equal(t, spans[0].SpanContext().TraceID().String(), entry["trace_id"])
 		assert.Equal(t, spans[0].SpanContext().SpanID().String(), entry["span_id"])
+	}
+}
+
+// TestNew_ServerErrorStatusKeepsLoggedError checks that the Error status that otelhttp sets on the server span
+// of a 5xx response keeps the description of an error that the handler logged, and has none otherwise.
+func TestNew_ServerErrorStatusKeepsLoggedError(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		logged error
+		want   sdktrace.Status
+	}{
+		"logged error": {
+			logged: errors.New("database down"),
+			want:   sdktrace.Status{Code: codes.Error, Description: "database down"},
+		},
+		"no logged error": {want: sdktrace.Status{Code: codes.Error}},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tel := telemetrytest.New(t)
+			logger, _ := loggertest.NewJSON()
+			r := New(Options{}, logger, tel.MeterProvider(), tel.TracerProvider())
+			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				if tt.logged != nil {
+					logger.ErrorContext(r.Context(), "request failed", "error", tt.logged)
+				}
+				w.WriteHeader(http.StatusServiceUnavailable)
+			})
+
+			r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+
+			spans := tel.Spans()
+			require.Len(t, spans, 1)
+			assert.Equal(t, tt.want, spans[0].Status())
+		})
 	}
 }
 
@@ -199,9 +238,14 @@ func TestNew_EncodingFailureIsLoggedWithRequestID(t *testing.T) {
 // TestNew_RecordsHTTPServerTelemetry checks the metrics and the server span of each request.
 func TestNew_RecordsHTTPServerTelemetry(t *testing.T) {
 	t.Parallel()
-	sub := chi.NewRouter()
-	sub.Get("/{itemID}", func(http.ResponseWriter, *http.Request) {})
-	sub.Get("/missing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	// A new subrouter for each router, since mounting writes the parent's 404 and 405 handlers into it.
+	newSub := func() chi.Router {
+		sub := chi.NewRouter()
+		sub.Get("/{itemID}", func(http.ResponseWriter, *http.Request) {})
+		sub.Get("/missing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+
+		return sub
+	}
 	// Answers every request with a 401 before the subrouter mounted behind it routes it, as authn.Require does.
 	unauthorized := func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) })
@@ -269,8 +313,8 @@ func TestNew_RecordsHTTPServerTelemetry(t *testing.T) {
 			r.Get("/panic", func(http.ResponseWriter, *http.Request) { panic("boom") })
 			r.Get("/files/*", func(http.ResponseWriter, *http.Request) {})
 			r.Route("/api/v1", func(r chi.Router) {
-				r.Mount("/things/{thingID}/items", sub)
-				r.With(unauthorized).Mount("/guarded/{thingID}/items", sub)
+				r.Mount("/things/{thingID}/items", newSub())
+				r.With(unauthorized).Mount("/guarded/{thingID}/items", newSub())
 			})
 
 			rec := httptest.NewRecorder()
@@ -346,8 +390,6 @@ func TestNew_RecordsBodySizes(t *testing.T) {
 
 func TestNew_SkipsUnmeasuredPaths(t *testing.T) {
 	t.Parallel()
-	health := chi.NewRouter()
-	health.Get("/", func(http.ResponseWriter, *http.Request) {})
 
 	tests := []struct {
 		path         string
@@ -366,6 +408,9 @@ func TestNew_SkipsUnmeasuredPaths(t *testing.T) {
 			tel := telemetrytest.New(t)
 			r := New(Options{UnmeasuredPaths: []string{"/api/v1/health"}}, loggertest.Discard(), tel.MeterProvider(),
 				tel.TracerProvider())
+			// A new subrouter for each router, since mounting writes the parent's 404 and 405 handlers into it.
+			health := chi.NewRouter()
+			health.Get("/", func(http.ResponseWriter, *http.Request) {})
 			r.Mount("/api/v1/health", health)
 
 			rec := httptest.NewRecorder()
@@ -417,6 +462,11 @@ func TestNew_ContinuesTracesOfTrustedProxiesOnly(t *testing.T) {
 			spans := tel.Spans()
 			require.Len(t, spans, 1)
 			span := spans[0]
+			duration := telemetrytest.HistogramPoints[float64](t, tel, "http.server.request.duration")
+			require.Len(t, duration, 1)
+			require.Len(t, duration[0].Exemplars, 1)
+			assert.Equal(t, span.SpanContext().TraceID(), trace.TraceID(duration[0].Exemplars[0].TraceID),
+				"the exemplar names the server span's trace")
 			if tt.wantTrusted {
 				assert.Equal(t, sent.TraceID(), span.SpanContext().TraceID())
 				assert.True(t, span.Parent().Equal(sent), "parent is the sent span")
@@ -427,6 +477,34 @@ func TestNew_ContinuesTracesOfTrustedProxiesOnly(t *testing.T) {
 				require.Len(t, span.Links(), 1)
 				assert.True(t, span.Links()[0].SpanContext.Equal(sent), "links to the sent span")
 			}
+		})
+	}
+}
+
+// TestNew_IgnoresTraceparentWithoutTracing checks that with tracing off, the span context of a sampled
+// traceparent reaches neither the request's context nor the exemplars of its metrics, whoever sends it.
+func TestNew_IgnoresTraceparentWithoutTracing(t *testing.T) {
+	t.Parallel()
+
+	peers := map[string]string{"untrusted peer": "198.51.100.1:1234", "trusted peer": "10.0.0.1:1234"}
+	for name, remoteAddr := range peers {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tel := telemetrytest.New(t)
+			r := New(Options{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}},
+				loggertest.Discard(), tel.MeterProvider(), tracenoop.NewTracerProvider())
+			var got trace.SpanContext
+			r.Get("/", func(_ http.ResponseWriter, r *http.Request) { got = trace.SpanContextFromContext(r.Context()) })
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+			req.RemoteAddr = remoteAddr
+			req.Header.Set("Traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+			r.ServeHTTP(httptest.NewRecorder(), req)
+
+			assert.False(t, got.IsValid(), "the handler's context holds no span context")
+			duration := telemetrytest.HistogramPoints[float64](t, tel, "http.server.request.duration")
+			require.Len(t, duration, 1)
+			assert.Empty(t, duration[0].Exemplars)
 		})
 	}
 }
