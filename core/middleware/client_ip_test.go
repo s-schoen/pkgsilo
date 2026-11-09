@@ -114,3 +114,31 @@ func TestClientIPFromContext_Empty(t *testing.T) {
 	t.Parallel()
 	assert.False(t, middleware.ClientIPFromContext(t.Context()).IsValid())
 }
+
+func TestTrustedProxies_ContainsPeer(t *testing.T) {
+	t.Parallel()
+	trusted := middleware.TrustedProxies{
+		netip.MustParsePrefix("10.0.0.0/8"),
+		netip.MustParsePrefix("2001:db8:ffff::1/128"),
+	}
+
+	tests := map[string]struct {
+		remoteAddr string
+		want       bool
+	}{
+		"trusted IPv4 peer":        {remoteAddr: "10.0.0.1:1234", want: true},
+		"trusted IPv6 peer":        {remoteAddr: "[2001:db8:ffff::1]:1234", want: true},
+		"IPv4-mapped trusted peer": {remoteAddr: "[::ffff:10.0.0.1]:1234", want: true},
+		"untrusted peer":           {remoteAddr: "198.51.100.1:1234"},
+		"unparsable peer":          {remoteAddr: "not-an-ip"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+			req.RemoteAddr = tt.remoteAddr
+
+			assert.Equal(t, tt.want, trusted.ContainsPeer(req))
+		})
+	}
+}

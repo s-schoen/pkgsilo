@@ -42,10 +42,11 @@ const (
 // on the router that opts configures. All routes but the health check need an authenticated request.
 // API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger, and
 // metrics are recorded with meterProvider: every request but a health check is measured, and so are
-// authentications and authorization decisions.
+// authentications and authorization decisions. Every request but a health check gets a server span from
+// tracerProvider.
 func NewHandler(
 	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger, meterProvider metric.MeterProvider,
-	_ trace.TracerProvider,
+	tracerProvider trace.TracerProvider,
 ) http.Handler {
 	authorizer := authz.New(db, meterProvider)
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
@@ -55,7 +56,7 @@ func NewHandler(
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema())
 
 	opts.UnmeasuredPaths = slices.Concat(opts.UnmeasuredPaths, []string{apiPath + healthPath})
-	r := router.New(opts, logger, meterProvider)
+	r := router.New(opts, logger, meterProvider, tracerProvider)
 	r.Route(apiPath, func(r chi.Router) {
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())
 		r.Group(func(r chi.Router) {

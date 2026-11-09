@@ -7,13 +7,17 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
-// trustedProxies lists the reverse proxies whose X-Forwarded-For entries are trusted.
-type trustedProxies []netip.Prefix
+// TrustedProxies lists the reverse proxies whose X-Forwarded-For entries are trusted. It must not
+// hold IPv4-mapped IPv6 prefixes, since addresses are matched unmapped.
+type TrustedProxies []netip.Prefix
 
-// contains reports whether addr belongs to a trusted proxy.
-func (tp trustedProxies) contains(addr netip.Addr) bool {
+// Contains reports whether addr belongs to a trusted proxy.
+func (tp TrustedProxies) Contains(addr netip.Addr) bool {
 	for _, prefix := range tp {
 		if prefix.Contains(addr) {
 			return true
@@ -23,20 +27,36 @@ func (tp trustedProxies) contains(addr netip.Addr) bool {
 	return false
 }
 
+// ContainsPeer reports whether the request's direct peer, its RemoteAddr, is a trusted proxy.
+func (tp TrustedProxies) ContainsPeer(r *http.Request) bool {
+	peer, ok := parseIP(r.RemoteAddr)
+
+	return ok && tp.Contains(peer)
+}
+
 type clientIPKey struct{}
 
-// ClientIP resolves the client's IP address and stores it in the request context.
+// ClientIP resolves the client's IP address and stores it in the request context. It also sets it as
+// client.address on the span in the request context, overwriting what otelhttp took from
+// X-Forwarded-For whatever the peer, or the empty string if the peer's address can't be parsed.
 //
 // X-Forwarded-For is only honored when the direct peer is a trusted proxy. Its entries are then
 // walked from right to left, skipping trusted proxies; the first untrusted entry is the client.
 // Everything further left is client-controlled and ignored. r.RemoteAddr is left untouched.
 // Peers are matched as unmapped IPs, so trusted must not hold IPv4-mapped IPv6 prefixes.
 func ClientIP(trusted []netip.Prefix) func(http.Handler) http.Handler {
-	tp := trustedProxies(trusted)
+	tp := TrustedProxies(trusted)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), clientIPKey{}, tp.clientIP(r))
+			ip := tp.clientIP(r)
+			address := ""
+			if ip.IsValid() {
+				address = ip.String()
+			}
+			trace.SpanFromContext(r.Context()).SetAttributes(semconv.ClientAddress(address))
+
+			ctx := context.WithValue(r.Context(), clientIPKey{}, ip)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -48,9 +68,9 @@ func ClientIPFromContext(ctx context.Context) netip.Addr {
 	return ip
 }
 
-func (tp trustedProxies) clientIP(r *http.Request) netip.Addr {
+func (tp TrustedProxies) clientIP(r *http.Request) netip.Addr {
 	client, ok := parseIP(r.RemoteAddr)
-	if !ok || !tp.contains(client) {
+	if !ok || !tp.Contains(client) {
 		return client
 	}
 
@@ -65,7 +85,7 @@ func (tp trustedProxies) clientIP(r *http.Request) netip.Addr {
 		}
 
 		client = hop
-		if !tp.contains(hop) {
+		if !tp.Contains(hop) {
 			break
 		}
 	}

@@ -5,13 +5,15 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
-	tracenoop "go.opentelemetry.io/otel/trace/noop"
+	"go.opentelemetry.io/otel/trace"
 
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/middleware"
@@ -20,32 +22,40 @@ import (
 // Options configures the router.
 type Options struct {
 	// TrustedProxies are the reverse proxies whose X-Forwarded-For header determines the
-	// client IP. Empty: the header is ignored.
+	// client IP, and whose traceparent header a request's trace continues. Empty: both
+	// headers are ignored, and every request starts a new trace that links to the caller's.
 	TrustedProxies []netip.Prefix
 	// Dev prints the stack traces of recovered panics in a readable form instead of logging them.
 	Dev bool
-	// UnmeasuredPaths are the paths whose requests aren't measured, such as the health check, which
-	// would only measure the health checker. A path matches with a trailing slash too, since a
-	// subrouter mounted at it serves both.
+	// UnmeasuredPaths are the paths whose requests aren't measured and get no span, such as the
+	// health check, which would only measure the health checker. A path matches with a trailing
+	// slash too, since a subrouter mounted at it serves both.
 	UnmeasuredPaths []string
 }
 
 // New returns a chi router with the middleware shared by all features, which records the HTTP server
-// metrics of every request with meterProvider. It panics if meterProvider is nil.
+// metrics of every request with meterProvider and its server span with tracerProvider. It panics if
+// either provider is nil.
 //
 // Unmatched routes and methods are answered with Problem Details. Subrouters inherit these
 // handlers only when mounted after New returns.
-func New(opts Options, logger *slog.Logger, meterProvider metric.MeterProvider) *chi.Mux {
+func New(
+	opts Options, logger *slog.Logger, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
+) *chi.Mux {
 	if meterProvider == nil {
 		panic("router: New needs a meter provider")
 	}
+	if tracerProvider == nil {
+		panic("router: New needs a tracer provider")
+	}
 
 	r := chi.NewRouter()
-	// Order matters: the metrics middleware comes first, so that it measures what the middleware
-	// below writes too, such as the 500 of a recovered panic. RequestLogger reads the request ID
-	// and client IP from the context it receives, so both must be set before it. Recoverer must
-	// sit inside RequestLogger so that recovered panics are logged with their 500 status.
-	r.Use(measure(meterProvider, opts.UnmeasuredPaths))
+	// Order matters: the telemetry middleware comes first, so that it measures what the middleware
+	// below writes too, such as the 500 of a recovered panic, and so that RequestID and ClientIP
+	// find its span. RequestLogger reads the request ID and client IP from the context it
+	// receives, so both must be set before it. Recoverer must sit inside RequestLogger so that
+	// recovered panics are logged with their 500 status.
+	r.Use(measure(meterProvider, tracerProvider, opts))
 	r.Use(middleware.RequestID)
 	r.Use(middleware.ClientIP(opts.TrustedProxies))
 	r.Use(middleware.RequestLogger(logger))
@@ -67,23 +77,35 @@ func New(opts Options, logger *slog.Logger, meterProvider metric.MeterProvider) 
 	return r
 }
 
-// measure returns the middleware that records the HTTP server metrics of semconv with provider, http.route
-// being the chi route pattern of the request, for every request but those to the unmeasured paths.
+// measure returns the middleware that records the HTTP server metrics of semconv with meterProvider and the
+// server span with tracerProvider, for every request but those to opts.UnmeasuredPaths. http.route is the
+// chi route pattern of the request, and the span is named after it.
+//
+// The span continues the trace of an incoming traceparent only if the request's direct peer is one of
+// opts.TrustedProxies. Any other request starts a new trace that links to the caller's span, so that no
+// client can choose its trace ID or force it to be sampled. Baggage isn't propagated.
 //
 // It must run as a middleware of the root router: chi returns its route context to a pool once
 // the router's ServeHTTP returns, and the route is known only once the request is answered.
 // otelhttp's own route, from Request.Pattern, can't be used: chi sets it only on the copy of the
 // request that it passes to the route's handler.
-func measure(provider metric.MeterProvider, unmeasuredPaths []string) func(http.Handler) http.Handler {
-	unmeasured := make(map[string]bool, len(unmeasuredPaths))
-	for _, path := range unmeasuredPaths {
+func measure(
+	meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider, opts Options,
+) func(http.Handler) http.Handler {
+	unmeasured := make(map[string]bool, len(opts.UnmeasuredPaths))
+	for _, path := range opts.UnmeasuredPaths {
 		unmeasured[strings.TrimSuffix(path, "/")] = true
 	}
+	trusted := middleware.TrustedProxies(opts.TrustedProxies)
 
 	otel := otelhttp.NewMiddleware("http.server",
-		otelhttp.WithMeterProvider(provider),
-		// Spans come with tracing, which isn't set up: until then, none are created.
-		otelhttp.WithTracerProvider(tracenoop.NewTracerProvider()),
+		otelhttp.WithMeterProvider(meterProvider),
+		otelhttp.WithTracerProvider(tracerProvider),
+		// Never the global propagator, which cmd/main.go leaves unset.
+		otelhttp.WithPropagators(propagation.TraceContext{}),
+		otelhttp.WithPublicEndpointFn(func(r *http.Request) bool { return !trusted.ContainsPeer(r) }),
+		// Named before chi routes the request: labelRoute adds the route once it's known.
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return spanMethod(r) }),
 		// By the path that chi routes, so that a path it routes elsewhere is measured.
 		otelhttp.WithFilter(func(r *http.Request) bool {
 			return !unmeasured[strings.TrimSuffix(routingPath(r), "/")]
@@ -96,15 +118,32 @@ func measure(provider metric.MeterProvider, unmeasuredPaths []string) func(http.
 }
 
 // labelRoute adds the request's route pattern as http.route to the labeler of otelhttp, which reads it
-// once next returns.
+// once next returns, and to the server span, which it renames to "{method} {route}". A request without a
+// route keeps its span's name.
 func labelRoute(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(w, r)
-		if route := routePattern(r); route != "" {
-			labeler, _ := otelhttp.LabelerFromContext(r.Context())
-			labeler.Add(semconv.HTTPRoute(route))
+		route := routePattern(r)
+		if route == "" {
+			return
 		}
+		labeler, _ := otelhttp.LabelerFromContext(r.Context())
+		labeler.Add(semconv.HTTPRoute(route))
+		span := trace.SpanFromContext(r.Context())
+		span.SetName(spanMethod(r) + " " + route)
+		span.SetAttributes(semconv.HTTPRoute(route))
 	})
+}
+
+// spanMethod returns the request's method as a server span's name begins with it: in upper case, or HTTP
+// for a method that semconv doesn't know, which the metrics record as _OTHER.
+func spanMethod(r *http.Request) string {
+	method := strings.ToUpper(r.Method)
+	if !slices.Contains(standardMethods, method) {
+		return "HTTP"
+	}
+
+	return method
 }
 
 // routePattern returns the pattern of the route that the request matches, or "" if it matches none.
