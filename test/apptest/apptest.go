@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"pkgsilo/app"
@@ -27,6 +28,7 @@ import (
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/test/apitest"
 	"pkgsilo/test/databasetest"
+	"pkgsilo/test/telemetrytest"
 )
 
 const (
@@ -52,7 +54,7 @@ func New(t *testing.T) *apitest.Client {
 func NewWithDB(t *testing.T) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
-	return newApp(t, noop.NewMeterProvider())
+	return newApp(t, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 }
 
 // NewWithMetrics is like New, but with metrics enabled, and also returns a client for the application's
@@ -61,25 +63,39 @@ func NewWithMetrics(t *testing.T) (api, metrics *apitest.Client) {
 	t.Helper()
 
 	tel := newTelemetry(t)
-	api, _ = newApp(t, tel.MeterProvider())
+	api, _ = newApp(t, tel.MeterProvider(), tracenoop.NewTracerProvider())
 
 	return api, apitest.NewClient(t, tel.Handler())
+}
+
+// NewWithTracing is like New, but with tracing enabled, and also returns the recorder that holds the spans
+// that the application creates once they end. The application records no metrics.
+func NewWithTracing(t *testing.T) (api *apitest.Client, spans *telemetrytest.Recorder) {
+	t.Helper()
+
+	spans = telemetrytest.New(t)
+	api, _ = newApp(t, noop.NewMeterProvider(), spans.TracerProvider())
+
+	return api, spans
 }
 
 // NewInstance returns a client for another instance of the application on db, which NewWithDB returned
 // together with api. The client authenticates like api. The instances share nothing but the database, like
 // the instances of a deployment. Unlike in a deployment, they also share db's connection pool. The new
-// instance records no metrics.
+// instance records no metrics and creates no spans.
 func NewInstance(t *testing.T, api *apitest.Client, db *sqlx.DB) *apitest.Client {
 	t.Helper()
 
-	return api.WithHandler(newHandler(t, db, noop.NewMeterProvider()))
+	return api.WithHandler(newHandler(t, db, noop.NewMeterProvider(), tracenoop.NewTracerProvider()))
 }
 
 // newApp returns a client for the application on a new database with all migrations applied and the
 // first start done, and that database. The client authenticates as admin. As in cmd/main.go, the
-// application and its database record their metrics with the same provider.
-func newApp(t *testing.T, meterProvider metric.MeterProvider) (*apitest.Client, *sqlx.DB) {
+// application and its database record their metrics with the same provider, and the application creates
+// its spans with tracerProvider.
+func newApp(
+	t *testing.T, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
+) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
 	db := databasetest.NewWithMeterProvider(t, meterProvider)
@@ -87,7 +103,7 @@ func newApp(t *testing.T, meterProvider metric.MeterProvider) (*apitest.Client, 
 	key, err := app.Bootstrap(t.Context(), db, []byte(apiKeyPepper))
 	require.NoError(t, err)
 
-	return apitest.NewClient(t, newHandler(t, db, meterProvider)).WithHeader(apiKeyHeader, key), db
+	return apitest.NewClient(t, newHandler(t, db, meterProvider, tracerProvider)).WithHeader(apiKeyHeader, key), db
 }
 
 // newTelemetry returns the telemetry of an application instance with metrics on, which is shut down at the
@@ -106,12 +122,14 @@ func newTelemetry(t *testing.T) *telemetry.Telemetry {
 }
 
 // newHandler returns the application, wired as cmd/main.go serves it, on db, recording its metrics with
-// meterProvider. It logs to the test's output.
-func newHandler(t *testing.T, db *sqlx.DB, meterProvider metric.MeterProvider) http.Handler {
+// meterProvider and creating its spans with tracerProvider. It logs to the test's output.
+func newHandler(
+	t *testing.T, db *sqlx.DB, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
+) http.Handler {
 	t.Helper()
 
 	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper),
-		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), meterProvider, tracenoop.NewTracerProvider())
+		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), meterProvider, tracerProvider)
 }
 
 // NewIdentity creates an identity with the given username and an API key of its own through the client

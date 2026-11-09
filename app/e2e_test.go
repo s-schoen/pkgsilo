@@ -9,6 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 
 	"pkgsilo/core/telemetry"
 	identityapi "pkgsilo/feature/identity/api"
@@ -78,4 +81,39 @@ func TestMetrics(t *testing.T) {
 		assert.Regexp(t, `(?m)^pkgsilo_authn_attempts_total\{[^}]*`+attempts+`$`, body)
 	}
 	assert.Regexp(t, `(?m)^pkgsilo_authz_decisions_total\{[^}]*pkgsilo_authz_decision="allow"\} [1-9]\d*$`, body)
+}
+
+// TestTracing checks that the app creates the spans of a request with the tracer provider it's given:
+//
+//  1. List the identities with a traceparent header: 200.
+//  2. Find the spans: one server span named GET /api/v1/identities, which holds the request ID of the
+//     response. The test client isn't a trusted proxy, so the span starts a new trace instead of
+//     continuing the sent one, and links to the sent span.
+func TestTracing(t *testing.T) {
+	t.Parallel()
+	api, spans := apptest.NewWithTracing(t)
+	const sentTraceID, sentSpanID = "4bf92f3577b34da6a3ce929d0e0e4736", "00f067aa0ba902b7"
+
+	// 1. List.
+	list := api.WithHeader("Traceparent", "00-"+sentTraceID+"-"+sentSpanID+"-01").Get("/api/v1/identities")
+	list.AssertStatus(http.StatusOK)
+
+	// 2. Find the spans.
+	var servers []sdktrace.ReadOnlySpan
+	for _, span := range spans.Spans() {
+		if span.SpanKind() == trace.SpanKindServer {
+			servers = append(servers, span)
+		}
+	}
+	require.Len(t, servers, 1)
+	server := servers[0]
+	assert.Equal(t, "GET /api/v1/identities", server.Name())
+	attrs := attribute.NewSet(server.Attributes()...)
+	requestID, _ := attrs.Value("pkgsilo.request.id")
+	assert.Equal(t, list.Header().Get("X-Request-ID"), requestID.AsString())
+	assert.NotEqual(t, sentTraceID, server.SpanContext().TraceID().String())
+	assert.False(t, server.Parent().IsValid(), "the server span has no parent")
+	require.Len(t, server.Links(), 1)
+	assert.Equal(t, sentTraceID, server.Links()[0].SpanContext.TraceID().String())
+	assert.Equal(t, sentSpanID, server.Links()[0].SpanContext.SpanID().String())
 }
