@@ -33,6 +33,8 @@ func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("API_KEY_PEPPER", testPepper)
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("OTEL_SDK_DISABLED", "")
+	t.Setenv("OTEL_TRACES_EXPORTER", "")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -60,6 +62,8 @@ func TestLoad_FromEnv(t *testing.T) {
 	t.Setenv("API_KEY_PEPPER", testPepper)
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://collector:4318/v1/traces")
+	t.Setenv("OTEL_SDK_DISABLED", "false")
+	t.Setenv("OTEL_TRACES_EXPORTER", "OTLP")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -77,7 +81,28 @@ func TestLoad_FromEnv(t *testing.T) {
 	assert.Equal(t, Pepper(testPepper), cfg.APIKeyPepper)
 	assert.Equal(t, "http://collector:4318", cfg.OTELExporterOTLPEndpoint)
 	assert.Equal(t, "http://collector:4318/v1/traces", cfg.OTELExporterOTLPTracesEndpoint)
+	assert.Equal(t, "false", cfg.OTELSDKDisabled)
+	assert.Equal(t, TracesExporterOTLP, cfg.OTELTracesExporter)
 	assert.True(t, cfg.TracingEnabled())
+}
+
+func TestLoad_TracingOff(t *testing.T) {
+	tests := map[string]string{"OTEL_SDK_DISABLED": "true", "OTEL_TRACES_EXPORTER": "none"}
+	for key, value := range tests {
+		t.Run(key, func(t *testing.T) {
+			t.Setenv("DATABASE_URL", "postgres://localhost/pkgsilo")
+			t.Setenv("API_KEY_PEPPER", testPepper)
+			t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
+			t.Setenv("OTEL_SDK_DISABLED", "")
+			t.Setenv("OTEL_TRACES_EXPORTER", "")
+			t.Setenv(key, value)
+
+			cfg, err := Load()
+			require.NoError(t, err)
+
+			assert.False(t, cfg.TracingEnabled())
+		})
+	}
 }
 
 func TestConfig_TracingEnabled(t *testing.T) {
@@ -92,6 +117,27 @@ func TestConfig_TracingEnabled(t *testing.T) {
 		"traces endpoint": {cfg: Config{OTELExporterOTLPTracesEndpoint: "http://collector:4318/v1/traces"}, want: true},
 		"both": {
 			cfg:  Config{OTELExporterOTLPEndpoint: "http://a:4318", OTELExporterOTLPTracesEndpoint: "http://b:4318"},
+			want: true,
+		},
+		"sdk disabled": {
+			cfg:  Config{OTELExporterOTLPEndpoint: "http://collector:4318", OTELSDKDisabled: " TRUE "},
+			want: false,
+		},
+		"sdk not disabled": {
+			cfg:  Config{OTELExporterOTLPEndpoint: "http://collector:4318", OTELSDKDisabled: "false"},
+			want: true,
+		},
+		// The spec reads any value but true as false.
+		"sdk disabled with 1": {
+			cfg:  Config{OTELExporterOTLPEndpoint: "http://collector:4318", OTELSDKDisabled: "1"},
+			want: true,
+		},
+		"no exporter": {
+			cfg:  Config{OTELExporterOTLPEndpoint: "http://collector:4318", OTELTracesExporter: TracesExporterNone},
+			want: false,
+		},
+		"otlp exporter": {
+			cfg:  Config{OTELExporterOTLPEndpoint: "http://collector:4318", OTELTracesExporter: TracesExporterOTLP},
 			want: true,
 		},
 	}
@@ -118,11 +164,12 @@ func TestLoad_MetricsOff(t *testing.T) {
 
 func TestLoad_Invalid(t *testing.T) {
 	tests := map[string]string{
-		"LOG_LEVEL":          "loud",
-		"TRUSTED_PROXIES":    "10.0.0.1,proxy.local",
-		"DATABASE_URL":       "",
-		"DATABASE_MAX_CONNS": "many",
-		"API_KEY_PEPPER":     "",
+		"LOG_LEVEL":            "loud",
+		"TRUSTED_PROXIES":      "10.0.0.1,proxy.local",
+		"DATABASE_URL":         "",
+		"DATABASE_MAX_CONNS":   "many",
+		"API_KEY_PEPPER":       "",
+		"OTEL_TRACES_EXPORTER": "zipkin",
 	}
 
 	for key, value := range tests {
