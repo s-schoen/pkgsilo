@@ -35,6 +35,11 @@ type Config struct {
 	// OTEL_* variable, itself.
 	OTELExporterOTLPEndpoint       string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
 	OTELExporterOTLPTracesEndpoint string `env:"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"`
+	// OTELSDKDisabled and OTELTracesExporter are the standard OpenTelemetry variables that turn tracing off
+	// despite an endpoint: OTEL_SDK_DISABLED=true and OTEL_TRACES_EXPORTER=none. Metrics stay on, since
+	// METRICS_ADDR alone controls them.
+	OTELSDKDisabled    string         `env:"OTEL_SDK_DISABLED"` //nolint:tagliatelle // Its initialisms run together.
+	OTELTracesExporter TracesExporter `env:"OTEL_TRACES_EXPORTER"`
 }
 
 // defaultMetricsAddr is the address of the metrics listener if METRICS_ADDR is unset.
@@ -60,11 +65,41 @@ func (c Config) MetricsEnabled() bool {
 	return c.MetricsAddr != ""
 }
 
-// TracingEnabled reports whether the application exports spans: whether one of the OTLP endpoints is set.
-// Like the exporter, it ignores blank values.
+// TracingEnabled reports whether the application exports spans: whether one of the OTLP endpoints is set,
+// unless OTEL_SDK_DISABLED is true, case-insensitively as the OpenTelemetry spec says, or
+// OTEL_TRACES_EXPORTER is none. Like the exporter, it ignores blank values.
 func (c Config) TracingEnabled() bool {
+	if strings.EqualFold(strings.TrimSpace(c.OTELSDKDisabled), "true") || c.OTELTracesExporter == TracesExporterNone {
+		return false
+	}
+
 	return strings.TrimSpace(c.OTELExporterOTLPEndpoint) != "" ||
 		strings.TrimSpace(c.OTELExporterOTLPTracesEndpoint) != ""
+}
+
+// TracesExporter is the value of OTEL_TRACES_EXPORTER: TracesExporterOTLP, the default, or TracesExporterNone.
+// pkgsilo has no other exporter.
+type TracesExporter string
+
+const (
+	// TracesExporterOTLP exports spans over OTLP/HTTP.
+	TracesExporterOTLP TracesExporter = "otlp"
+	// TracesExporterNone exports no spans, which turns tracing off.
+	TracesExporterNone TracesExporter = "none"
+)
+
+// UnmarshalText parses otlp or none, case-insensitively. A blank value is the default, as if unset.
+func (e *TracesExporter) UnmarshalText(text []byte) error {
+	value := TracesExporter(strings.ToLower(strings.TrimSpace(string(text))))
+	switch value {
+	case "", TracesExporterOTLP, TracesExporterNone:
+		*e = value
+
+		return nil
+	default:
+		return fmt.Errorf("unsupported exporter %q: only %s and %s are supported", text, TracesExporterOTLP,
+			TracesExporterNone)
+	}
 }
 
 // IsDev reports whether the application runs in the development environment.
