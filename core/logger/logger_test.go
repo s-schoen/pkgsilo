@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -166,9 +167,122 @@ func TestLogger_RecordsErrorOnSpan(t *testing.T) {
 	event := spans[0].Events()[0]
 	assert.Equal(t, semconv.ExceptionEventName, event.Name)
 	assert.ElementsMatch(t, []attribute.KeyValue{
-		semconv.ExceptionType("*fmt.wrapError"),
+		semconv.ExceptionType("*logger_test.pathError"),
 		semconv.ExceptionMessage("read config: no such file: /etc/x"),
 	}, event.Attributes)
+}
+
+// TestLogger_RecordsExceptionTypeBehindWrapping checks that exception.type skips the errors with which
+// fmt.Errorf wraps a single error, which name no type of their own, and only those.
+func TestLogger_RecordsExceptionTypeBehindWrapping(t *testing.T) {
+	t.Parallel()
+	cause := &pathError{path: "/etc/x"}
+
+	tests := map[string]struct {
+		err  error
+		want string
+	}{
+		"unwrapped":        {err: cause, want: "*logger_test.pathError"},
+		"wrapped twice":    {err: fmt.Errorf("a: %w", fmt.Errorf("b: %w", cause)), want: "*logger_test.pathError"},
+		"wrapped sentinel": {err: fmt.Errorf("a: %w", io.EOF), want: "*errors.errorString"},
+		"not wrapped":      {err: fmt.Errorf("a: %v", cause), want: "*errors.errorString"}, //nolint:errorlint // On purpose.
+		"wrapping two":     {err: fmt.Errorf("a: %w, %w", cause, io.EOF), want: "*fmt.wrapErrors"},
+		"wrapped join":     {err: fmt.Errorf("a: %w", errors.Join(cause, io.EOF)), want: "*errors.joinError"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tel := telemetrytest.New(t)
+			logger, _ := loggertest.NewJSON()
+			ctx, span := spanContext(t, tel)
+
+			logger.ErrorContext(ctx, "failed", "error", tt.err)
+			span.End()
+
+			spans := tel.Spans()
+			require.Len(t, spans, 1)
+			require.Len(t, spans[0].Events(), 1)
+			attrs := attribute.NewSet(spans[0].Events()[0].Attributes...)
+			got, _ := attrs.Value(semconv.ExceptionTypeKey)
+			assert.Equal(t, tt.want, got.AsString())
+		})
+	}
+}
+
+// TestLogger_RecordsErrorAddedWithWith checks that an error added with With is recorded like one of the
+// record's own, which overrides it.
+func TestLogger_RecordsErrorAddedWithWith(t *testing.T) {
+	t.Parallel()
+	added := &pathError{path: "/etc/added"}
+
+	tests := map[string]struct {
+		log  func(*slog.Logger, context.Context)
+		want error
+	}{
+		"with": {
+			log:  func(l *slog.Logger, ctx context.Context) { l.With("error", added).ErrorContext(ctx, "failed") },
+			want: added,
+		},
+		"with, then a group": {
+			log: func(l *slog.Logger, ctx context.Context) {
+				l.With("error", added).WithGroup("grp").ErrorContext(ctx, "failed")
+			},
+			want: added,
+		},
+		"the record's own": {
+			log: func(l *slog.Logger, ctx context.Context) {
+				l.With("error", added).ErrorContext(ctx, "failed", "error", io.EOF)
+			},
+			want: io.EOF,
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tel := telemetrytest.New(t)
+			logger, _ := loggertest.NewJSON()
+			ctx, span := spanContext(t, tel)
+
+			tt.log(logger, ctx)
+			span.End()
+
+			spans := tel.Spans()
+			require.Len(t, spans, 1)
+			assert.Equal(t, sdktrace.Status{Code: codes.Error, Description: tt.want.Error()}, spans[0].Status())
+			require.Len(t, spans[0].Events(), 1)
+			assert.ElementsMatch(t, []attribute.KeyValue{
+				semconv.ExceptionType(fmt.Sprintf("%T", tt.want)),
+				semconv.ExceptionMessage(tt.want.Error()),
+			}, spans[0].Events()[0].Attributes)
+		})
+	}
+}
+
+// TestLogger_DerivedLoggersKeepTheirOwnErrors checks that loggers derived from one logger with With don't
+// share the errors that each added.
+func TestLogger_DerivedLoggersKeepTheirOwnErrors(t *testing.T) {
+	t.Parallel()
+	tel := telemetrytest.New(t)
+	logger, _ := loggertest.NewJSON()
+	base := logger.With("component", "test")
+	first := base.With("error", &pathError{path: "/first"})
+	second := base.With("error", &pathError{path: "/second"})
+
+	firstCtx, firstSpan := spanContext(t, tel)
+	first.ErrorContext(firstCtx, "failed")
+	firstSpan.End()
+	secondCtx, secondSpan := spanContext(t, tel)
+	second.ErrorContext(secondCtx, "failed")
+	secondSpan.End()
+	baseCtx, baseSpan := spanContext(t, tel)
+	base.ErrorContext(baseCtx, "failed")
+	baseSpan.End()
+
+	spans := tel.Spans()
+	require.Len(t, spans, 3)
+	assert.Equal(t, "no such file: /first", spans[0].Status().Description)
+	assert.Equal(t, "no such file: /second", spans[1].Status().Description)
+	assert.Equal(t, "failed", spans[2].Status().Description)
 }
 
 func TestLogger_RecordsMessageOnSpanWithoutError(t *testing.T) {
