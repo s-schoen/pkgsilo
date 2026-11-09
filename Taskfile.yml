@@ -27,9 +27,21 @@ tasks:
     cmds:
       - docker compose -f docker-compose.dev.yaml up -d --wait
 
+  # db:down stops only the services without a profile, so Jaeger keeps running. Use tracing:down for it.
   "db:down":
     cmds:
       - docker compose -f docker-compose.dev.yaml down
+
+  "tracing:up":
+    desc: Start the Jaeger trace viewer (UI on http://localhost:16686)
+    cmds:
+      - docker compose -f docker-compose.dev.yaml --profile tracing up -d --wait jaeger
+      - echo "Open Jaeger Web UI on http://localhost:16686"
+
+  # Stops only Jaeger; the Postgres service keeps running.
+  "tracing:down":
+    cmds:
+      - docker compose -f docker-compose.dev.yaml --profile tracing stop jaeger
 
   "db:migrate":
     dotenv:

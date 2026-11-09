@@ -15,5 +15,13 @@ services:
       timeout: 5s
       retries: 15
 
+  # Local trace viewer, started by `task tracing:up`. Receives OTLP/HTTP on 4318 and serves its UI on 16686.
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    profiles: ["tracing"]
+    ports:
+      - "4318:4318"
+      - "16686:16686"
+
 volumes:
   postgres-data:
