@@ -85,7 +85,7 @@ func (r *Recorder) Metric(tb testing.TB, name string) (metricdata.Metrics, bool)
 
 // HistogramPoints returns the data points of the histogram with the given name, one per attribute set, or
 // nil when it has recorded nothing. It fails the test if the metric is no histogram of N.
-func HistogramPoints[N int64 | float64](tb testing.TB, r *Recorder, name string) []metricdata.HistogramDataPoint[N] {
+func (r *Recorder) HistogramPoints[N int64 | float64](tb testing.TB, name string) []metricdata.HistogramDataPoint[N] {
 	tb.Helper()
 
 	m, ok := r.Metric(tb, name)
@@ -101,7 +101,7 @@ func HistogramPoints[N int64 | float64](tb testing.TB, r *Recorder, name string)
 // SumPoints returns the data points of the counter or up-down counter with the given name, synchronous or
 // observable, one per attribute set, or nil when it has recorded nothing. It fails the test if the metric
 // is no sum of N.
-func SumPoints[N int64 | float64](tb testing.TB, r *Recorder, name string) []metricdata.DataPoint[N] {
+func (r *Recorder) SumPoints[N int64 | float64](tb testing.TB, name string) []metricdata.DataPoint[N] {
 	tb.Helper()
 
 	m, ok := r.Metric(tb, name)

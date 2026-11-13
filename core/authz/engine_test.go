@@ -355,7 +355,7 @@ func TestEngine_CountsDecisions(t *testing.T) {
 	require.Error(t, err)
 
 	got := map[string]int64{}
-	for _, point := range telemetrytest.SumPoints[int64](t, metrics, "pkgsilo.authz.decisions") {
+	for _, point := range metrics.SumPoints[int64](t, "pkgsilo.authz.decisions") {
 		require.Equal(t, 1, point.Attributes.Len(), "the decision is the only attribute")
 		decision, _ := point.Attributes.Value("pkgsilo.authz.decision")
 		got[decision.AsString()] = point.Value

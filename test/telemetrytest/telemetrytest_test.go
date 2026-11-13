@@ -22,7 +22,7 @@ func TestHistogramPoints(t *testing.T) {
 	histogram.Record(t.Context(), 1.5, metric.WithAttributes(attribute.String("a", "1")))
 	histogram.Record(t.Context(), 1, metric.WithAttributes(attribute.String("a", "2")))
 
-	points := HistogramPoints[float64](t, rec, "test.duration")
+	points := rec.HistogramPoints[float64](t, "test.duration")
 
 	require.Len(t, points, 2)
 	byA := map[string]uint64{}
@@ -39,7 +39,7 @@ func TestHistogramPoints_NothingRecorded(t *testing.T) {
 	_, err := rec.MeterProvider().Meter("pkgsilo/test").Float64Histogram("test.duration")
 	require.NoError(t, err)
 
-	assert.Nil(t, HistogramPoints[float64](t, rec, "test.duration"))
+	assert.Nil(t, rec.HistogramPoints[float64](t, "test.duration"))
 }
 
 func TestHistogramPoints_WrongType(t *testing.T) {
@@ -49,7 +49,7 @@ func TestHistogramPoints_WrongType(t *testing.T) {
 	require.NoError(t, err)
 	histogram.Record(t.Context(), 1)
 
-	failed := tbtest.Run(t, func(tb *tbtest.Recorder) { HistogramPoints[float64](tb, rec, "test.size") })
+	failed := tbtest.Run(t, func(tb *tbtest.Recorder) { rec.HistogramPoints[float64](tb, "test.size") })
 
 	assert.True(t, failed.Failed())
 	assert.Contains(t, failed.Messages(), "metric test.size is a metricdata.Histogram[int64], no histogram of float64")
@@ -69,7 +69,7 @@ func TestSumPoints(t *testing.T) {
 	}, gauge)
 	require.NoError(t, err)
 
-	points := SumPoints[int64](t, rec, "test.count")
+	points := rec.SumPoints[int64](t, "test.count")
 
 	require.Len(t, points, 2)
 	byA := map[string]int64{}
@@ -86,7 +86,7 @@ func TestSumPoints_NothingRecorded(t *testing.T) {
 	_, err := rec.MeterProvider().Meter("pkgsilo/test").Int64Counter("test.requests")
 	require.NoError(t, err)
 
-	assert.Nil(t, SumPoints[int64](t, rec, "test.requests"))
+	assert.Nil(t, rec.SumPoints[int64](t, "test.requests"))
 }
 
 func TestSumPoints_WrongType(t *testing.T) {
@@ -96,7 +96,7 @@ func TestSumPoints_WrongType(t *testing.T) {
 	require.NoError(t, err)
 	counter.Add(t.Context(), 1)
 
-	failed := tbtest.Run(t, func(tb *tbtest.Recorder) { SumPoints[int64](tb, rec, "test.seconds") })
+	failed := tbtest.Run(t, func(tb *tbtest.Recorder) { rec.SumPoints[int64](tb, "test.seconds") })
 
 	assert.True(t, failed.Failed())
 	assert.Contains(t, failed.Messages(), "metric test.seconds is a metricdata.Sum[float64], no sum of int64")
@@ -140,7 +140,7 @@ func TestNew_AppliesTelemetryViews(t *testing.T) {
 	require.NoError(t, err)
 	histogram.Record(t.Context(), 1, metric.WithAttributes(semconv.ServerAddress("example.com"), semconv.HTTPRoute("/")))
 
-	points := HistogramPoints[float64](t, rec, "http.server.request.duration")
+	points := rec.HistogramPoints[float64](t, "http.server.request.duration")
 
 	require.Len(t, points, 1)
 	assert.Equal(t, []attribute.KeyValue{semconv.HTTPRoute("/")}, points[0].Attributes.ToSlice())
