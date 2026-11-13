@@ -12,7 +12,7 @@ import (
 // type. The members of R that M lacks, such as a key hash, are left out.
 //
 // Every member of M must map, so that a field can't be forgotten, and stay visible or hidden by mistake. A
-// model that doesn't map member by member onto its record is built by hand, with Reveal.
+// model that doesn't map member by member onto its record is built by hand, with ReadableFields.Reveal.
 type Mapper[R, M any] struct {
 	// members maps each member of M, by its index, to the member of R that it's copied from.
 	members []mappedMember

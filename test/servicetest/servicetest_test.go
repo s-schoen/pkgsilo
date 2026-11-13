@@ -89,6 +89,6 @@ func TestExpectReadableFields(t *testing.T) {
 
 	readable, err := fields.Readable(decider, resource)
 	require.NoError(t, err)
-	assert.Equal(t, authz.Field[string]{}, authz.Reveal(readable, "username", "ada"))
-	assert.Equal(t, authz.Visible("Ada"), authz.Reveal(readable, "displayName", "Ada"))
+	assert.Equal(t, authz.Field[string]{}, readable.Reveal("username", "ada"))
+	assert.Equal(t, authz.Visible("Ada"), readable.Reveal("displayName", "Ada"))
 }
