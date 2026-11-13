@@ -2,6 +2,8 @@ package api
 
 import (
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,12 +54,7 @@ func TestGroupRequests_Validate(t *testing.T) {
 
 // invalidMembers returns the members that err reports as invalid.
 func invalidMembers(err error) []string {
-	var members []string
-	if errs, ok := errors.AsType[validation.Errors](err); ok {
-		for member := range errs {
-			members = append(members, member)
-		}
-	}
+	errs, _ := errors.AsType[validation.Errors](err)
 
-	return members
+	return slices.Collect(maps.Keys(errs))
 }

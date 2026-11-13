@@ -57,8 +57,7 @@ func NewUnpaginatedCollection[T any](data []T) Collection[T] {
 func NewPagedCollection[T any](data []T, offset, limit int, hasMore bool) Collection[T] {
 	var nextOffset *int
 	if hasMore {
-		next := offset + len(data)
-		nextOffset = &next
+		nextOffset = new(offset + len(data))
 	}
 
 	return NewCollection(data, Pagination{Offset: offset, Limit: limit, NextOffset: nextOffset})

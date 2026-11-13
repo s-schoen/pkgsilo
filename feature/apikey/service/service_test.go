@@ -793,7 +793,6 @@ const presentedKey = "psk_PRESENTEDKEY"
 func TestAPIKeyService_Authenticate(t *testing.T) {
 	t.Parallel()
 	recent := now.Add(-lastUsedInterval + time.Second)
-	stale := now.Add(-lastUsedInterval)
 	tests := []struct {
 		name       string
 		expiresAt  *time.Time
@@ -801,7 +800,7 @@ func TestAPIKeyService_Authenticate(t *testing.T) {
 		wantUpdate bool
 	}{
 		{name: "first use", wantUpdate: true},
-		{name: "used long ago", lastUsedAt: &stale, wantUpdate: true},
+		{name: "used long ago", lastUsedAt: new(now.Add(-lastUsedInterval)), wantUpdate: true},
 		{name: "used recently", lastUsedAt: &recent},
 		{name: "not yet expired", expiresAt: new(now.Add(time.Second)), lastUsedAt: &recent},
 	}

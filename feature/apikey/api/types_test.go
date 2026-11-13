@@ -2,6 +2,8 @@ package api
 
 import (
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +15,6 @@ import (
 
 func TestCreateKeyRequest_Validate(t *testing.T) {
 	t.Parallel()
-	future, past, zero := time.Now().Add(time.Minute), time.Now().Add(-time.Minute), time.Time{}
 	tests := []struct {
 		name      string
 		keyName   string
@@ -21,7 +22,7 @@ func TestCreateKeyRequest_Validate(t *testing.T) {
 		// wantInvalid are the members that fail validation.
 		wantInvalid []string
 	}{
-		{name: "valid", keyName: "ci", expiresAt: &future},
+		{name: "valid", keyName: "ci", expiresAt: new(time.Now().Add(time.Minute))},
 		{name: "never expires", keyName: "ci"},
 		{name: "longest name", keyName: strings.Repeat("é", 128)},
 		{name: "name missing", wantInvalid: []string{"name"}},
@@ -29,8 +30,8 @@ func TestCreateKeyRequest_Validate(t *testing.T) {
 		{name: "name whitespace", keyName: " \t ", wantInvalid: []string{"name"}},
 		{name: "name NUL", keyName: "ci\x00", wantInvalid: []string{"name"}},
 		{name: "name line break", keyName: "ci\nkey", wantInvalid: []string{"name"}},
-		{name: "expired", keyName: "ci", expiresAt: &past, wantInvalid: []string{"expiresAt"}},
-		{name: "expires at zero time", keyName: "ci", expiresAt: &zero, wantInvalid: []string{"expiresAt"}},
+		{name: "expired", keyName: "ci", expiresAt: new(time.Now().Add(-time.Minute)), wantInvalid: []string{"expiresAt"}},
+		{name: "expires at zero time", keyName: "ci", expiresAt: new(time.Time{}), wantInvalid: []string{"expiresAt"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -47,12 +48,7 @@ func TestCreateKeyRequest_Validate(t *testing.T) {
 
 // invalidMembers returns the members that err reports as invalid.
 func invalidMembers(err error) []string {
-	var members []string
-	if errs, ok := errors.AsType[validation.Errors](err); ok {
-		for member := range errs {
-			members = append(members, member)
-		}
-	}
+	errs, _ := errors.AsType[validation.Errors](err)
 
-	return members
+	return slices.Collect(maps.Keys(errs))
 }

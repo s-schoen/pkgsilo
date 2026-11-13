@@ -160,15 +160,14 @@ func TestDeclareType_Invalid(t *testing.T) {
 
 func TestSetFields(t *testing.T) {
 	t.Parallel()
-	name := "Ada"
 	tests := []struct {
 		name  string
 		input any
 		want  []string
 	}{
 		{name: "patch of nothing", input: testPatch{}, want: nil},
-		{name: "patch of some", input: testPatch{OwnerID: &name}, want: []string{"ownerId"}},
-		{name: "patch of all", input: testPatch{Name: &name, OwnerID: &name}, want: []string{"name", "ownerId"}},
+		{name: "patch of some", input: testPatch{OwnerID: new("Ada")}, want: []string{"ownerId"}},
+		{name: "patch of all", input: testPatch{Name: new("Ada"), OwnerID: new("Ada")}, want: []string{"name", "ownerId"}},
 		// A member that's no pointer is always set, even to its zero value.
 		{name: "input", input: testInput{}, want: []string{"name", "ownerId"}},
 		{name: "input with an optional member", input: struct {
