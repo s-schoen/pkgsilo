@@ -32,10 +32,12 @@ var (
 // writeError answers a service error with its problem. Unexpected errors are logged and
 // answered with 500, without exposing their details.
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
-	var fieldsDenied *authz.FieldsDeniedError
-	switch {
-	case errors.As(err, &fieldsDenied):
+	if fieldsDenied, ok := errors.AsType[*authz.FieldsDeniedError](err); ok {
 		envelope.WriteProblem(w, request.FieldsDeniedProblem(fieldsDenied.Fields...))
+		return
+	}
+
+	switch {
 	case errors.Is(err, authz.ErrDenied):
 		envelope.WriteProblem(w, forbiddenProblem)
 	case errors.Is(err, service.ErrGroupNotFound):
