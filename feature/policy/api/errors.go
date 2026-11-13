@@ -35,17 +35,20 @@ func invalidPolicyProblem(reason string) envelope.Problem {
 // writeError answers a service error with its problem. Unexpected errors are logged and
 // answered with 500, without exposing their details.
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
-	var (
-		fieldsDenied *authz.FieldsDeniedError
-		invalid      *service.InvalidPolicyError
-	)
-	switch {
-	case errors.As(err, &fieldsDenied):
+	if fieldsDenied, ok := errors.AsType[*authz.FieldsDeniedError](err); ok {
 		envelope.WriteProblem(w, request.FieldsDeniedProblem(fieldsDenied.Fields...))
-	case errors.Is(err, authz.ErrDenied):
+		return
+	}
+	if errors.Is(err, authz.ErrDenied) {
 		envelope.WriteProblem(w, forbiddenProblem)
-	case errors.As(err, &invalid):
+		return
+	}
+	if invalid, ok := errors.AsType[*service.InvalidPolicyError](err); ok {
 		envelope.WriteProblem(w, invalidPolicyProblem(invalid.Reason))
+		return
+	}
+
+	switch {
 	case errors.Is(err, service.ErrPolicyNotFound):
 		envelope.WriteProblem(w, policyNotFoundProblem)
 	case errors.Is(err, service.ErrPolicyNameTaken):

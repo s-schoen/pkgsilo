@@ -33,8 +33,8 @@ func translateError(err error) error {
 		return ErrNotFound
 	}
 
-	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok {
 		return err
 	}
 	switch {

@@ -25,8 +25,8 @@ func translateError(err error) error {
 		return ErrNotFound
 	}
 
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation && pgErr.ConstraintName == identityForeignKeyName {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok &&
+		pgErr.Code == foreignKeyViolation && pgErr.ConstraintName == identityForeignKeyName {
 		return ErrIdentityNotFound
 	}
 

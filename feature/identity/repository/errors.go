@@ -25,8 +25,8 @@ func translateError(err error) error {
 		return ErrNotFound
 	}
 
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == usernameUniqueKeyName {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok &&
+		pgErr.Code == uniqueViolation && pgErr.ConstraintName == usernameUniqueKeyName {
 		return ErrDuplicateUsername
 	}
 
