@@ -10,6 +10,7 @@ coverage:
         informational: true
     patch:
       default:
+        target: 90%
         informational: true
 
 # Only for a change in coverage, which spares Renovate's pull requests a comment.
