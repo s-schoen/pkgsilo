@@ -39,10 +39,10 @@ const (
 )
 
 var (
-	setupOnce sync.Once
-	errSetup  error
-	adminDB   *sqlx.DB
-	serverURL *url.URL
+	// setupServer runs setup once per test process, the first time a test needs a database.
+	setupServer = sync.OnceValue(setup)
+	adminDB     *sqlx.DB
+	serverURL   *url.URL
 )
 
 // New returns a connection to a new database with all migrations applied, so that it holds nothing but
@@ -65,9 +65,8 @@ func NewWithProviders(
 		t.Skip("needs a PostgreSQL container")
 	}
 
-	setupOnce.Do(func() { errSetup = setup() })
-	if errSetup != nil {
-		t.Fatalf("set up test database server: %v", errSetup)
+	if err := setupServer(); err != nil {
+		t.Fatalf("set up test database server: %v", err)
 	}
 
 	name := fmt.Sprintf("test_%x", randomBytes())
@@ -229,7 +228,7 @@ func openWhenReady(ctx context.Context, dbURL string) (*sqlx.DB, error) {
 
 // databaseURL returns the URL of the named database on the test server.
 func databaseURL(name string) string {
-	u := *serverURL
+	u := serverURL.Clone()
 	u.Path = "/" + name
 
 	return u.String()
