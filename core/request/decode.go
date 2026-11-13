@@ -5,7 +5,8 @@ package request
 import (
 	"bytes"
 	"encoding"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -75,29 +76,17 @@ func hasMediaType(r *http.Request, want string) bool {
 // decode decodes the request body, which must be a single JSON object, into dst and validates it, like
 // DecodeJSON.
 func decode(w http.ResponseWriter, r *http.Request, dst validation.Validatable) bool {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
-	if err != nil {
-		writeDecodeProblem(w, err, body, dst)
-		return false
+	if reflect.TypeOf(dst).Kind() != reflect.Pointer {
+		// A bug in the caller, not in the request.
+		panic(fmt.Sprintf("request: decode body into %T, which is not a pointer", dst))
 	}
 
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
-		writeDecodeProblem(w, err, body, dst)
-		return false
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
+	if err == nil {
+		err = unmarshalObject(body, dst)
 	}
-	// A second value, even an empty one, makes the body ambiguous.
-	if err := dec.Decode(&json.RawMessage{}); !errors.Is(err, io.EOF) {
-		if err == nil {
-			err = errTrailingData
-		}
-		writeDecodeProblem(w, err, body, dst)
-		return false
-	}
-	// null decodes into a struct without an error, and changes nothing.
-	if !bytes.HasPrefix(bytes.TrimLeft(body, " \t\r\n"), []byte("{")) {
-		writeDecodeProblem(w, errNotObject, body, dst)
+	if err != nil {
+		writeDecodeProblem(w, err)
 		return false
 	}
 
@@ -107,6 +96,28 @@ func decode(w http.ResponseWriter, r *http.Request, dst validation.Validatable) 
 	}
 
 	return true
+}
+
+// unmarshalObject decodes body, which must be a single JSON object without unknown members, into dst. The
+// options apply to every value inside it too, such as the value of an Optional.
+func unmarshalObject(body []byte, dst any) error {
+	dec := jsontext.NewDecoder(bytes.NewReader(body), json.RejectUnknownMembers(true))
+	if err := json.UnmarshalDecode(dec, dst); err != nil {
+		return err //nolint:wrapcheck // writeDecodeProblem answers the json package's errors.
+	}
+	// A second value, even an empty one, makes the body ambiguous.
+	if _, err := dec.ReadValue(); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errTrailingData
+		}
+		return err
+	}
+	// null decodes into a struct without an error, and changes nothing.
+	if !bytes.HasPrefix(bytes.TrimLeft(body, " \t\r\n"), []byte("{")) {
+		return errNotObject
+	}
+
+	return nil
 }
 
 // EnsureEmptyBody is the counterpart of DecodeJSON for endpoints that take no body. On a request
@@ -130,96 +141,101 @@ var (
 	errNotObject    = errors.New("JSON value is not an object")
 )
 
-// writeDecodeProblem answers err, which decoding body into dst failed with.
-func writeDecodeProblem(w http.ResponseWriter, err error, body []byte, dst any) {
-	var (
-		maxBytesErr *http.MaxBytesError
-		syntaxErr   *json.SyntaxError
-		typeErr     *json.UnmarshalTypeError
-		invalidErr  *json.InvalidUnmarshalError
-	)
-
-	detail := "The request body must be a single JSON object."
-	switch {
-	case errors.As(err, &maxBytesErr):
+// writeDecodeProblem answers err, which reading or decoding the request body failed with.
+func writeDecodeProblem(w http.ResponseWriter, err error) {
+	if maxBytesErr, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		envelope.WriteProblem(w, envelope.RequestEntityTooLargeProblem.New(envelope.Occurrence{
 			Detail: fmt.Sprintf("The request body must not exceed %d bytes.", maxBytesErr.Limit),
 		}))
 		return
-	case errors.As(err, &invalidErr):
-		// dst isn't a pointer: a bug in the caller, not in the request.
-		panic(fmt.Errorf("request: decode body: %w", err))
-	case errors.Is(err, io.EOF):
-		detail = "The request body must not be empty."
-	case errors.As(err, &syntaxErr), errors.Is(err, io.ErrUnexpectedEOF):
-		detail = "The request body is not valid JSON."
-	case errors.As(err, &typeErr):
-		if member, ok := typeErrorMember(typeErr, body, dst); ok {
-			detail = fmt.Sprintf("The member %q must be of type %s.", member, jsonType(typeErr.Type))
-		}
-	default:
-		// encoding/json reports unknown members only through the message.
-		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
-			detail = fmt.Sprintf("The member %s is not allowed.", field)
-		}
 	}
 
-	envelope.WriteProblem(w, envelope.BadRequestProblem.New(envelope.Occurrence{Detail: detail}))
+	envelope.WriteProblem(w, envelope.BadRequestProblem.New(envelope.Occurrence{Detail: decodeProblemDetail(err)}))
 }
 
-// typeErrorMember returns the member of the JSON object body whose value typeErr reports, from decoding body
-// into dst. encoding/json names it, except in an error that a field's own UnmarshalJSON returns, such as
-// Optional's: then it's the member whose value doesn't decode into its field of dst, a pointer to a struct.
-// It reports false if it finds none.
-func typeErrorMember(typeErr *json.UnmarshalTypeError, body []byte, dst any) (string, bool) {
-	if typeErr.Field != "" {
-		return typeErr.Field, true
+// decodeProblemDetail explains to the client why decoding the request body failed with err.
+func decodeProblemDetail(err error) string {
+	syntaxErr, isSyntax := errors.AsType[*jsontext.SyntacticError](err)
+	semanticErr, isSemantic := errors.AsType[*json.SemanticError](err)
+	switch {
+	case errors.Is(err, io.EOF):
+		return "The request body must not be empty."
+	case isSyntax && errors.Is(err, jsontext.ErrDuplicateName):
+		return fmt.Sprintf("The member %q appears more than once.", memberName(syntaxErr.JSONPointer))
+	case isSyntax, errors.Is(err, io.ErrUnexpectedEOF):
+		return "The request body is not valid JSON."
+	case isSemantic && errors.Is(err, json.ErrUnknownName):
+		return fmt.Sprintf("The member %q is not allowed.", memberName(semanticErr.JSONPointer))
+	case isSemantic && isTypeError(semanticErr):
+		return fmt.Sprintf("The member %q must be of type %s.",
+			memberName(semanticErr.JSONPointer), jsonType(semanticErr.GoType))
+	default:
+		// Such as a value that isn't an object, or a value of the right type that its Go type rejects, such
+		// as a malformed UUID.
+		return "The request body must be a single JSON object."
 	}
+}
 
-	t := reflect.TypeOf(dst)
-	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
-		return "", false
+// isTypeError reports whether err is about a member whose JSON value is of another type than its Go type
+// takes. A value that isn't a member, such as a body that's an array, is no type error.
+func isTypeError(err *json.SemanticError) bool {
+	return err.JSONPointer != "" && err.GoType != nil && kindName(err.JSONKind) != jsonType(err.GoType)
+}
+
+// memberName names the member that ptr points to by its path, with its names joined by dots, such as
+// "address.city".
+func memberName(ptr jsontext.Pointer) string {
+	return strings.Join(slices.Collect(ptr.Tokens()), ".")
+}
+
+// The names of the JSON types, which problem details name a member's type by.
+const (
+	jsonString  = "string"
+	jsonNumber  = "number"
+	jsonBoolean = "boolean"
+	jsonArray   = "array"
+	jsonObject  = "object"
+	jsonNull    = "null"
+)
+
+// kindName names the JSON type of a value of the kind, as jsonType does.
+func kindName(kind jsontext.Kind) string {
+	switch kind {
+	case '"':
+		return jsonString
+	case '0':
+		return jsonNumber
+	case 't', 'f':
+		return jsonBoolean
+	case '[':
+		return jsonArray
+	case 'n':
+		return jsonNull
+	default:
+		return jsonObject
 	}
-
-	var members map[string]json.RawMessage
-	if err := json.Unmarshal(body, &members); err != nil {
-		return "", false
-	}
-
-	for field := range t.Elem().Fields() {
-		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
-		value, ok := members[name]
-		if !ok {
-			continue
-		}
-		if err := json.Unmarshal(value, reflect.New(field.Type).Interface()); err != nil {
-			return name, true
-		}
-	}
-
-	return "", false
 }
 
 // jsonType names the JSON type that decodes into a Go value of type t.
 func jsonType(t reflect.Type) string {
 	// Such as UUIDs and timestamps, whatever their Go kind.
 	if reflect.PointerTo(t).Implements(reflect.TypeFor[encoding.TextUnmarshaler]()) {
-		return "string"
+		return jsonString
 	}
 
 	switch t.Kind() {
 	case reflect.String:
-		return "string"
+		return jsonString
 	case reflect.Bool:
-		return "boolean"
+		return jsonBoolean
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64:
-		return "number"
+		return jsonNumber
 	case reflect.Slice, reflect.Array:
-		return "array"
+		return jsonArray
 	default:
-		return "object"
+		return jsonObject
 	}
 }
 
@@ -255,26 +271,24 @@ func validationErrors(
 
 	var flatten func(err error, path []string) bool
 	flatten = func(err error, path []string) bool {
-		var (
-			errs     validation.Errors
-			valueErr validation.Error
-		)
-		switch {
-		case errors.As(err, &errs):
+		if errs, ok := errors.AsType[validation.Errors](err); ok {
 			for key, err := range errs {
 				if !flatten(err, append(slices.Clone(path), key)) {
 					return false
 				}
 			}
-		case errors.As(err, &valueErr):
+
+			return true
+		}
+		if valueErr, ok := errors.AsType[validation.Error](err); ok {
 			ve := locate(path)
 			ve.Detail = valueErr.Error()
 			out = append(out, ve)
-		default:
-			return false
+
+			return true
 		}
 
-		return true
+		return false
 	}
 	if !flatten(err, nil) {
 		return nil, false

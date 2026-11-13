@@ -6,8 +6,7 @@
 package apitest
 
 import (
-	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -277,31 +276,29 @@ func (r *Response) AssertInternalError() {
 
 // DecodeResource returns the data of the resource response r, decoded into T. It stops the test
 // unless r has the given status and its data has no members that T lacks.
-func DecodeResource[T any](r *Response, status int) T {
+func (r *Response) DecodeResource[T any](status int) T {
 	r.tb.Helper()
 
-	return decode[envelope.Resource[T]](r, status).Data
+	return r.decode[envelope.Resource[T]](status).Data
 }
 
 // DecodeCollection returns the collection response r, its data decoded into T. It stops the test
 // unless r has the given status and its data has no members that T lacks.
-func DecodeCollection[T any](r *Response, status int) envelope.Collection[T] {
+func (r *Response) DecodeCollection[T any](status int) envelope.Collection[T] {
 	r.tb.Helper()
 
-	return decode[envelope.Collection[T]](r, status)
+	return r.decode[envelope.Collection[T]](status)
 }
 
-func decode[T any](r *Response, status int) T {
+func (r *Response) decode[T any](status int) T {
 	r.tb.Helper()
 	if !r.status(status) || !r.contentType(jsonMediaType) {
 		r.tb.FailNow()
 	}
 
-	// Decoded from a copy, so that the body stays readable for later assertions.
-	dec := json.NewDecoder(bytes.NewReader(r.Body.Bytes()))
-	dec.DisallowUnknownFields()
+	// Bytes doesn't drain the body, so that it stays readable for later assertions.
 	var v T
-	if err := dec.Decode(&v); err != nil {
+	if err := json.Unmarshal(r.Body.Bytes(), &v, json.RejectUnknownMembers(true)); err != nil {
 		r.tb.Fatalf("decode body: %v\nbody: %s", err, r.Body.String())
 	}
 

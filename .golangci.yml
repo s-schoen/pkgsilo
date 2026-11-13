@@ -98,10 +98,16 @@ linters:
       check: [switch, mapliteral]
       default-signifies-exhaustive: true
     forbidigo:
+      # Matches identifiers by the package they come from, so that the encoding/json rule holds under any import
+      # name and leaves encoding/json/v2, whose package name is json too, alone.
+      analyze-types: true
       forbid:
         - pattern: ^(fmt\.Print(|f|ln)|print|println)$
         - pattern: ^log\.(Fatal|Panic|Print)(f|ln)?$
           msg: Log through the injected *slog.Logger.
+        - pattern: ^json\.
+          pkg: ^encoding/json$
+          msg: Use encoding/json/v2, whose defaults are stricter.
     gocognit:
       min-complexity: 20
     gocritic:

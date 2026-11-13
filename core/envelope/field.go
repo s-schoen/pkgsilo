@@ -1,9 +1,8 @@
 package envelope
 
 import (
-	"encoding/json"
 	"encoding/json/jsontext"
-	jsonv2 "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 )
@@ -53,19 +52,19 @@ func (f Field[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if !f.Visible {
 		return errHiddenFieldEncoded
 	}
-	if err := jsonv2.MarshalEncode(enc, f.Value, jsonv2.OmitZeroStructFields(false)); err != nil {
+	if err := json.MarshalEncode(enc, f.Value, json.OmitZeroStructFields(false)); err != nil {
 		return fmt.Errorf("encode field: %w", err)
 	}
 
 	return nil
 }
 
-// UnmarshalJSON decodes a member that's present as a visible field. A member that's absent leaves the
-// field hidden.
-func (f *Field[T]) UnmarshalJSON(data []byte) error {
+// UnmarshalJSONFrom decodes a member that's present as a visible field, even if it's null. A member that's
+// absent leaves the field hidden.
+func (f *Field[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	var value T
-	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf("decode field: %w", err)
+	if err := json.UnmarshalDecode(dec, &value); err != nil {
+		return err //nolint:wrapcheck // The json package adds the member's pointer to its own error.
 	}
 	*f = Field[T]{Value: value, Visible: true}
 

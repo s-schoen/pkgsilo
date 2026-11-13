@@ -10,7 +10,7 @@ import (
 
 var validationProblem = DefineProblemType("validation", "Request validation failed", 422)
 
-func TestProblem_MarshalJSON(t *testing.T) {
+func TestProblem_MarshalJSONTo(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
@@ -54,12 +54,19 @@ func TestProblem_MarshalJSON(t *testing.T) {
 	}
 }
 
-func TestProblem_MarshalJSON_OrdersStandardMembersFirst(t *testing.T) {
+func TestProblem_MarshalJSONTo_OrdersStandardMembersFirst(t *testing.T) {
 	t.Parallel()
-	p := BadRequestProblem.New(Occurrence{Detail: "d", Extensions: map[string]any{"b": 2, "a": 1}})
+	p := BadRequestProblem.New(Occurrence{Detail: "d", Instance: "urn:x", Extensions: map[string]any{
+		"f": 6, "b": 2, "h": 8, "a": 1, "e": 5, "c": 3, "g": 7, "d": 4, "status": 999,
+	}})
 
-	//nolint:testifylint // JSONEq would ignore the member order under test.
-	assert.Equal(t, `{"type":"about:blank","title":"Bad Request","status":400,"detail":"d","a":1,"b":2}`, encode(t, p))
+	// Go iterates over a map in a random order each time, so a sorting that only happened by chance would
+	// fail some of the encodings.
+	for range 20 {
+		//nolint:testifylint // JSONEq would ignore the member order under test.
+		assert.Equal(t, `{"type":"about:blank","title":"Bad Request","status":400,"detail":"d","instance":"urn:x",`+
+			`"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8}`, encode(t, p))
+	}
 }
 
 func TestDefineProblemType(t *testing.T) {

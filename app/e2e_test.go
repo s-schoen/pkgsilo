@@ -17,7 +17,6 @@ import (
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/telemetry"
 	identityapi "pkgsilo/feature/identity/api"
-	"pkgsilo/test/apitest"
 	"pkgsilo/test/apptest"
 )
 
@@ -39,8 +38,7 @@ func TestMetrics(t *testing.T) {
 	api, metrics := apptest.NewWithMetrics(t)
 
 	// 1. List.
-	identities := apitest.DecodeCollection[identityapi.IdentityResponse](
-		api.Get("/api/v1/identities"), http.StatusOK).Data
+	identities := api.Get("/api/v1/identities").DecodeCollection[identityapi.IdentityResponse](http.StatusOK).Data
 	require.NotEmpty(t, identities)
 
 	// 2. Get.
@@ -105,7 +103,7 @@ func TestTracing(t *testing.T) {
 
 	// 1. List.
 	list := api.WithHeader("Traceparent", "00-"+sentTraceID+"-"+sentSpanID+"-01").Get("/api/v1/identities")
-	identities := apitest.DecodeCollection[identityapi.IdentityResponse](list, http.StatusOK).Data
+	identities := list.DecodeCollection[identityapi.IdentityResponse](http.StatusOK).Data
 
 	// 2. Find the spans.
 	var servers []sdktrace.ReadOnlySpan

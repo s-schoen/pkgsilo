@@ -1,9 +1,9 @@
 package request
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
-	"fmt"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 )
@@ -20,22 +20,22 @@ type Optional[T any] struct {
 	Null bool
 }
 
-// UnmarshalJSON decodes the member's value. encoding/json calls it only for a member that's present.
+// UnmarshalJSONFrom decodes the member's value. The json package calls it only for a member that's present.
 //
-// encoding/json reports a type error of the value without naming the member, which DecodeJSON and
-// DecodeMergePatch add.
-func (o *Optional[T]) UnmarshalJSON(b []byte) error {
+// It decodes the value with the options of dec, so that a value inside it rejects unknown members as the
+// body does, and returns the json package's error as it is, which names the member by its JSON Pointer.
+func (o *Optional[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	o.Set = true
-	if string(b) == "null" {
+	if dec.PeekKind() == 'n' {
+		if _, err := dec.ReadToken(); err != nil {
+			return err //nolint:wrapcheck // A syntactic error, which the json package locates itself.
+		}
 		o.Null = true
+
 		return nil
 	}
 
-	if err := json.Unmarshal(b, &o.Value); err != nil {
-		return fmt.Errorf("decode optional value: %w", err)
-	}
-
-	return nil
+	return json.UnmarshalDecode(dec, &o.Value) //nolint:wrapcheck // The json package adds the member's pointer.
 }
 
 // Pointer returns a pointer to the value, or nil if the member is absent or null. It suits a member that

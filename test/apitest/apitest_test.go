@@ -319,7 +319,7 @@ func TestDecodeResource(t *testing.T) {
 	api := newTestClient(t)
 	resp := api.Post("/items", adaJSON)
 
-	assert.Equal(t, ada, DecodeResource[item](resp, http.StatusCreated))
+	assert.Equal(t, ada, resp.DecodeResource[item](http.StatusCreated))
 	// Decoding leaves the body for further assertions.
 	resp.AssertCreated("/items/ada", adaJSON)
 }
@@ -328,7 +328,7 @@ func TestDecodeCollection(t *testing.T) {
 	t.Parallel()
 	api := newTestClient(t)
 
-	got := DecodeCollection[item](api.Get("/items?limit=1"), http.StatusOK)
+	got := api.Get("/items?limit=1").DecodeCollection[item](http.StatusOK)
 
 	assert.Equal(t, envelope.Collection[item]{
 		Data:       []item{ada},
@@ -348,17 +348,17 @@ func TestDecode_Fails(t *testing.T) {
 	}{
 		{
 			name:        "status",
-			decode:      func(api *Client) { DecodeResource[item](api.Get("/items/gone"), http.StatusOK) },
+			decode:      func(api *Client) { api.Get("/items/gone").DecodeResource[item](http.StatusOK) },
 			wantMessage: "The item is gone.",
 		},
 		{
 			name:        "unknown member",
-			decode:      func(api *Client) { DecodeResource[unrelated](api.Get("/items/ada"), http.StatusOK) },
-			wantMessage: `unknown field "name"`,
+			decode:      func(api *Client) { api.Get("/items/ada").DecodeResource[unrelated](http.StatusOK) },
+			wantMessage: `unknown object member name "name"`,
 		},
 		{
 			name:        "content type",
-			decode:      func(api *Client) { DecodeCollection[item](api.Get("/items/gone"), http.StatusGone) },
+			decode:      func(api *Client) { api.Get("/items/gone").DecodeCollection[item](http.StatusGone) },
 			wantMessage: "Content-Type header",
 		},
 	}

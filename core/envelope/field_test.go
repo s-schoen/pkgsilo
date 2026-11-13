@@ -1,7 +1,7 @@
 package envelope
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 	"time"
 
@@ -90,7 +90,7 @@ func TestField_MarshalJSONTo_HiddenOutsideEnvelope(t *testing.T) {
 	require.ErrorIs(t, err, errHiddenFieldEncoded, "a hidden field must not be encoded as null")
 }
 
-func TestField_UnmarshalJSON(t *testing.T) {
+func TestField_UnmarshalJSONFrom(t *testing.T) {
 	t.Parallel()
 
 	var got keyBody
@@ -100,7 +100,7 @@ func TestField_UnmarshalJSON(t *testing.T) {
 		"a null member must be visible, and an absent one hidden")
 }
 
-func TestField_UnmarshalJSON_Invalid(t *testing.T) {
+func TestField_UnmarshalJSONFrom_Invalid(t *testing.T) {
 	t.Parallel()
 
 	var got keyBody

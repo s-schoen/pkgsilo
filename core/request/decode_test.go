@@ -38,9 +38,10 @@ func (a address) Validate() error {
 	return validation.ValidateStruct(&a, validation.Field(&a.City, validation.Required))
 }
 
-// namePatch is a JSON Merge Patch of a profile's name, which must not be null.
+// namePatch is a JSON Merge Patch of a profile's name, which must not be null, and its address.
 type namePatch struct {
-	Name Optional[string] `json:"name"`
+	Name    Optional[string]  `json:"name"`
+	Address Optional[address] `json:"address"`
 }
 
 func (p namePatch) Validate() error {
@@ -134,6 +135,41 @@ func TestDecodeJSON_Problems(t *testing.T) {
 			body:        `{"name":"Ada","nickname":"ada"}`,
 			want: `{"type":"about:blank","title":"Bad Request","status":400,
 				"detail":"The member \"nickname\" is not allowed."}`,
+		},
+		{
+			name:        "member name in another case",
+			contentType: "application/json",
+			body:        `{"Name":"Ada"}`,
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The member \"Name\" is not allowed."}`,
+		},
+		{
+			name:        "duplicate member",
+			contentType: "application/json",
+			body:        `{"name":"Ada","name":"Grace"}`,
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The member \"name\" appears more than once."}`,
+		},
+		{
+			name:        "invalid UTF-8",
+			contentType: "application/json",
+			body:        "{\"name\":\"\xff\"}",
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The request body is not valid JSON."}`,
+		},
+		{
+			name:        "wrong nested member type",
+			contentType: "application/json",
+			body:        `{"name":"Ada","address":{"city":1}}`,
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The member \"address.city\" must be of type string."}`,
+		},
+		{
+			name:        "unknown nested member",
+			contentType: "application/json",
+			body:        `{"name":"Ada","address":{"zip":"NW1"}}`,
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The member \"address.zip\" is not allowed."}`,
 		},
 		{
 			name:        "not an object",
@@ -283,6 +319,41 @@ func TestDecodeMergePatch_Problems(t *testing.T) {
 			body:        `{"name":"Ada","nickname":"ada"}`,
 			want: `{"type":"about:blank","title":"Bad Request","status":400,
 				"detail":"The member \"nickname\" is not allowed."}`,
+		},
+		{
+			name:        "member name in another case",
+			contentType: "application/merge-patch+json",
+			body:        `{"Name":"Ada"}`,
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The member \"Name\" is not allowed."}`,
+		},
+		{
+			name:        "duplicate member",
+			contentType: "application/merge-patch+json",
+			body:        `{"name":"Ada","name":"Grace"}`,
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The member \"name\" appears more than once."}`,
+		},
+		{
+			name:        "invalid UTF-8",
+			contentType: "application/merge-patch+json",
+			body:        "{\"name\":\"\xff\"}",
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The request body is not valid JSON."}`,
+		},
+		{
+			name:        "unknown member inside an optional value",
+			contentType: "application/merge-patch+json",
+			body:        `{"address":{"zip":"NW1"}}`,
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The member \"address.zip\" is not allowed."}`,
+		},
+		{
+			name:        "wrong member type inside an optional value",
+			contentType: "application/merge-patch+json",
+			body:        `{"address":{"city":1}}`,
+			want: `{"type":"about:blank","title":"Bad Request","status":400,
+				"detail":"The member \"address.city\" must be of type string."}`,
 		},
 		{
 			name:        "trailing value",
