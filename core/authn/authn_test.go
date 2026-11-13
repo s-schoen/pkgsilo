@@ -126,7 +126,7 @@ func stringAttrs(kvs []attribute.KeyValue) map[string]string {
 func assertAttempts(t *testing.T, got served, want map[string]string) {
 	t.Helper()
 
-	points := telemetrytest.SumPoints[int64](t, got.telemetry, "pkgsilo.authn.attempts")
+	points := got.telemetry.SumPoints[int64](t, "pkgsilo.authn.attempts")
 	require.Len(t, points, 1)
 	assert.Equal(t, int64(1), points[0].Value)
 	assert.Equal(t, want, stringAttrs(points[0].Attributes.ToSlice()), "the metric's attributes")

@@ -336,12 +336,12 @@ func TestNew_RecordsHTTPServerTelemetry(t *testing.T) {
 				want = append(want, semconv.HTTPRoute(tt.wantRoute))
 				wantSpanName += " " + tt.wantRoute
 			}
-			duration := telemetrytest.HistogramPoints[float64](t, tel, "http.server.request.duration")
+			duration := tel.HistogramPoints[float64](t, "http.server.request.duration")
 			require.Len(t, duration, 1)
 			assert.ElementsMatch(t, want, duration[0].Attributes.ToSlice())
 			assert.EqualValues(t, 1, duration[0].Count)
 			for _, name := range []string{"http.server.request.body.size", "http.server.response.body.size"} {
-				points := telemetrytest.HistogramPoints[int64](t, tel, name)
+				points := tel.HistogramPoints[int64](t, name)
 				require.Len(t, points, 1, name)
 				assert.ElementsMatch(t, want, points[0].Attributes.ToSlice(), name)
 				assert.EqualValues(t, 1, points[0].Count, name)
@@ -382,7 +382,7 @@ func TestNew_RecordsBodySizes(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	for _, name := range []string{"http.server.request.body.size", "http.server.response.body.size"} {
-		points := telemetrytest.HistogramPoints[int64](t, metrics, name)
+		points := metrics.HistogramPoints[int64](t, name)
 		require.Len(t, points, 1, name)
 		assert.EqualValues(t, 5, points[0].Sum, name)
 	}
@@ -462,7 +462,7 @@ func TestNew_ContinuesTracesOfTrustedProxiesOnly(t *testing.T) {
 			spans := tel.Spans()
 			require.Len(t, spans, 1)
 			span := spans[0]
-			duration := telemetrytest.HistogramPoints[float64](t, tel, "http.server.request.duration")
+			duration := tel.HistogramPoints[float64](t, "http.server.request.duration")
 			require.Len(t, duration, 1)
 			require.Len(t, duration[0].Exemplars, 1)
 			assert.Equal(t, span.SpanContext().TraceID(), trace.TraceID(duration[0].Exemplars[0].TraceID),
@@ -502,7 +502,7 @@ func TestNew_IgnoresTraceparentWithoutTracing(t *testing.T) {
 			r.ServeHTTP(httptest.NewRecorder(), req)
 
 			assert.False(t, got.IsValid(), "the handler's context holds no span context")
-			duration := telemetrytest.HistogramPoints[float64](t, tel, "http.server.request.duration")
+			duration := tel.HistogramPoints[float64](t, "http.server.request.duration")
 			require.Len(t, duration, 1)
 			assert.Empty(t, duration[0].Exemplars)
 		})

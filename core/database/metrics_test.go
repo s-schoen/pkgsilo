@@ -52,15 +52,15 @@ func TestOpen_PoolMetrics(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]int64{"idle": 0, "used": 1},
-		byState(t, telemetrytest.SumPoints[int64](t, rec, "db.client.connection.count")))
+		byState(t, rec.SumPoints[int64](t, "db.client.connection.count")))
 	assert.Equal(t, int64(db.Stats().MaxOpenConnections),
-		value(t, telemetrytest.SumPoints[int64](t, rec, "db.client.connection.max")))
-	assert.Zero(t, value(t, telemetrytest.SumPoints[int64](t, rec, "pkgsilo.database.connection.waits")))
+		value(t, rec.SumPoints[int64](t, "db.client.connection.max")))
+	assert.Zero(t, value(t, rec.SumPoints[int64](t, "pkgsilo.database.connection.waits")))
 
 	require.NoError(t, conn.Close())
 
 	assert.Equal(t, map[string]int64{"idle": 1, "used": 0},
-		byState(t, telemetrytest.SumPoints[int64](t, rec, "db.client.connection.count")))
+		byState(t, rec.SumPoints[int64](t, "db.client.connection.count")))
 }
 
 // TestOpen_PoolMetricsWaits checks that a query that waits for a connection, because the pool's
@@ -87,9 +87,9 @@ func TestOpen_PoolMetricsWaits(t *testing.T) {
 	require.NoError(t, held[0].Close())
 	require.NoError(t, <-queried)
 
-	assert.Equal(t, int64(1), value(t, telemetrytest.SumPoints[int64](t, rec, "pkgsilo.database.connection.waits")))
+	assert.Equal(t, int64(1), value(t, rec.SumPoints[int64](t, "pkgsilo.database.connection.waits")))
 	assert.GreaterOrEqual(t,
-		value(t, telemetrytest.SumPoints[float64](t, rec, "pkgsilo.database.connection.wait_duration")), 0.01)
+		value(t, rec.SumPoints[float64](t, "pkgsilo.database.connection.wait_duration")), 0.01)
 	for _, conn := range held[1:] {
 		require.NoError(t, conn.Close())
 	}
@@ -101,7 +101,7 @@ func TestOpen_PoolMetricsStopOnClose(t *testing.T) {
 	t.Parallel()
 	rec := telemetrytest.New(t)
 	db := databasetest.NewWithProviders(t, rec.MeterProvider(), rec.TracerProvider())
-	require.NotNil(t, telemetrytest.SumPoints[int64](t, rec, "db.client.connection.count"))
+	require.NotNil(t, rec.SumPoints[int64](t, "db.client.connection.count"))
 
 	require.NoError(t, db.Close())
 
@@ -123,13 +123,13 @@ func TestOpen_OperationMetrics(t *testing.T) {
 	require.NoError(t, db.GetContext(t.Context(), &n, "SELECT 1"))
 
 	var queries uint64
-	for _, p := range telemetrytest.HistogramPoints[float64](t, rec, "db.client.operation.duration") {
+	for _, p := range rec.HistogramPoints[float64](t, "db.client.operation.duration") {
 		if p.Attributes.Equals(&queryAttrs) {
 			queries = p.Count
 		}
 	}
 	assert.Equal(t, uint64(1), queries)
-	assert.Nil(t, telemetrytest.SumPoints[int64](t, rec, "db.client.operation.errors"))
+	assert.Nil(t, rec.SumPoints[int64](t, "db.client.operation.errors"))
 }
 
 func TestOpen_OperationMetricsErrors(t *testing.T) {
@@ -140,7 +140,7 @@ func TestOpen_OperationMetricsErrors(t *testing.T) {
 	var n int
 	require.Error(t, db.GetContext(t.Context(), &n, "SELECT 1/0"))
 
-	points := telemetrytest.SumPoints[int64](t, rec, "db.client.operation.errors")
+	points := rec.SumPoints[int64](t, "db.client.operation.errors")
 	require.Len(t, points, 1)
 	assert.Equal(t, queryAttrs, points[0].Attributes)
 	assert.Equal(t, int64(1), points[0].Value)
@@ -155,5 +155,5 @@ func TestOpen_OperationMetricsNoRows(t *testing.T) {
 	var n int
 	require.ErrorIs(t, db.GetContext(t.Context(), &n, "SELECT 1 WHERE false"), sql.ErrNoRows)
 
-	assert.Nil(t, telemetrytest.SumPoints[int64](t, rec, "db.client.operation.errors"))
+	assert.Nil(t, rec.SumPoints[int64](t, "db.client.operation.errors"))
 }
