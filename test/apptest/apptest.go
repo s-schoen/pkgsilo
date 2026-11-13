@@ -138,10 +138,10 @@ func newHandler(
 func NewIdentity(admin *apitest.Client, username string) (identityapi.IdentityResponse, *apitest.Client) {
 	const identitiesPath = "/api/v1/identities"
 
-	created := apitest.DecodeResource[identityapi.IdentityResponse](
-		admin.Post(identitiesPath, `{"username":"`+username+`","displayName":"`+username+`"}`), http.StatusCreated)
-	key := apitest.DecodeResource[apikeyapi.CreatedKeyResponse](
-		admin.Post(identitiesPath+"/"+created.ID.String()+"/api-keys", `{"name":"test"}`), http.StatusCreated)
+	created := admin.Post(identitiesPath, `{"username":"`+username+`","displayName":"`+username+`"}`).
+		DecodeResource[identityapi.IdentityResponse](http.StatusCreated)
+	key := admin.Post(identitiesPath+"/"+created.ID.String()+"/api-keys", `{"name":"test"}`).
+		DecodeResource[apikeyapi.CreatedKeyResponse](http.StatusCreated)
 
 	return created, admin.WithHeader(apiKeyHeader, key.Key.Value)
 }
@@ -152,7 +152,7 @@ func NewIdentity(admin *apitest.Client, username string) (identityapi.IdentityRe
 func AdministratorsGroup(t *testing.T, admin *apitest.Client) uuid.UUID {
 	t.Helper()
 
-	groups := apitest.DecodeCollection[groupapi.GroupResponse](admin.Get("/api/v1/groups"), http.StatusOK).Data
+	groups := admin.Get("/api/v1/groups").DecodeCollection[groupapi.GroupResponse](http.StatusOK).Data
 	for _, group := range groups {
 		if group.Name.Value == "administrators" {
 			return group.ID

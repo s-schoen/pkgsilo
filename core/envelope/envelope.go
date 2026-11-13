@@ -3,9 +3,8 @@
 package envelope
 
 import (
-	"encoding/json"
 	"encoding/json/jsontext"
-	jsonv2 "encoding/json/v2"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -55,7 +54,7 @@ func encodeEnvelope(enc *jsontext.Encoder, repr reflect.Type, data any, rest ...
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return fmt.Errorf("encode envelope: %w", err)
 	}
-	if err := encodeMember(enc, member{name: "data", value: data}, jsonv2.OmitZeroStructFields(true)); err != nil {
+	if err := encodeMember(enc, member{name: "data", value: data}, json.OmitZeroStructFields(true)); err != nil {
 		return err
 	}
 	for _, m := range rest {
@@ -76,11 +75,11 @@ type member struct {
 	value any
 }
 
-func encodeMember(enc *jsontext.Encoder, m member, opts ...jsonv2.Options) error {
+func encodeMember(enc *jsontext.Encoder, m member, opts ...json.Options) error {
 	if err := enc.WriteToken(jsontext.String(m.name)); err != nil {
 		return fmt.Errorf("encode envelope member %s: %w", m.name, err)
 	}
-	if err := jsonv2.MarshalEncode(enc, m.value, opts...); err != nil {
+	if err := json.MarshalEncode(enc, m.value, opts...); err != nil {
 		return fmt.Errorf("encode envelope member %s: %w", m.name, err)
 	}
 

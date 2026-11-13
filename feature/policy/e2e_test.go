@@ -4,7 +4,7 @@
 package policy_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -60,13 +60,12 @@ func policyBody(t *testing.T, name, source string) string {
 func addPolicy(t *testing.T, api *apitest.Client, name, source string) policy {
 	t.Helper()
 
-	return apitest.DecodeResource[policy](api.Post(policiesPath, policyBody(t, name, source)), http.StatusCreated)
+	return api.Post(policiesPath, policyBody(t, name, source)).DecodeResource[policy](http.StatusCreated)
 }
 
 // addGroup creates a group with the identities as members through the client and returns its ID.
 func addGroup(api *apitest.Client, name string, members ...uuid.UUID) string {
-	group := apitest.DecodeResource[groupapi.GroupResponse](
-		api.Post(groupsPath, `{"name":"`+name+`"}`), http.StatusCreated)
+	group := api.Post(groupsPath, `{"name":"`+name+`"}`).DecodeResource[groupapi.GroupResponse](http.StatusCreated)
 	for _, member := range members {
 		api.Put(groupsPath+"/"+group.ID.String()+"/members/"+member.String(), "").AssertNoContent()
 	}
@@ -76,7 +75,7 @@ func addGroup(api *apitest.Client, name string, members ...uuid.UUID) string {
 
 // listPolicies returns all policies that the client may read.
 func listPolicies(api *apitest.Client) []policy {
-	return apitest.DecodeCollection[policy](api.Get(policiesPath), http.StatusOK).Data
+	return api.Get(policiesPath).DecodeCollection[policy](http.StatusOK).Data
 }
 
 // policyNamed returns the policy with the given name, out of those that api lists.
@@ -141,7 +140,7 @@ func TestPolicies_Lifecycle(t *testing.T) {
 
 	// 1. Create.
 	created := api.Post(policiesPath, policyBody(t, "read-identities", source))
-	readIdentities := apitest.DecodeResource[policy](created, http.StatusCreated)
+	readIdentities := created.DecodeResource[policy](http.StatusCreated)
 	location := policiesPath + "/" + readIdentities.ID.String()
 	assert.Equal(t, location, created.Header().Get("Location"))
 	assert.Equal(t, envelope.Visible("read-identities"), readIdentities.Name)
@@ -151,7 +150,7 @@ func TestPolicies_Lifecycle(t *testing.T) {
 	assert.Equal(t, readIdentities.CreatedAt, readIdentities.UpdatedAt)
 
 	// 2. Get.
-	assert.Equal(t, readIdentities, apitest.DecodeResource[policy](api.Get(location), http.StatusOK))
+	assert.Equal(t, readIdentities, api.Get(location).DecodeResource[policy](http.StatusOK))
 
 	// 3. List.
 	listed := listPolicies(api)
@@ -163,8 +162,8 @@ func TestPolicies_Lifecycle(t *testing.T) {
 
 	// 4. Replace.
 	const replacedSource = `permit (principal, action in Action::"read", resource);`
-	replaced := apitest.DecodeResource[policy](
-		api.Put(location, policyBody(t, "read-everything", replacedSource)), http.StatusOK)
+	replaced := api.Put(location, policyBody(t, "read-everything", replacedSource)).
+		DecodeResource[policy](http.StatusOK)
 	assert.Equal(t, readIdentities.ID, replaced.ID)
 	assert.Equal(t, envelope.Visible("read-everything"), replaced.Name)
 	assert.Equal(t, envelope.Visible(replacedSource), replaced.Source)
@@ -172,7 +171,7 @@ func TestPolicies_Lifecycle(t *testing.T) {
 	assert.True(t, replaced.UpdatedAt.Value.After(readIdentities.UpdatedAt.Value), "the update time must advance")
 
 	// 5. Get again.
-	assert.Equal(t, replaced, apitest.DecodeResource[policy](api.Get(location), http.StatusOK))
+	assert.Equal(t, replaced, api.Get(location).DecodeResource[policy](http.StatusOK))
 
 	// 6. Delete.
 	api.Delete(location).AssertNoContent()
@@ -314,7 +313,7 @@ func TestPolicies_Invalid(t *testing.T) {
 			assertInvalidPolicy(t, api.Put(validPath, policyBody(t, tt.name, tt.source)), tt.reason)
 
 			// 4. Nothing written.
-			assert.Equal(t, valid, apitest.DecodeResource[policy](api.Get(validPath), http.StatusOK))
+			assert.Equal(t, valid, api.Get(validPath).DecodeResource[policy](http.StatusOK))
 			for _, p := range listPolicies(api) {
 				assert.NotEqual(t, tt.name, p.Name.Value)
 			}
@@ -451,7 +450,7 @@ func TestPolicies_SecondInstance(t *testing.T) {
 	);`)
 
 	// 4. Get grace elsewhere.
-	assert.Equal(t, grace, apitest.DecodeResource[identity](asAdaElsewhere.Get(gracePath), http.StatusOK))
+	assert.Equal(t, grace, asAdaElsewhere.Get(gracePath).DecodeResource[identity](http.StatusOK))
 
 	// 5. Delete the policy.
 	api.Delete(policiesPath + "/" + readGrace.ID.String()).AssertNoContent()
@@ -484,9 +483,9 @@ func TestPolicies_IdentitiesButNotOtherTypes(t *testing.T) {
 	);`)
 
 	// 3. Manage identities.
-	assert.Len(t, apitest.DecodeCollection[identity](asAda.Get(identitiesPath), http.StatusOK).Data, 2)
-	carol := apitest.DecodeResource[identity](
-		asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`), http.StatusCreated)
+	assert.Len(t, asAda.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data, 2)
+	carol := asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`).
+		DecodeResource[identity](http.StatusCreated)
 	carolPath := identitiesPath + "/" + carol.ID.String()
 	asAda.Put(carolPath, `{"username":"carol","displayName":"Carol Shaw"}`).AssertStatus(http.StatusOK)
 	asAda.Delete(carolPath).AssertNoContent()
@@ -524,12 +523,12 @@ func TestPolicies_ReadOnlyAudit(t *testing.T) {
 	auditPath := policiesPath + "/" + audit.ID.String()
 
 	// 3. Read.
-	identities := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data
+	identities := api.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data
 	policies := listPolicies(api)
-	assert.Equal(t, identities, apitest.DecodeCollection[identity](asAda.Get(identitiesPath), http.StatusOK).Data)
+	assert.Equal(t, identities, asAda.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data)
 	assert.Equal(t, policies, listPolicies(asAda))
-	assert.Equal(t, grace, apitest.DecodeResource[identity](asAda.Get(gracePath), http.StatusOK))
-	assert.Equal(t, audit, apitest.DecodeResource[policy](asAda.Get(auditPath), http.StatusOK))
+	assert.Equal(t, grace, asAda.Get(gracePath).DecodeResource[identity](http.StatusOK))
+	assert.Equal(t, audit, asAda.Get(auditPath).DecodeResource[policy](http.StatusOK))
 
 	// 4. Write.
 	assertFieldsDenied(t, asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`),
@@ -542,7 +541,7 @@ func TestPolicies_ReadOnlyAudit(t *testing.T) {
 	asAda.Delete(auditPath).AssertProblemType(forbidden)
 
 	// 5. Nothing written.
-	assert.Equal(t, identities, apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data)
+	assert.Equal(t, identities, api.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data)
 	assert.Equal(t, policies, listPolicies(api))
 }
 
@@ -586,20 +585,20 @@ func TestPolicies_FieldDenials(t *testing.T) {
 	// 3. Replace as a display name editor.
 	const body = `{"username":"grace-hopper","displayName":"Grace Hopper"}`
 	assertFieldsDenied(t, asAda.Put(gracePath, body), "#/username")
-	assert.Equal(t, grace, apitest.DecodeResource[identity](api.Get(gracePath), http.StatusOK))
+	assert.Equal(t, grace, api.Get(gracePath).DecodeResource[identity](http.StatusOK))
 
 	// 4. Replace as an editor.
 	api.Delete(groupsPath + "/" + displayNameEditors + "/members/" + ada.ID.String()).AssertNoContent()
 	api.Put(groupsPath+"/"+editors+"/members/"+ada.ID.String(), "").AssertNoContent()
 	assertFieldsDenied(t, asAda.Put(gracePath, body), "#/username")
-	assert.Equal(t, grace, apitest.DecodeResource[identity](api.Get(gracePath), http.StatusOK))
+	assert.Equal(t, grace, api.Get(gracePath).DecodeResource[identity](http.StatusOK))
 
 	// 5. Without the forbid.
 	api.Put(policiesPath+"/"+editorsPolicy.ID.String(), policyBody(t, "editors", grant)).AssertStatus(http.StatusOK)
-	replaced := apitest.DecodeResource[identity](asAda.Put(gracePath, body), http.StatusOK)
+	replaced := asAda.Put(gracePath, body).DecodeResource[identity](http.StatusOK)
 	assert.Equal(t, identity{ID: grace.ID}, replaced, "the response to a write is masked like a read")
 	assert.Equal(t, envelope.Visible("grace-hopper"),
-		apitest.DecodeResource[identity](api.Get(gracePath), http.StatusOK).Username)
+		api.Get(gracePath).DecodeResource[identity](http.StatusOK).Username)
 }
 
 // TestPolicies_DeleteReferencedGroup checks that a group stays deletable while a policy references it:
@@ -622,7 +621,7 @@ func TestPolicies_DeleteReferencedGroup(t *testing.T) {
 	api.Delete(groupsPath + "/" + maintainers).AssertNoContent()
 
 	// 3. The policy.
-	assert.Equal(t, referencing, apitest.DecodeResource[policy](api.Get(referencingPath), http.StatusOK))
+	assert.Equal(t, referencing, api.Get(referencingPath).DecodeResource[policy](http.StatusOK))
 	assertInvalidPolicy(t, api.Put(referencingPath, policyBody(t, referencing.Name.Value, referencing.Source.Value)),
 		`the group "`+maintainers+`" does not exist`)
 }
@@ -648,7 +647,7 @@ func TestPolicies_DeleteAdministrators(t *testing.T) {
 
 	// 3. Locked out.
 	assert.Empty(t, listPolicies(api))
-	identities := apitest.DecodeCollection[identity](api.Get(identitiesPath), http.StatusOK).Data
+	identities := api.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data
 	require.Len(t, identities, 1)
 	assert.Equal(t, envelope.Visible("admin"), identities[0].Username)
 	assertFieldsDenied(t, api.Post(policiesPath, policyBody(t, "administrators", administrators.Source.Value)),
@@ -691,14 +690,14 @@ func TestPolicies_Patch(t *testing.T) {
 
 	// 2. Patch the name.
 	before := revision(t, db)
-	patched := apitest.DecodeResource[policy](api.Patch(createdPath, `{"name":"maintainers-read"}`), http.StatusOK)
+	patched := api.Patch(createdPath, `{"name":"maintainers-read"}`).DecodeResource[policy](http.StatusOK)
 	assert.Equal(t, envelope.Visible("maintainers-read"), patched.Name)
 	assert.Equal(t, created.Source, patched.Source, "a member that the patch leaves out must not change")
 	assert.True(t, patched.UpdatedAt.Value.After(created.UpdatedAt.Value), "the update time must advance")
 	assert.Equal(t, before+1, revision(t, db), "a policy write must advance the revision")
 
 	// 3. Patch nothing.
-	assert.Equal(t, patched, apitest.DecodeResource[policy](api.Patch(createdPath, `{}`), http.StatusOK))
+	assert.Equal(t, patched, api.Patch(createdPath, `{}`).DecodeResource[policy](http.StatusOK))
 	assert.Equal(t, before+1, revision(t, db), "a patch that sets nothing writes nothing")
 
 	// 4. Patch with invalid bodies.
@@ -708,7 +707,7 @@ func TestPolicies_Patch(t *testing.T) {
 	resp.AssertProblemType(invalidBody)
 	assert.Contains(t, resp.Body.String(), `"pointer":"#/name"`)
 	api.Patch(createdPath, `{"name":"administrators"}`).AssertProblemType(policyNameTaken)
-	assert.Equal(t, patched, apitest.DecodeResource[policy](api.Get(createdPath), http.StatusOK))
+	assert.Equal(t, patched, api.Get(createdPath).DecodeResource[policy](http.StatusOK))
 
 	// 5. Patch after deleting the group.
 	api.Delete(groupsPath + "/" + maintainers).AssertNoContent()
@@ -755,7 +754,7 @@ func TestPolicies_PatchFieldDenials(t *testing.T) {
 	);`)
 
 	// 3. Patch the name.
-	patched := apitest.DecodeResource[policy](asAda.Patch(targetPath, `{"name":"renamed"}`), http.StatusOK)
+	patched := asAda.Patch(targetPath, `{"name":"renamed"}`).DecodeResource[policy](http.StatusOK)
 	assert.Equal(t, envelope.Visible("renamed"), patched.Name)
 	assert.Equal(t, envelope.Visible(source), patched.Source)
 
@@ -766,5 +765,5 @@ func TestPolicies_PatchFieldDenials(t *testing.T) {
 	assertFieldsDenied(t, asAda.Put(targetPath, policyBody(t, "again", source)), "#/source")
 
 	// 5. Nothing else written.
-	assert.Equal(t, patched, apitest.DecodeResource[policy](api.Get(targetPath), http.StatusOK))
+	assert.Equal(t, patched, api.Get(targetPath).DecodeResource[policy](http.StatusOK))
 }

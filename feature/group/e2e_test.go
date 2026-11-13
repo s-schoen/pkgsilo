@@ -4,7 +4,7 @@
 package group_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 	"time"
@@ -45,7 +45,7 @@ type (
 
 // createGroup creates a group with the given name and returns it with its path.
 func createGroup(api *apitest.Client, name string) (created group, path string) {
-	created = apitest.DecodeResource[group](api.Post(groupsPath, `{"name":"`+name+`"}`), http.StatusCreated)
+	created = api.Post(groupsPath, `{"name":"`+name+`"}`).DecodeResource[group](http.StatusCreated)
 
 	return created, groupsPath + "/" + created.ID.String()
 }
@@ -54,18 +54,18 @@ func createGroup(api *apitest.Client, name string) (created group, path string) 
 func createIdentity(api *apitest.Client, username string) uuid.UUID {
 	resp := api.Post(identitiesPath, `{"username":"`+username+`","displayName":"`+username+`"}`)
 
-	return apitest.DecodeResource[identity](resp, http.StatusCreated).ID
+	return resp.DecodeResource[identity](http.StatusCreated).ID
 }
 
 // adminID returns the ID of the identity that the client of apptest.New authenticates as: the one that
 // the first start created, before all others.
 func adminID(api *apitest.Client) uuid.UUID {
-	return apitest.DecodeCollection[identity](api.Get(identitiesPath+"?limit=1"), http.StatusOK).Data[0].ID
+	return api.Get(identitiesPath + "?limit=1").DecodeCollection[identity](http.StatusOK).Data[0].ID
 }
 
 // memberIDs lists the members of the group at groupPath and returns their identity IDs, in order.
 func memberIDs(api *apitest.Client, groupPath string) []uuid.UUID {
-	members := apitest.DecodeCollection[member](api.Get(groupPath+"/members"), http.StatusOK).Data
+	members := api.Get(groupPath + "/members").DecodeCollection[member](http.StatusOK).Data
 	ids := make([]uuid.UUID, len(members))
 	for i, m := range members {
 		ids[i] = m.IdentityID.Value
@@ -91,7 +91,7 @@ func TestGroups_Lifecycle(t *testing.T) {
 
 	// 1. Create.
 	created := api.Post(groupsPath, `{"name":"Maintainers"}`)
-	maintainers := apitest.DecodeResource[group](created, http.StatusCreated)
+	maintainers := created.DecodeResource[group](http.StatusCreated)
 	location := groupsPath + "/" + maintainers.ID.String()
 	assert.Equal(t, location, created.Header().Get("Location"))
 	assert.Equal(t, envelope.Visible("Maintainers"), maintainers.Name)
@@ -100,24 +100,24 @@ func TestGroups_Lifecycle(t *testing.T) {
 	assert.Equal(t, maintainers.CreatedAt, maintainers.UpdatedAt)
 
 	// 2. Get.
-	assert.Equal(t, maintainers, apitest.DecodeResource[group](api.Get(location), http.StatusOK))
+	assert.Equal(t, maintainers, api.Get(location).DecodeResource[group](http.StatusOK))
 
 	// 3. List.
-	listed := apitest.DecodeCollection[group](api.Get(groupsPath), http.StatusOK).Data
+	listed := api.Get(groupsPath).DecodeCollection[group](http.StatusOK).Data
 	if assert.Len(t, listed, 2) {
 		assert.Equal(t, envelope.Visible("administrators"), listed[0].Name)
 		assert.Equal(t, maintainers, listed[1])
 	}
 
 	// 4. Replace.
-	replaced := apitest.DecodeResource[group](api.Put(location, `{"name":"Core maintainers"}`), http.StatusOK)
+	replaced := api.Put(location, `{"name":"Core maintainers"}`).DecodeResource[group](http.StatusOK)
 	assert.Equal(t, maintainers.ID, replaced.ID)
 	assert.Equal(t, envelope.Visible("Core maintainers"), replaced.Name)
 	assert.Equal(t, maintainers.CreatedAt, replaced.CreatedAt, "the creation time is immutable")
 	assert.True(t, replaced.UpdatedAt.Value.After(maintainers.UpdatedAt.Value), "the update time must advance")
 
 	// 5. Get again.
-	assert.Equal(t, replaced, apitest.DecodeResource[group](api.Get(location), http.StatusOK))
+	assert.Equal(t, replaced, api.Get(location).DecodeResource[group](http.StatusOK))
 
 	// 6. Delete.
 	api.Delete(location).AssertNoContent()
@@ -156,7 +156,7 @@ func TestGroups_NameTaken(t *testing.T) {
 		api := api.For(t)
 
 		api.Put(reviewersPath, `{"name":"Maintainers"}`).AssertProblemType(groupNameTaken)
-		assert.Equal(t, reviewers, apitest.DecodeResource[group](api.Get(reviewersPath), http.StatusOK))
+		assert.Equal(t, reviewers, api.Get(reviewersPath).DecodeResource[group](http.StatusOK))
 	})
 }
 
@@ -178,7 +178,7 @@ func TestGroups_ListPages(t *testing.T) {
 	}
 
 	// 2. List the first page.
-	first := apitest.DecodeCollection[group](api.Get(groupsPath+"?limit=2"), http.StatusOK)
+	first := api.Get(groupsPath + "?limit=2").DecodeCollection[group](http.StatusOK)
 	if assert.Len(t, first.Data, 2) {
 		assert.Equal(t, envelope.Visible("administrators"), first.Data[0].Name, "groups are listed in creation order")
 		assert.Equal(t, created[0], first.Data[1])
@@ -186,7 +186,7 @@ func TestGroups_ListPages(t *testing.T) {
 	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, first.Pagination)
 
 	// 3. List the last page.
-	last := apitest.DecodeCollection[group](api.Get(groupsPath+"?offset=2&limit=2"), http.StatusOK)
+	last := api.Get(groupsPath + "?offset=2&limit=2").DecodeCollection[group](http.StatusOK)
 	assert.Equal(t, created[1:], last.Data)
 	assert.Equal(t, envelope.Pagination{Offset: 2, Limit: 2}, last.Pagination)
 }
@@ -219,11 +219,11 @@ func TestGroups_Members(t *testing.T) {
 
 	// 3. Add ada.
 	api.Put(membersPath+"/"+ada.String(), "").AssertNoContent()
-	added := apitest.DecodeCollection[member](api.Get(membersPath), http.StatusOK).Data
+	added := api.Get(membersPath).DecodeCollection[member](http.StatusOK).Data
 
 	// 4. Add ada again.
 	api.Put(membersPath+"/"+ada.String(), "").AssertNoContent()
-	assert.Equal(t, added, apitest.DecodeCollection[member](api.Get(membersPath), http.StatusOK).Data,
+	assert.Equal(t, added, api.Get(membersPath).DecodeCollection[member](http.StatusOK).Data,
 		"adding a member again must not change the membership")
 
 	// 5. Add grace and margaret.
@@ -231,7 +231,7 @@ func TestGroups_Members(t *testing.T) {
 	api.Put(membersPath+"/"+margaret.String(), "").AssertNoContent()
 
 	// 6. List the first page.
-	first := apitest.DecodeCollection[member](api.Get(membersPath+"?limit=2"), http.StatusOK)
+	first := api.Get(membersPath + "?limit=2").DecodeCollection[member](http.StatusOK)
 	if assert.Len(t, first.Data, 2) {
 		assert.Equal(t, ada, first.Data[0].IdentityID.Value, "members are listed in the order they were added")
 		assert.Equal(t, grace, first.Data[1].IdentityID.Value)
@@ -241,7 +241,7 @@ func TestGroups_Members(t *testing.T) {
 	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, first.Pagination)
 
 	// 7. List the last page.
-	last := apitest.DecodeCollection[member](api.Get(membersPath+"?offset=2&limit=2"), http.StatusOK)
+	last := api.Get(membersPath + "?offset=2&limit=2").DecodeCollection[member](http.StatusOK)
 	if assert.Len(t, last.Data, 1) {
 		assert.Equal(t, margaret, last.Data[0].IdentityID.Value)
 	}
@@ -327,12 +327,12 @@ func addPolicy(t *testing.T, api *apitest.Client, source string) {
 
 // listGroups returns the groups that the client may read.
 func listGroups(api *apitest.Client) []group {
-	return apitest.DecodeCollection[group](api.Get(groupsPath), http.StatusOK).Data
+	return api.Get(groupsPath).DecodeCollection[group](http.StatusOK).Data
 }
 
 // listMembers returns the members of the group at groupPath, which the client may read.
 func listMembers(api *apitest.Client, groupPath string) []member {
-	return apitest.DecodeCollection[member](api.Get(groupPath+"/members"), http.StatusOK).Data
+	return api.Get(groupPath + "/members").DecodeCollection[member](http.StatusOK).Data
 }
 
 // assertFieldsDenied asserts a fields-denied problem that points to the given members of the request body,
@@ -446,8 +446,8 @@ func TestGroups_IdentitiesButNotGroups(t *testing.T) {
 	);`)
 
 	// 3. Manage identities.
-	carol := apitest.DecodeResource[identity](
-		asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`), http.StatusCreated)
+	carol := asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`).
+		DecodeResource[identity](http.StatusCreated)
 
 	// 4. Groups.
 	assert.Empty(t, listGroups(asAda))
@@ -487,7 +487,7 @@ func TestGroups_ReadOnlyAudit(t *testing.T) {
 	members := listMembers(api, maintainersPath)
 	assert.Equal(t, groups, listGroups(asAda))
 	assert.Equal(t, members, listMembers(asAda, maintainersPath))
-	assert.Equal(t, maintainers, apitest.DecodeResource[group](asAda.Get(maintainersPath), http.StatusOK))
+	assert.Equal(t, maintainers, asAda.Get(maintainersPath).DecodeResource[group](http.StatusOK))
 
 	// 4. Write.
 	assertFieldsDenied(t, asAda.Post(groupsPath, `{"name":"more"}`), "#/name")
@@ -535,7 +535,7 @@ func TestGroups_MembersReadOwnGroup(t *testing.T) {
 
 	// 3. Read maintainers.
 	assert.Equal(t, []group{maintainers}, listGroups(asAda))
-	assert.Equal(t, maintainers, apitest.DecodeResource[group](asAda.Get(maintainersPath), http.StatusOK))
+	assert.Equal(t, maintainers, asAda.Get(maintainersPath).DecodeResource[group](http.StatusOK))
 	assert.Equal(t, []uuid.UUID{ada.ID, grace}, memberIDs(asAda, maintainersPath))
 	asAda.Get(identitiesPath + "/" + grace.String()).AssertProblemType(identityNotFound)
 
@@ -686,19 +686,19 @@ func TestGroups_Patch(t *testing.T) {
 	createGroup(api, "Reviewers")
 
 	// 2. Patch the name.
-	patched := apitest.DecodeResource[group](api.Patch(maintainersPath, `{"name":"Core maintainers"}`), http.StatusOK)
+	patched := api.Patch(maintainersPath, `{"name":"Core maintainers"}`).DecodeResource[group](http.StatusOK)
 	assert.Equal(t, envelope.Visible("Core maintainers"), patched.Name)
 	assert.True(t, patched.UpdatedAt.Value.After(maintainers.UpdatedAt.Value), "the update time must advance")
 
 	// 3. Patch nothing.
-	assert.Equal(t, patched, apitest.DecodeResource[group](api.Patch(maintainersPath, `{}`), http.StatusOK))
+	assert.Equal(t, patched, api.Patch(maintainersPath, `{}`).DecodeResource[group](http.StatusOK))
 
 	// 4. Patch with invalid names.
 	resp := api.Patch(maintainersPath, `{"name":null}`)
 	resp.AssertProblemType(invalidBody)
 	assert.Contains(t, resp.Body.String(), `"pointer":"#/name"`)
 	api.Patch(maintainersPath, `{"name":"Reviewers"}`).AssertProblemType(groupNameTaken)
-	assert.Equal(t, patched, apitest.DecodeResource[group](api.Get(maintainersPath), http.StatusOK))
+	assert.Equal(t, patched, api.Get(maintainersPath).DecodeResource[group](http.StatusOK))
 
 	// 5. Patch a missing group.
 	api.Patch(groupsPath+"/"+uuid.NewV4().String(), `{}`).AssertProblemType(groupNotFound)
@@ -731,9 +731,9 @@ func TestGroups_PatchByPolicy(t *testing.T) {
 	);`)
 
 	// 3. Patch maintainers.
-	assert.Equal(t, maintainers, apitest.DecodeResource[group](asAda.Patch(maintainersPath, `{}`), http.StatusOK))
+	assert.Equal(t, maintainers, asAda.Patch(maintainersPath, `{}`).DecodeResource[group](http.StatusOK))
 	assertFieldsDenied(t, asAda.Patch(maintainersPath, `{"name":"Mine"}`), "#/name")
-	assert.Equal(t, maintainers, apitest.DecodeResource[group](api.Get(maintainersPath), http.StatusOK))
+	assert.Equal(t, maintainers, api.Get(maintainersPath).DecodeResource[group](http.StatusOK))
 
 	// 4. Patch hidden.
 	for _, body := range []string{`{"name":"Mine"}`, `{}`} {

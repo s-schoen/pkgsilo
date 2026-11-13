@@ -1,10 +1,12 @@
 package envelope
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
+	"slices"
 )
 
 // ProblemJSONMediaType is the media type of an RFC 9457 Problem Details JSON response.
@@ -82,46 +84,38 @@ type Problem struct {
 	Extensions map[string]any
 }
 
-type problemMembers struct {
-	Type     string `json:"type"`
-	Title    string `json:"title"`
-	Status   int    `json:"status"`
-	Detail   string `json:"detail,omitempty"`
-	Instance string `json:"instance,omitempty"`
-}
+// standardMembers are the members of every problem, which an extension can't replace.
+var standardMembers = []string{"type", "title", "status", "detail", "instance"}
 
-// MarshalJSON encodes the standard members first, followed by the extensions sorted by key.
-func (p Problem) MarshalJSON() ([]byte, error) {
-	b, err := json.Marshal(problemMembers{
-		Type:     p.Type,
-		Title:    p.Title,
-		Status:   p.Status,
-		Detail:   p.Detail,
-		Instance: p.Instance,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal problem members: %w", err)
+// MarshalJSONTo encodes the standard members first, followed by the extensions sorted by key. It leaves out
+// an empty detail and instance.
+func (p Problem) MarshalJSONTo(enc *jsontext.Encoder) error {
+	members := []member{{name: "type", value: p.Type}, {name: "title", value: p.Title}, {name: "status", value: p.Status}}
+	if p.Detail != "" {
+		members = append(members, member{name: "detail", value: p.Detail})
 	}
-
-	ext := make(map[string]any, len(p.Extensions))
-	for k, v := range p.Extensions {
-		switch k {
-		case "type", "title", "status", "detail", "instance":
-			continue
+	if p.Instance != "" {
+		members = append(members, member{name: "instance", value: p.Instance})
+	}
+	for _, name := range slices.Sorted(maps.Keys(p.Extensions)) {
+		if !slices.Contains(standardMembers, name) {
+			members = append(members, member{name: name, value: p.Extensions[name]})
 		}
-		ext[k] = v
-	}
-	if len(ext) == 0 {
-		return b, nil
 	}
 
-	e, err := json.Marshal(ext)
-	if err != nil {
-		return nil, fmt.Errorf("marshal problem extensions: %w", err)
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return fmt.Errorf("encode problem: %w", err)
+	}
+	for _, m := range members {
+		if err := encodeMember(enc, m); err != nil {
+			return fmt.Errorf("encode problem: %w", err)
+		}
+	}
+	if err := enc.WriteToken(jsontext.EndObject); err != nil {
+		return fmt.Errorf("encode problem: %w", err)
 	}
 
-	// Merge both objects: drop the closing brace of the first and the opening brace of the second.
-	return append(append(b[:len(b)-1], ','), e[1:]...), nil
+	return nil
 }
 
 // WriteProblem writes p as a Problem Details response whose HTTP status matches p.Status.

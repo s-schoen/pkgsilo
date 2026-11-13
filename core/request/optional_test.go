@@ -1,7 +1,9 @@
 package request
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
+	"maps"
+	"slices"
 	"testing"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
@@ -9,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOptional_UnmarshalJSON(t *testing.T) {
+func TestOptional_UnmarshalJSONFrom(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -34,7 +36,7 @@ func TestOptional_UnmarshalJSON(t *testing.T) {
 	}
 }
 
-func TestOptional_UnmarshalJSON_Pointer(t *testing.T) {
+func TestOptional_UnmarshalJSONFrom_Pointer(t *testing.T) {
 	t.Parallel()
 	var got struct {
 		Count Optional[*int] `json:"count"`
@@ -110,10 +112,5 @@ func TestIfSet_NotOptional(t *testing.T) {
 
 // keys returns the members that errs reports.
 func keys(errs validation.Errors) []string {
-	var members []string
-	for member := range errs {
-		members = append(members, member)
-	}
-
-	return members
+	return slices.Collect(maps.Keys(errs))
 }
