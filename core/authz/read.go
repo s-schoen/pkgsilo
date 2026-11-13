@@ -84,12 +84,12 @@ func (f FieldActions) NoneReadable() ReadableFields {
 // Reveal returns the field with the given name and value, visible if it's readable and hidden otherwise.
 // It panics on a field that isn't declared, which is a bug in the caller: the field would stay hidden
 // from every actor.
-func Reveal[T any](fields ReadableFields, name string, value T) Field[T] {
-	i := slices.Index(fields.fields, name)
+func (f ReadableFields) Reveal[T any](name string, value T) Field[T] {
+	i := slices.Index(f.fields, name)
 	if i < 0 {
 		panic(fmt.Sprintf("authz: no read action declared for the field %q", name))
 	}
-	if !fields.readable[i] {
+	if !f.readable[i] {
 		return Field[T]{}
 	}
 

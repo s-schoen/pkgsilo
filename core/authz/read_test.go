@@ -78,8 +78,8 @@ func TestFieldActions_Readable(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, testReadFields.Actions(), checked)
-			assert.Equal(t, tt.wantUsername, Reveal(fields, "username", "ada"))
-			assert.Equal(t, tt.wantDisplay, Reveal(fields, "displayName", "Ada Lovelace"))
+			assert.Equal(t, tt.wantUsername, fields.Reveal("username", "ada"))
+			assert.Equal(t, tt.wantDisplay, fields.Reveal("displayName", "Ada Lovelace"))
 		})
 	}
 }
@@ -117,11 +117,11 @@ func TestFieldActions_ReadableIf(t *testing.T) {
 
 			if canRead {
 				assert.Equal(t, append([]Action{readObject}, testReadFields.Actions()...), checked)
-				assert.Equal(t, Visible("ada"), Reveal(fields, "username", "ada"))
+				assert.Equal(t, Visible("ada"), fields.Reveal("username", "ada"))
 				return
 			}
 			assert.Equal(t, []Action{readObject}, checked, "no field of an unreadable object must be checked")
-			assert.Equal(t, Field[string]{}, Reveal(fields, "username", "ada"))
+			assert.Equal(t, Field[string]{}, fields.Reveal("username", "ada"))
 		})
 	}
 }
@@ -140,8 +140,8 @@ func TestFieldActions_NoneReadable(t *testing.T) {
 	t.Parallel()
 	fields := testReadFields.NoneReadable()
 
-	assert.Equal(t, Field[string]{}, Reveal(fields, "username", "ada"))
-	assert.Equal(t, Field[string]{}, Reveal(fields, "displayName", "Ada Lovelace"))
+	assert.Equal(t, Field[string]{}, fields.Reveal("username", "ada"))
+	assert.Equal(t, Field[string]{}, fields.Reveal("displayName", "Ada Lovelace"))
 }
 
 // TestReveal_UndeclaredField checks that a field without a read action is a bug that fails loudly, instead
@@ -151,7 +151,7 @@ func TestReveal_UndeclaredField(t *testing.T) {
 	fields := testReadFields.NoneReadable()
 
 	assert.PanicsWithValue(t, `authz: no read action declared for the field "email"`, func() {
-		Reveal(fields, "email", "ada@example.com")
+		fields.Reveal("email", "ada@example.com")
 	})
 }
 

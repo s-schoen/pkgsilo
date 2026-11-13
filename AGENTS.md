@@ -4,7 +4,7 @@
 
 Every feature is a vertical slice in `feature/<feature>/`, shaped like `feature/identity/`, the reference slice: read it before building a new feature, and register the new feature as a component in `.github/codecov.yml`. Only features go in `feature/`; shared infrastructure stays in `core/`.
 
-A feature is a directory with three layer packages: `feature/<feature>/api` → `feature/<feature>/service` → `feature/<feature>/repository`. Each layer calls only the layer below and owns its types and errors. The layer above always translates, even when the types are identical today: record → domain model → API response, repository error → domain error → HTTP problem. The service translates a record into its domain model with an `authz.Mapper` (see "Authorization") when the model's members match the record's by name and type, and by hand with `authz.Reveal` otherwise.
+A feature is a directory with three layer packages: `feature/<feature>/api` → `feature/<feature>/service` → `feature/<feature>/repository`. Each layer calls only the layer below and owns its types and errors. The layer above always translates, even when the types are identical today: record → domain model → API response, repository error → domain error → HTTP problem. The service translates a record into its domain model with an `authz.Mapper` (see "Authorization") when the model's members match the record's by name and type, and by hand with `ReadableFields.Reveal` otherwise.
 
 Each layer package has the same files:
 
