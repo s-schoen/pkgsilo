@@ -80,6 +80,10 @@ type Tool struct {
 	Kind Kind
 }
 
+// DoneOutput is the output of a tool that reports only that it succeeded, such as one that deletes an
+// object: an empty object.
+type DoneOutput struct{}
+
 // Toolset is the set of tools that a feature offers, the Tools type of its tools package.
 type Toolset interface {
 	// Register adds the feature's tools to reg with Registry.Add.

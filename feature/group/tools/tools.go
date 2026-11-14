@@ -155,18 +155,18 @@ func (t *Tools) listMembers(
 	return mcpserver.NewListOutput(members, page.Offset, toMemberOutput), nil
 }
 
-func (t *Tools) addMember(ctx context.Context, actor uuid.UUID, in MemberInput) (DoneOutput, error) {
+func (t *Tools) addMember(ctx context.Context, actor uuid.UUID, in MemberInput) (mcpserver.DoneOutput, error) {
 	if err := t.service.AddMember(ctx, actor, in.GroupID, in.IdentityID); err != nil {
-		return DoneOutput{}, translateError(err)
+		return mcpserver.DoneOutput{}, translateError(err)
 	}
 
-	return DoneOutput{}, nil
+	return mcpserver.DoneOutput{}, nil
 }
 
-func (t *Tools) removeMember(ctx context.Context, actor uuid.UUID, in MemberInput) (DoneOutput, error) {
+func (t *Tools) removeMember(ctx context.Context, actor uuid.UUID, in MemberInput) (mcpserver.DoneOutput, error) {
 	if err := t.service.RemoveMember(ctx, actor, in.GroupID, in.IdentityID); err != nil {
-		return DoneOutput{}, translateError(err)
+		return mcpserver.DoneOutput{}, translateError(err)
 	}
 
-	return DoneOutput{}, nil
+	return mcpserver.DoneOutput{}, nil
 }

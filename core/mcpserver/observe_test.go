@@ -27,7 +27,7 @@ func TestObserve(t *testing.T) {
 		reg.Add(mcpserver.Tool{Name: "test_fail", Description: "Fails.", Kind: mcpserver.Read},
 			failing(errors.New("connection refused")))
 		reg.Add(mcpserver.Tool{Name: "test_panic", Description: "Panics.", Kind: mcpserver.Read},
-			func(context.Context, uuid.UUID, noInput) (noOutput, error) { panic("boom") })
+			func(context.Context, uuid.UUID, noInput) (mcpserver.DoneOutput, error) { panic("boom") })
 	})
 	call := func(tool string) map[string]string {
 		return map[string]string{

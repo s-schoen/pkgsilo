@@ -73,13 +73,10 @@ func (noInput) Validate() error {
 	return nil
 }
 
-// noOutput is the output of a tool that returns nothing.
-type noOutput struct{}
-
 // failing returns a tool handler that fails with err.
-func failing(err error) func(context.Context, uuid.UUID, noInput) (noOutput, error) {
-	return func(context.Context, uuid.UUID, noInput) (noOutput, error) {
-		return noOutput{}, err
+func failing(err error) func(context.Context, uuid.UUID, noInput) (mcpserver.DoneOutput, error) {
+	return func(context.Context, uuid.UUID, noInput) (mcpserver.DoneOutput, error) {
+		return mcpserver.DoneOutput{}, err
 	}
 }
 
@@ -369,8 +366,8 @@ func TestAdd_Rejects(t *testing.T) {
 			name: "field in input",
 			add: func(reg *mcpserver.Registry) {
 				reg.Add(mcpserver.Tool{Name: "test_tool", Description: "A tool.", Kind: mcpserver.Read},
-					func(context.Context, uuid.UUID, fieldInput) (noOutput, error) {
-						return noOutput{}, nil
+					func(context.Context, uuid.UUID, fieldInput) (mcpserver.DoneOutput, error) {
+						return mcpserver.DoneOutput{}, nil
 					})
 			},
 		},
@@ -462,7 +459,7 @@ func TestAdd_Panic(t *testing.T) {
 	t.Parallel()
 	s := serve(t, func(reg *mcpserver.Registry) {
 		reg.Add(mcpserver.Tool{Name: "test_panic", Description: "Panics.", Kind: mcpserver.Read},
-			func(context.Context, uuid.UUID, noInput) (noOutput, error) { panic("boom") })
+			func(context.Context, uuid.UUID, noInput) (mcpserver.DoneOutput, error) { panic("boom") })
 	})
 
 	resp := s.post(t, "application/json", "", callBody("test_panic"))

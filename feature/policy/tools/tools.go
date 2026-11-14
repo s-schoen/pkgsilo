@@ -153,10 +153,10 @@ func (t *Tools) update(ctx context.Context, actor uuid.UUID, in UpdateInput) (Po
 	return toPolicyOutput(policy), nil
 }
 
-func (t *Tools) delete(ctx context.Context, actor uuid.UUID, in DeleteInput) (DoneOutput, error) {
+func (t *Tools) delete(ctx context.Context, actor uuid.UUID, in DeleteInput) (mcpserver.DoneOutput, error) {
 	if err := t.service.Delete(ctx, actor, in.ID); err != nil {
-		return DoneOutput{}, translateError(err)
+		return mcpserver.DoneOutput{}, translateError(err)
 	}
 
-	return DoneOutput{}, nil
+	return mcpserver.DoneOutput{}, nil
 }
