@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	// errIdentityNotFound answers a call for an identity that doesn't exist or that the actor may not read,
-	// which the service doesn't tell apart.
-	errIdentityNotFound = mcpserver.DefineError("identity_not_found",
+	// ErrIdentityNotFound answers a call for an identity that doesn't exist or that the actor may not read,
+	// which the service doesn't tell apart. It's exported for the tools of other features that refer to
+	// identities, so that agents recognize a missing identity in one way.
+	ErrIdentityNotFound = mcpserver.DefineError("identity_not_found",
 		"The identity does not exist, or the policies do not allow you to read it.")
 	// errUsernameTaken answers a call that gives an identity a username that another identity has.
 	errUsernameTaken = mcpserver.DefineError("username_taken",
@@ -21,7 +22,7 @@ var (
 func translateError(err error) error {
 	switch {
 	case errors.Is(err, service.ErrIdentityNotFound):
-		return errIdentityNotFound
+		return ErrIdentityNotFound
 	case errors.Is(err, service.ErrUsernameTaken):
 		return errUsernameTaken
 	default:

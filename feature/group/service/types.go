@@ -5,8 +5,21 @@ import (
 	"time"
 	"uuid"
 
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+
 	"pkgsilo/core/authz"
+	"pkgsilo/core/request"
 )
+
+// NameRules are the rules of a group name, for the inputs of every transport that sets it: the request
+// bodies of the HTTP API and the arguments of the MCP tools. It has 1 to 128 characters, not all
+// whitespace, and no control characters. Callers must not modify them.
+var NameRules = []validation.Rule{
+	validation.Required,
+	request.NotBlank,
+	request.NoControlCharacters,
+	validation.RuneLength(1, 128),
+}
 
 // Group is a named set of identities, its members, as an actor sees it: every field but the ID is hidden
 // unless the actor may read it. The authz tag of a field names its action, such as group:read:name.

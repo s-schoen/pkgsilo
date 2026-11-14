@@ -1,5 +1,5 @@
-// End-to-end tests of the group endpoints: each test drives the whole app through /api/v1, as
-// cmd/main.go serves it, on a fresh database. The doc comment of each test lists its steps in order,
+// End-to-end tests of the group endpoints and tools: each test drives the whole app through /api/v1 and
+// /mcp, as cmd/main.go serves it, on a fresh database. The doc comment of each test lists its steps in order,
 // each with the result it expects; the numbered comments in the test mark where each step starts.
 package group_test
 
@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/envelope"
+	"pkgsilo/core/mcpserver"
 	groupapi "pkgsilo/feature/group/api"
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/test/apitest"
@@ -740,4 +741,62 @@ func TestGroups_PatchByPolicy(t *testing.T) {
 		assertLikeMissing(t, func(target string) *apitest.Response { return asAda.Patch(target, body) },
 			hiddenPath, missingPath, groupNotFound)
 	}
+}
+
+// errMemberNotFound is the tool error of an identity that isn't a member of the group, written out
+// independently of the code, like the problem types.
+var errMemberNotFound = mcpserver.DefineError("member_not_found",
+	"The identity is not a member of the group, or the policies do not allow you to read it. Nothing was changed.")
+
+// memberPage is the output of group_list_members.
+type memberPage struct {
+	Items      []member `json:"items"`
+	NextOffset *int     `json:"nextOffset"`
+}
+
+// TestGroups_MCP grants an identity, grace, membership in a group through the group tools, as admin, and
+// revokes it:
+//
+//  1. Create maintainers with group_create: maintainers, with its audit fields set by the server, as the API
+//     returns it.
+//  2. Create grace through the API: 201.
+//  3. Add grace to maintainers with group_add_member, twice: an empty output for both.
+//  4. List the members of maintainers with group_list_members: grace alone, added by admin, without a
+//     nextOffset.
+//  5. Remove grace from maintainers with group_remove_member: an empty output.
+//  6. List the members again: none. Remove grace again: member_not_found.
+func TestGroups_MCP(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	mcp := apptest.MCP(t, api)
+
+	// 1. Create.
+	maintainers := mcp.Call("group_create", `{"name":"maintainers"}`).Decode[group]()
+	assert.Equal(t, envelope.Visible("maintainers"), maintainers.Name)
+	assert.Equal(t, envelope.Visible(adminID(api)), maintainers.CreatedBy)
+	assert.Equal(t, maintainers.CreatedAt, maintainers.UpdatedAt)
+	assert.Equal(t, maintainers, api.Get(groupsPath + "/" + maintainers.ID.String()).DecodeResource[group](http.StatusOK))
+
+	// 2. Create grace.
+	grace := createIdentity(api, "grace")
+
+	// 3. Add grace.
+	args := `{"groupId":"` + maintainers.ID.String() + `","identityId":"` + grace.String() + `"}`
+	mcp.Call("group_add_member", args).AssertOutput(`{}`)
+	mcp.Call("group_add_member", args).AssertOutput(`{}`)
+
+	// 4. List the members.
+	listArgs := `{"groupId":"` + maintainers.ID.String() + `"}`
+	members := mcp.Call("group_list_members", listArgs).Decode[memberPage]()
+	require.Len(t, members.Items, 1)
+	assert.Equal(t, envelope.Visible(grace), members.Items[0].IdentityID)
+	assert.Equal(t, envelope.Visible(adminID(api)), members.Items[0].CreatedBy)
+	assert.Nil(t, members.NextOffset)
+
+	// 5. Remove grace.
+	mcp.Call("group_remove_member", args).AssertOutput(`{}`)
+
+	// 6. List again.
+	mcp.Call("group_list_members", listArgs).AssertOutput(`{"items":[]}`)
+	mcp.Call("group_remove_member", args).AssertToolError(errMemberNotFound)
 }

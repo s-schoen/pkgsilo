@@ -21,6 +21,7 @@ import (
 	groupapi "pkgsilo/feature/group/api"
 	grouprepo "pkgsilo/feature/group/repository"
 	groupservice "pkgsilo/feature/group/service"
+	grouptools "pkgsilo/feature/group/tools"
 	healthapi "pkgsilo/feature/health/api"
 	healthrepo "pkgsilo/feature/health/repository"
 	healthservice "pkgsilo/feature/health/service"
@@ -65,6 +66,7 @@ func NewHandler(
 	r := router.New(opts, logger, meterProvider, tracerProvider)
 	r.With(authenticate).Handle(mcpPath, mcpserver.NewHandler(logger, meterProvider, tracerProvider,
 		identitytools.New(identities),
+		grouptools.New(groups),
 	))
 	r.Route(apiPath, func(r chi.Router) {
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())

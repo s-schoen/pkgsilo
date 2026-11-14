@@ -291,7 +291,7 @@ func TestTools_ServiceErrors(t *testing.T) {
 		updateArgs   = `{"id":"` + ada.ID.String() + `","username":"ada"}`
 		input        = service.IdentityInput{Username: "ada", DisplayName: "Ada Lovelace"}
 		patch        = service.IdentityPatch{Username: new("ada")}
-		wantNotFound = func(r *mcptest.Result) { r.AssertToolError(errIdentityNotFound) }
+		wantNotFound = func(r *mcptest.Result) { r.AssertToolError(ErrIdentityNotFound) }
 		wantTaken    = func(r *mcptest.Result) { r.AssertToolError(errUsernameTaken) }
 		wantDenied   = func(r *mcptest.Result) { r.AssertToolError(mcpserver.FieldsDeniedError("username")) }
 		wantInternal = func(r *mcptest.Result) { r.AssertInternalError() }
