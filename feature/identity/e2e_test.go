@@ -5,6 +5,7 @@ package identity_test
 
 import (
 	"encoding/json/v2"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/envelope"
+	"pkgsilo/core/mcpserver"
 	groupapi "pkgsilo/feature/group/api"
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/test/apitest"
@@ -728,4 +730,66 @@ func TestIdentities_MCPWhoami(t *testing.T) {
 
 	// 2. Who am I.
 	assert.Equal(t, ada, apptest.MCP(t, asAda).Call("identity_whoami", "").Decode[identity]())
+}
+
+// errUsernameTaken is the tool error of a username that another identity has, written out independently of
+// the code, like the problem types.
+var errUsernameTaken = mcpserver.DefineError("username_taken",
+	"Another identity already has this username. Nothing was changed. Choose another username.")
+
+// identityPage is the output of identity_list.
+type identityPage struct {
+	Items      []identity `json:"items"`
+	NextOffset *int       `json:"nextOffset"`
+}
+
+// TestIdentities_MCP takes one identity, ada, through the identity tools as admin:
+//
+//  1. Create ada with identity_create: ada, with its audit fields set by the server.
+//  2. Page through identity_list one identity at a time, from the first page on, copying each nextOffset into
+//     the next call: admin, whom the first start created, then ada on the last page, without a nextOffset.
+//  3. Change ada's display name with identity_update: ada with the new display name and the same username.
+//  4. Get ada with identity_get, and through the API: ada as identity_update returned it.
+//  5. Create another identity named ada with identity_create: username_taken.
+func TestIdentities_MCP(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	mcp := apptest.MCP(t, api)
+
+	// 1. Create.
+	ada := mcp.Call("identity_create", `{"username":"ada","displayName":"Ada Lovelace"}`).Decode[identity]()
+	assert.Equal(t, envelope.Visible("ada"), ada.Username)
+	assert.Equal(t, envelope.Visible("Ada Lovelace"), ada.DisplayName)
+	assert.Equal(t, ada.CreatedAt, ada.UpdatedAt)
+
+	// 2. Page through the list.
+	var (
+		pages []identityPage
+		args  = `{"limit":1}`
+	)
+	for len(pages) < 3 {
+		page := mcp.Call("identity_list", args).Decode[identityPage]()
+		pages = append(pages, page)
+		if page.NextOffset == nil {
+			break
+		}
+		args = fmt.Sprintf(`{"offset":%d,"limit":1}`, *page.NextOffset)
+	}
+	require.Len(t, pages, 2)
+	assert.Equal(t, envelope.Visible("admin"), pages[0].Items[0].Username)
+	assert.Equal(t, new(1), pages[0].NextOffset)
+	assert.Equal(t, identityPage{Items: []identity{ada}}, pages[1])
+
+	// 3. Update.
+	updated := mcp.Call("identity_update", `{"id":"`+ada.ID.String()+`","displayName":"Countess of Lovelace"}`).
+		Decode[identity]()
+	assert.Equal(t, envelope.Visible("Countess of Lovelace"), updated.DisplayName)
+	assert.Equal(t, ada.Username, updated.Username)
+
+	// 4. Get.
+	assert.Equal(t, updated, mcp.Call("identity_get", `{"id":"`+ada.ID.String()+`"}`).Decode[identity]())
+	assert.Equal(t, updated, api.Get(identitiesPath + "/" + ada.ID.String()).DecodeResource[identity](http.StatusOK))
+
+	// 5. Create another ada.
+	mcp.Call("identity_create", `{"username":"ada","displayName":"Another Ada"}`).AssertToolError(errUsernameTaken)
 }

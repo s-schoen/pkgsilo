@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -26,11 +27,17 @@ import (
 // compatResult is what the script of testdata/mcpcompat prints.
 type compatResult struct {
 	Initialize   jsontext.Value `json:"initialize"`
-	Tools        jsontext.Value `json:"tools"`
+	Tools        []compatTool   `json:"tools"`
 	Whoami       compatCall     `json:"whoami"`
 	ToolError    compatCall     `json:"toolError"`
 	Hidden       compatCall     `json:"hidden"`
 	Unauthorized jsontext.Value `json:"unauthorized"`
+}
+
+// compatTool is a tool that the script lists.
+type compatTool struct {
+	Name        string         `json:"name"`
+	Annotations jsontext.Value `json:"annotations"`
 }
 
 // compatCall is a tool call of the script.
@@ -49,7 +56,8 @@ type compatCall struct {
 //     itself, each with an API key.
 //  2. Run the script, which connects as admin and initializes: the server pkgsilo, with the tools
 //     capability, at the newest protocol version that the TypeScript SDK speaks.
-//  3. It lists the tools: identity_whoami, annotated as a read.
+//  3. It lists the tools: identity_whoami among them, annotated as a read. The others are the features'
+//     and left to TestMCP, so that this suite stays fixed while features add tools.
 //  4. It calls identity_whoami as admin: admin, as the API lists it, in the structured output and the text.
 //  5. It calls identity_whoami as denied: the tool error identity_not_found.
 //  6. It calls identity_whoami as hidden: hidden without its username.
@@ -80,9 +88,11 @@ func TestMCP_Compatibility(t *testing.T) {
 		string(got.Initialize))
 
 	// 3. List the tools.
-	assert.JSONEq(t, `[{"name":"identity_whoami","annotations":{
-		"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false
-	}}]`, string(got.Tools))
+	whoami := slices.IndexFunc(got.Tools, func(tool compatTool) bool { return tool.Name == "identity_whoami" })
+	if assert.GreaterOrEqual(t, whoami, 0, "identity_whoami isn't listed") {
+		assert.JSONEq(t, `{"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}`,
+			string(got.Tools[whoami].Annotations))
+	}
 
 	// 4. Who am I, as admin.
 	assert.False(t, got.Whoami.IsError, got.Whoami.Text)
