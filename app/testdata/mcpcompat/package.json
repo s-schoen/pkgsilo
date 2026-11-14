@@ -1,0 +1,9 @@
+{
+  "name": "pkgsilo-mcp-compat",
+  "private": true,
+  "description": "Drives the MCP endpoint of pkgsilo with the official TypeScript SDK, for the compatibility test in app.",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2"
+  }
+}

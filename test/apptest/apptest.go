@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"uuid"
 
@@ -28,6 +29,7 @@ import (
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/test/apitest"
 	"pkgsilo/test/databasetest"
+	"pkgsilo/test/mcptest"
 	"pkgsilo/test/telemetrytest"
 )
 
@@ -130,6 +132,24 @@ func newHandler(
 
 	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper),
 		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), meterProvider, tracerProvider)
+}
+
+// MCP returns a client for the MCP endpoint of the application that api sends its requests to, which
+// authenticates like api: with its X-API-Key, or with none for the client of api.Anonymous.
+//
+// It takes an API client rather than returning one more client from New and its variants, so that every
+// API client a test holds, such as the one of NewIdentity, has its MCP counterpart without a variant of
+// each. The SDK's client speaks HTTP to a URL, so the application is served on an httptest server on a
+// loopback address for it, which is closed at the end of the test, and a RoundTripper adds the headers of
+// api to every request. The client connects on its first call: use its Connect method to see a refused
+// connection, such as that of an anonymous client.
+func MCP(t *testing.T, api *apitest.Client) *mcptest.Client {
+	t.Helper()
+
+	server := httptest.NewServer(api.Handler())
+	t.Cleanup(server.Close)
+
+	return mcptest.Connect(t, server.URL+mcptest.Path, api.Header())
 }
 
 // NewIdentity creates an identity with the given username and an API key of its own through the client

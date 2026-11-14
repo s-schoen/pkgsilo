@@ -2,6 +2,7 @@ package envelope
 
 import (
 	"encoding/json/v2"
+	"reflect"
 	"testing"
 	"time"
 
@@ -112,4 +113,11 @@ func TestNewField(t *testing.T) {
 
 	assert.Equal(t, Visible("ci"), NewField("ci", true))
 	assert.Equal(t, Field[string]{}, NewField("ci", false), "a hidden field must not hold its value")
+}
+
+func TestField_ValueType(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, reflect.TypeFor[string](), Field[string]{}.ValueType())
+	assert.Equal(t, reflect.TypeFor[*time.Time](), Field[*time.Time]{}.ValueType())
 }

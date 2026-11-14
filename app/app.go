@@ -13,6 +13,7 @@ import (
 
 	"pkgsilo/core/authn"
 	"pkgsilo/core/authz"
+	"pkgsilo/core/mcpserver"
 	"pkgsilo/core/router"
 	apikeyapi "pkgsilo/feature/apikey/api"
 	apikeyrepo "pkgsilo/feature/apikey/repository"
@@ -26,6 +27,7 @@ import (
 	identityapi "pkgsilo/feature/identity/api"
 	identityrepo "pkgsilo/feature/identity/repository"
 	identityservice "pkgsilo/feature/identity/service"
+	identitytools "pkgsilo/feature/identity/tools"
 	policyapi "pkgsilo/feature/policy/api"
 	policyrepo "pkgsilo/feature/policy/repository"
 	policyservice "pkgsilo/feature/policy/service"
@@ -36,10 +38,13 @@ const (
 	apiPath = "/api/v1"
 	// healthPath is the path of the health check, under apiPath.
 	healthPath = "/health"
+	// mcpPath is the path of the MCP endpoint, at the root, outside apiPath.
+	mcpPath = "/mcp"
 )
 
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
-// on the router that opts configures. All routes but the health check need an authenticated request.
+// on the router that opts configures, and the MCP endpoint at /mcp, which serves the tools of the
+// features to agents. All routes but the health check need an authenticated request.
 // API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger, and
 // metrics are recorded with meterProvider: every request but a health check is measured, and so are
 // authentications and authorization decisions. Every request but a health check gets a server span from
@@ -56,11 +61,15 @@ func NewHandler(
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema())
 
 	opts.UnmeasuredPaths = slices.Concat(opts.UnmeasuredPaths, []string{apiPath + healthPath})
+	authenticate := authn.Require(logger, meterProvider, tracerProvider, apikeyapi.NewAuthenticator(apiKeys))
 	r := router.New(opts, logger, meterProvider, tracerProvider)
+	r.With(authenticate).Handle(mcpPath, mcpserver.NewHandler(logger, meterProvider, tracerProvider,
+		identitytools.New(identities),
+	))
 	r.Route(apiPath, func(r chi.Router) {
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())
 		r.Group(func(r chi.Router) {
-			r.Use(authn.Require(logger, meterProvider, tracerProvider, apikeyapi.NewAuthenticator(apiKeys)))
+			r.Use(authenticate)
 			r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
 			r.Mount("/identities/{identityID}/api-keys", apikeyapi.NewHandler(apiKeys, logger).Routes())
 			r.Mount("/groups", groupapi.NewHandler(groups, logger).Routes())
