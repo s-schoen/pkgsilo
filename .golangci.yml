@@ -219,6 +219,10 @@ linters:
     rules:
       - path: _test\.go
         linters: [funlen, goconst, gosec, noctx, wrapcheck]
+      # A struct tag can't be wrapped, and the jsonschema tag holds a description of an MCP tool's member,
+      # which is part of the tool's contract with agents.
+      - source: 'jsonschema:"'
+        linters: [lll]
 
 formatters:
   enable:

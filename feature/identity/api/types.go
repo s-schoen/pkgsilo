@@ -1,7 +1,6 @@
 package api
 
 import (
-	"regexp"
 	"time"
 	"uuid"
 
@@ -10,24 +9,6 @@ import (
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/request"
 	"pkgsilo/feature/identity/service"
-)
-
-var usernamePattern = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*$`)
-
-// Rules of the identity fields, shared by the request bodies that set them.
-var (
-	usernameRules = []validation.Rule{
-		validation.Required,
-		validation.Length(3, 64),
-		validation.Match(usernamePattern).
-			Error("must consist of lowercase letters and digits, optionally separated by single '.', '_' or '-'"),
-	}
-	displayNameRules = []validation.Rule{
-		validation.Required,
-		request.NotBlank,
-		request.NoControlCharacters,
-		validation.RuneLength(1, 128),
-	}
 )
 
 // CreateIdentityRequest is the body of a request that creates an identity.
@@ -39,8 +20,8 @@ type CreateIdentityRequest struct {
 // Validate reports the invalid members of r as validation.Errors.
 func (r CreateIdentityRequest) Validate() error {
 	return validation.ValidateStruct(&r,
-		validation.Field(&r.Username, usernameRules...),
-		validation.Field(&r.DisplayName, displayNameRules...),
+		validation.Field(&r.Username, service.UsernameRules...),
+		validation.Field(&r.DisplayName, service.DisplayNameRules...),
 	)
 }
 
@@ -57,8 +38,8 @@ type ReplaceIdentityRequest struct {
 // Validate reports the invalid members of r as validation.Errors.
 func (r ReplaceIdentityRequest) Validate() error {
 	return validation.ValidateStruct(&r,
-		validation.Field(&r.Username, usernameRules...),
-		validation.Field(&r.DisplayName, displayNameRules...),
+		validation.Field(&r.Username, service.UsernameRules...),
+		validation.Field(&r.DisplayName, service.DisplayNameRules...),
 	)
 }
 
@@ -76,8 +57,8 @@ type PatchIdentityRequest struct {
 // Validate reports the invalid members of r as validation.Errors.
 func (r PatchIdentityRequest) Validate() error {
 	return validation.ValidateStruct(&r,
-		validation.Field(&r.Username, request.IfSet(usernameRules...)),
-		validation.Field(&r.DisplayName, request.IfSet(displayNameRules...)),
+		validation.Field(&r.Username, request.IfSet(service.UsernameRules...)),
+		validation.Field(&r.DisplayName, request.IfSet(service.DisplayNameRules...)),
 	)
 }
 
