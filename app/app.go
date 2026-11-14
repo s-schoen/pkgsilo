@@ -18,6 +18,7 @@ import (
 	apikeyapi "pkgsilo/feature/apikey/api"
 	apikeyrepo "pkgsilo/feature/apikey/repository"
 	apikeyservice "pkgsilo/feature/apikey/service"
+	apikeytools "pkgsilo/feature/apikey/tools"
 	groupapi "pkgsilo/feature/group/api"
 	grouprepo "pkgsilo/feature/group/repository"
 	groupservice "pkgsilo/feature/group/service"
@@ -69,6 +70,7 @@ func NewHandler(
 		identitytools.New(identities),
 		grouptools.New(groups),
 		policytools.New(policies),
+		apikeytools.New(apiKeys),
 	))
 	r.Route(apiPath, func(r chi.Router) {
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())

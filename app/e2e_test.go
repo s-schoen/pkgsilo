@@ -169,7 +169,8 @@ const mcpPath = "/mcp"
 //
 //  1. Send an MCP request without a key: 401 with the ApiKey challenge, and an MCP client without a key
 //     can't connect.
-//  2. List the tools as admin: exactly the tools that the features register.
+//  2. List the tools as admin: exactly the tools that the features register, without apikey_create, which
+//     would return a key into the model's context.
 //  3. Send a GET with the key: 405, since the endpoint is stateless and serves no event stream.
 //  4. Call identity_whoami as admin: admin, as the API lists it.
 func TestMCP(t *testing.T) {
@@ -187,6 +188,7 @@ func TestMCP(t *testing.T) {
 
 	// 2. List the tools.
 	assert.Equal(t, []string{
+		"apikey_delete", "apikey_get", "apikey_list",
 		"group_add_member", "group_create", "group_get", "group_list", "group_list_members", "group_remove_member",
 		"group_update", "identity_create", "identity_get", "identity_list", "identity_update", "identity_whoami",
 		"policy_create", "policy_delete", "policy_get", "policy_get_schema", "policy_list", "policy_update",
