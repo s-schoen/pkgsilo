@@ -47,12 +47,17 @@ type PolicyService interface {
 	// Delete removes the policy with the given ID. A policy that the actor may not read is reported like a
 	// missing one, and one that it may read but not delete with authz.ErrDenied.
 	Delete(ctx context.Context, actor, id uuid.UUID) error
+	// Schema returns the Cedar schema, in the human-readable format, that policies are validated against:
+	// every declared entity type and action. Any actor may read it, so it checks no authorization: it holds
+	// only the names of types and actions, which are no secret.
+	Schema() string
 }
 
 type policyService struct {
 	repo       repository.PolicyRepository
 	authorizer authz.Authorizer
 	checker    *checker
+	schema     string
 	now        func() time.Time
 }
 
@@ -71,7 +76,7 @@ func newPolicyService(
 		panic(fmt.Errorf("policy service: %w", err))
 	}
 
-	return &policyService{repo: repo, authorizer: authorizer, checker: checker, now: now}
+	return &policyService{repo: repo, authorizer: authorizer, checker: checker, schema: schema, now: now}
 }
 
 func (s *policyService) Create(ctx context.Context, actor uuid.UUID, in PolicyInput) (Policy, error) {
@@ -309,6 +314,10 @@ func (s *policyService) Delete(ctx context.Context, actor, id uuid.UUID) error {
 	}
 
 	return nil
+}
+
+func (s *policyService) Schema() string {
+	return s.schema
 }
 
 // getReadable returns the record of the policy with the given ID. It reports a policy that the decider

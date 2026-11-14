@@ -189,6 +189,7 @@ func TestMCP(t *testing.T) {
 	assert.Equal(t, []string{
 		"group_add_member", "group_create", "group_get", "group_list", "group_list_members", "group_remove_member",
 		"group_update", "identity_create", "identity_get", "identity_list", "identity_update", "identity_whoami",
+		"policy_create", "policy_delete", "policy_get", "policy_get_schema", "policy_list", "policy_update",
 	}, mcp.ToolNames())
 
 	// 3. GET.
