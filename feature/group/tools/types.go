@@ -119,7 +119,3 @@ func toMemberOutput(m service.Member) MemberOutput {
 		CreatedAt:  envelope.Visible(m.CreatedAt),
 	}
 }
-
-// DoneOutput is the output of group_add_member and group_remove_member, which report only that they
-// succeeded: an empty object.
-type DoneOutput struct{}

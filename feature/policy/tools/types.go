@@ -112,6 +112,3 @@ func toPolicyOutput(p service.Policy) PolicyOutput {
 		UpdatedAt: envelope.NewField(p.UpdatedAt.Get()),
 	}
 }
-
-// DoneOutput is the output of policy_delete, which reports only that it succeeded: an empty object.
-type DoneOutput struct{}
