@@ -32,6 +32,7 @@ import (
 	policyapi "pkgsilo/feature/policy/api"
 	policyrepo "pkgsilo/feature/policy/repository"
 	policyservice "pkgsilo/feature/policy/service"
+	policytools "pkgsilo/feature/policy/tools"
 )
 
 const (
@@ -67,6 +68,7 @@ func NewHandler(
 	r.With(authenticate).Handle(mcpPath, mcpserver.NewHandler(logger, meterProvider, tracerProvider,
 		identitytools.New(identities),
 		grouptools.New(groups),
+		policytools.New(policies),
 	))
 	r.Route(apiPath, func(r chi.Router) {
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())

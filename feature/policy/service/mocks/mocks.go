@@ -489,3 +489,47 @@ func (_c *MockPolicyService_Replace_Call) RunAndReturn(run func(ctx context.Cont
 	_c.Call.Return(run)
 	return _c
 }
+
+// Schema provides a mock function for the type MockPolicyService
+func (_mock *MockPolicyService) Schema() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Schema")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MockPolicyService_Schema_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Schema'
+type MockPolicyService_Schema_Call struct {
+	*mock.Call
+}
+
+// Schema is a helper method to define mock.On call
+func (_e *MockPolicyService_Expecter) Schema() *MockPolicyService_Schema_Call {
+	return &MockPolicyService_Schema_Call{Call: _e.mock.On("Schema")}
+}
+
+func (_c *MockPolicyService_Schema_Call) Run(run func()) *MockPolicyService_Schema_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockPolicyService_Schema_Call) Return(s string) *MockPolicyService_Schema_Call {
+	_c.Call.Return(s)
+	return _c
+}
+
+func (_c *MockPolicyService_Schema_Call) RunAndReturn(run func() string) *MockPolicyService_Schema_Call {
+	_c.Call.Return(run)
+	return _c
+}

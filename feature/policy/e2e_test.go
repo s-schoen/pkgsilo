@@ -1,5 +1,5 @@
-// End-to-end tests of the policy endpoints: each test drives the whole app through /api/v1, as
-// cmd/main.go serves it, on a fresh database. The doc comment of each test lists its steps in order,
+// End-to-end tests of the policy endpoints and tools: each test drives the whole app through /api/v1 and
+// /mcp, as cmd/main.go serves it, on a fresh database. The doc comment of each test lists its steps in order,
 // each with the result it expects; the numbered comments in the test mark where each step starts.
 package policy_test
 
@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/envelope"
+	"pkgsilo/core/mcpserver"
 	groupapi "pkgsilo/feature/group/api"
 	identityapi "pkgsilo/feature/identity/api"
 	policyapi "pkgsilo/feature/policy/api"
@@ -34,6 +35,11 @@ var (
 	invalidBody      = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
 	forbidden        = envelope.ProblemType{Type: "about:blank", Title: "Forbidden", Status: http.StatusForbidden}
 )
+
+// The tool errors of the policy tools, written out independently of the code: agents tell errors apart by
+// their codes and act on their messages, so a changed code or message must fail these tests.
+var errPolicyNotFound = mcpserver.DefineError("policy_not_found",
+	"The policy does not exist, or the policies do not allow you to read it.")
 
 const (
 	policiesPath   = "/api/v1/policies"
@@ -766,4 +772,71 @@ func TestPolicies_PatchFieldDenials(t *testing.T) {
 
 	// 5. Nothing else written.
 	assert.Equal(t, patched, api.Get(targetPath).DecodeResource[policy](http.StatusOK))
+}
+
+// TestPolicies_MCP writes, fixes and removes a policy through the policy tools, as admin:
+//
+//  1. Get the schema with policy_get_schema: it declares the action identity:read.
+//  2. Create a policy that uses the undeclared action identity:raed with policy_create: invalid_policy,
+//     naming the action. The policies are listed as before, so nothing was written.
+//  3. Create a valid policy with policy_create: the policy, with its audit fields set by the server, as the
+//     API returns it.
+//  4. Change its source with policy_update: the new source under the same name, as policy_get returns it.
+//  5. Delete it with policy_delete: an empty output.
+//  6. Get it with policy_get: policy_not_found.
+func TestPolicies_MCP(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	mcp := apptest.MCP(t, api)
+	before := listPolicies(api)
+
+	// 1. Get the schema.
+	schema := mcp.Call("policy_get_schema", "").Decode[struct {
+		Schema string `json:"schema"`
+	}]()
+	assert.Contains(t, schema.Schema, `action "identity:read" in ["read"]`)
+
+	// 2. Create an invalid policy.
+	mcp.Call("policy_create", policyBody(t, "typo",
+		`permit (principal, action == Action::"identity:raed", resource);`)).
+		AssertToolError(mcpserver.DefineError("invalid_policy", "The policy is invalid: the source does not "+
+			"match the schema: for policy `statement 1`, unrecognized action `Action::\"identity:raed\"`\n"+
+			"for policy `statement 1`, unable to find an applicable action given the policy scope constraints. "+
+			"Nothing was changed. Fix the source, with the schema that policy_get_schema returns, and call again."))
+	assert.Equal(t, before, listPolicies(api))
+
+	// 3. Create a valid policy.
+	const source = `permit (principal, action == Action::"identity:read", resource);`
+	created := mcp.Call("policy_create", policyBody(t, "read-identities", source)).Decode[policy]()
+	assert.Equal(t, envelope.Visible("read-identities"), created.Name)
+	assert.Equal(t, envelope.Visible(source), created.Source)
+	assert.Equal(t, created.CreatedBy, created.UpdatedBy)
+	assert.Equal(t, created.CreatedAt, created.UpdatedAt)
+	assert.Equal(t, created, api.Get(policiesPath + "/" + created.ID.String()).DecodeResource[policy](http.StatusOK))
+
+	// 4. Change the source.
+	const changed = `permit (principal, action in Action::"identity:readFields", resource);`
+	updated := mcp.Call("policy_update", policyArgs(t, map[string]string{
+		"id": created.ID.String(), "source": changed,
+	})).Decode[policy]()
+	assert.Equal(t, created.Name, updated.Name)
+	assert.Equal(t, envelope.Visible(changed), updated.Source)
+	idArgs := policyArgs(t, map[string]string{"id": created.ID.String()})
+	assert.Equal(t, updated, mcp.Call("policy_get", idArgs).Decode[policy]())
+
+	// 5. Delete.
+	mcp.Call("policy_delete", idArgs).AssertOutput(`{}`)
+
+	// 6. Get again.
+	mcp.Call("policy_get", idArgs).AssertToolError(errPolicyNotFound)
+}
+
+// policyArgs returns the members as the JSON arguments of a policy tool.
+func policyArgs(t *testing.T, members map[string]string) string {
+	t.Helper()
+
+	args, err := json.Marshal(members)
+	require.NoError(t, err)
+
+	return string(args)
 }

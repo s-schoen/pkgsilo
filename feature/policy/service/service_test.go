@@ -179,6 +179,15 @@ func TestNewPolicyService_InvalidSchema(t *testing.T) {
 	}
 }
 
+// TestPolicyService_Schema checks that the service returns the schema that it was given, without asking the
+// authorizer, whose mock fails any call.
+func TestPolicyService_Schema(t *testing.T) {
+	t.Parallel()
+	svc := NewPolicyService(mocks.NewMockPolicyRepository(t), authzmocks.NewMockAuthorizer(t), testSchema)
+
+	assert.Equal(t, testSchema, svc.Schema())
+}
+
 func TestPolicyService_Create(t *testing.T) {
 	t.Parallel()
 	svc, repo, writer := newTestService(t)

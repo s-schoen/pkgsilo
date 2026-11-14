@@ -6,7 +6,28 @@ import (
 	"time"
 	"uuid"
 
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+
 	"pkgsilo/core/authz"
+	"pkgsilo/core/request"
+)
+
+// Rules of the policy fields, for the inputs of every transport that sets them: the request bodies of the
+// HTTP API and the arguments of the MCP tools. Callers must not modify them.
+var (
+	// NameRules are the rules of a policy name: 1 to 128 characters, not all whitespace, and no control
+	// characters.
+	NameRules = []validation.Rule{
+		validation.Required,
+		request.NotBlank,
+		request.NoControlCharacters,
+		validation.RuneLength(1, 128),
+	}
+	// SourceRules are the rules of a policy source: it's required. The service checks the source itself
+	// when it saves it, and reports a mistake with an *InvalidPolicyError.
+	SourceRules = []validation.Rule{
+		validation.Required,
+	}
 )
 
 // Policy is a named document of one or more Cedar statements, as an actor sees it: every field but the ID

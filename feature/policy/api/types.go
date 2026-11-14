@@ -11,20 +11,6 @@ import (
 	"pkgsilo/feature/policy/service"
 )
 
-// Rules of the policy fields, shared by the request bodies that set them. The service checks the source
-// itself, and reports a mistake with an invalid-policy problem.
-var (
-	nameRules = []validation.Rule{
-		validation.Required,
-		request.NotBlank,
-		request.NoControlCharacters,
-		validation.RuneLength(1, 128),
-	}
-	sourceRules = []validation.Rule{
-		validation.Required,
-	}
-)
-
 // CreatePolicyRequest is the body of a request that creates a policy.
 type CreatePolicyRequest struct {
 	Name   string `json:"name"`
@@ -34,8 +20,8 @@ type CreatePolicyRequest struct {
 // Validate reports the invalid members of r as validation.Errors.
 func (r CreatePolicyRequest) Validate() error {
 	return validation.ValidateStruct(&r,
-		validation.Field(&r.Name, nameRules...),
-		validation.Field(&r.Source, sourceRules...),
+		validation.Field(&r.Name, service.NameRules...),
+		validation.Field(&r.Source, service.SourceRules...),
 	)
 }
 
@@ -52,8 +38,8 @@ type ReplacePolicyRequest struct {
 // Validate reports the invalid members of r as validation.Errors.
 func (r ReplacePolicyRequest) Validate() error {
 	return validation.ValidateStruct(&r,
-		validation.Field(&r.Name, nameRules...),
-		validation.Field(&r.Source, sourceRules...),
+		validation.Field(&r.Name, service.NameRules...),
+		validation.Field(&r.Source, service.SourceRules...),
 	)
 }
 
@@ -71,8 +57,8 @@ type PatchPolicyRequest struct {
 // Validate reports the invalid members of r as validation.Errors.
 func (r PatchPolicyRequest) Validate() error {
 	return validation.ValidateStruct(&r,
-		validation.Field(&r.Name, request.IfSet(nameRules...)),
-		validation.Field(&r.Source, request.IfSet(sourceRules...)),
+		validation.Field(&r.Name, request.IfSet(service.NameRules...)),
+		validation.Field(&r.Source, request.IfSet(service.SourceRules...)),
 	)
 }
 
