@@ -174,33 +174,39 @@ func TestTools_InvalidArguments(t *testing.T) {
 		}))
 }
 
-// TestTools_MissingArguments checks that the SDK answers a call without a required argument before the tool
-// is called.
-func TestTools_MissingArguments(t *testing.T) {
+// TestTools_ArgumentsNotMatchingTheSchema checks that a call whose arguments don't match the input schema,
+// such as one without a required argument, is answered with invalid_arguments before the tool is called.
+func TestTools_ArgumentsNotMatchingTheSchema(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
 		tool string
 		args string
-		want string
+		want validation.Errors
 	}{
 		{
 			name: "list",
 			tool: "apikey_list",
 			args: `{"limit":1}`,
-			want: `validating "arguments": validating root: required: missing properties: ["identityId"]`,
+			want: validation.Errors{"identityId": errors.New("is required")},
 		},
 		{
 			name: "get",
 			tool: "apikey_get",
 			args: `{"id":"` + ci.ID.String() + `"}`,
-			want: `validating "arguments": validating root: required: missing properties: ["identityId"]`,
+			want: validation.Errors{"identityId": errors.New("is required")},
 		},
 		{
 			name: "delete",
 			tool: "apikey_delete",
 			args: `{` + identityArg + `}`,
-			want: `validating "arguments": validating root: required: missing properties: ["id"]`,
+			want: validation.Errors{"id": errors.New("is required")},
+		},
+		{
+			name: "malformed ID",
+			tool: "apikey_delete",
+			args: `{` + identityArg + `,"id":"ci"}`,
+			want: validation.Errors{"id": errors.New("must be a UUID")},
 		},
 	}
 	for _, tt := range tests {
@@ -208,9 +214,21 @@ func TestTools_MissingArguments(t *testing.T) {
 			t.Parallel()
 			mcp, _ := newTestClient(t)
 
-			mcp.Call(tt.tool, tt.args).AssertErrorText(tt.want)
+			mcp.Call(tt.tool, tt.args).AssertToolError(mcpserver.InvalidArgumentsError(tt.want))
 		})
 	}
+}
+
+// TestTools_Hints checks what the annotations of the tools tell clients.
+func TestTools_Hints(t *testing.T) {
+	t.Parallel()
+	mcp, _ := newTestClient(t)
+
+	assert.Equal(t, map[string]string{
+		"apikey_list":   "read-only",
+		"apikey_get":    "read-only",
+		"apikey_delete": "destructive, idempotent",
+	}, mcp.Hints())
 }
 
 // TestTools_ServiceErrors checks that each tool answers the errors of the service with its tool errors, and

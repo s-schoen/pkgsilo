@@ -54,6 +54,12 @@ const (
 	internalErrorCode    = "internal_error"
 )
 
+// WriteErrorsDescription tells an agent what fields_denied and invalid_arguments mean, which Registry.Add
+// answers itself. It ends the description of a tool that creates or changes an object.
+const WriteErrorsDescription = "Fails with fields_denied, naming the arguments, if the policies do not allow " +
+	"you to set some of them, and with invalid_arguments, naming each invalid argument and why, if they break " +
+	"the rules; nothing is changed then."
+
 // ErrForbidden answers authz.ErrDenied: the policies don't allow the action, though the actor may read the
 // object.
 var ErrForbidden = DefineError(forbiddenCode, "The policies do not allow this action.")
@@ -65,8 +71,8 @@ func FieldsDeniedError(fields ...string) *ToolError {
 		"The policies do not allow setting these arguments: "+strings.Join(fields, ", ")+". Nothing was changed.")
 }
 
-// InvalidArgumentsError returns the error that answers arguments that fail validation, naming each invalid
-// member and why, as errs does.
+// InvalidArgumentsError returns the error that answers arguments that don't match the input schema or fail
+// validation, naming each invalid member and why, as errs does.
 func InvalidArgumentsError(errs validation.Errors) *ToolError {
 	return DefineError(invalidArgumentsCode, "The arguments are invalid: "+errs.Error())
 }
@@ -75,22 +81,6 @@ func InvalidArgumentsError(errs validation.Errors) *ToolError {
 // which users can quote. It says nothing about the cause, which is logged.
 func InternalError(requestID string) *ToolError {
 	return DefineError(internalErrorCode, "internal error (request ID "+requestID+")")
-}
-
-// validateArguments validates in and returns the invalid_arguments error if it's invalid. It panics if the
-// validation fails for another reason, such as a misconfigured rule: a bug in the feature, not in the
-// arguments.
-func validateArguments(in validation.Validatable) error {
-	err := in.Validate()
-	if err == nil {
-		return nil
-	}
-	errs, ok := errors.AsType[validation.Errors](err)
-	if !ok {
-		panic(fmt.Errorf("mcpserver: validate arguments: %w", err))
-	}
-
-	return InvalidArgumentsError(errs)
 }
 
 // toolError returns the tool error that answers the error that the handler of the tool with the given name

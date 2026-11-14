@@ -40,8 +40,8 @@ const (
 	// other replaces a method or tool name that the server doesn't know, so that the attributes stay
 	// bounded whatever a client sends.
 	other = "_OTHER"
-	// errorTypeTool is the error.type of a tool result that is an error without a ToolError, such as the
-	// SDK's answer to arguments that don't match the input schema.
+	// errorTypeTool is the error.type of a tool result that is an error without a ToolError. Registry.Add
+	// answers every error with one, so it marks a result that didn't come from Add.
 	errorTypeTool = "tool_error"
 )
 

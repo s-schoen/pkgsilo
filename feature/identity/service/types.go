@@ -9,29 +9,38 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
 	"pkgsilo/core/authz"
-	"pkgsilo/core/request"
+	"pkgsilo/core/rules"
 )
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*$`)
 
+// The limits of the identity fields, for the descriptions of the transports that name them.
+const (
+	// MinUsernameLength and MaxUsernameLength are the shortest and the longest username.
+	MinUsernameLength = 3
+	MaxUsernameLength = 64
+	// MaxDisplayNameLength is the longest display name, in characters.
+	MaxDisplayNameLength = 128
+)
+
 // The rules of the identity fields that callers set, for the inputs of every transport that sets them: the
 // request bodies of the HTTP API and the arguments of the MCP tools. Callers must not modify them.
 var (
-	// UsernameRules are the rules of a username: 3 to 64 lowercase letters and digits, optionally separated by
-	// single '.', '_' or '-'.
+	// UsernameRules are the rules of a username: MinUsernameLength to MaxUsernameLength lowercase letters and
+	// digits, optionally separated by single '.', '_' or '-'.
 	UsernameRules = []validation.Rule{
 		validation.Required,
-		validation.Length(3, 64),
+		validation.Length(MinUsernameLength, MaxUsernameLength),
 		validation.Match(usernamePattern).
 			Error("must consist of lowercase letters and digits, optionally separated by single '.', '_' or '-'"),
 	}
-	// DisplayNameRules are the rules of a display name: 1 to 128 characters, not all whitespace, and no
-	// control characters.
+	// DisplayNameRules are the rules of a display name: 1 to MaxDisplayNameLength characters, not all
+	// whitespace, and no control characters.
 	DisplayNameRules = []validation.Rule{
 		validation.Required,
-		request.NotBlank,
-		request.NoControlCharacters,
-		validation.RuneLength(1, 128),
+		rules.NotBlank,
+		rules.NoControlCharacters,
+		validation.RuneLength(1, MaxDisplayNameLength),
 	}
 )
 

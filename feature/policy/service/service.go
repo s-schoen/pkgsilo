@@ -48,9 +48,9 @@ type PolicyService interface {
 	// missing one, and one that it may read but not delete with authz.ErrDenied.
 	Delete(ctx context.Context, actor, id uuid.UUID) error
 	// Schema returns the Cedar schema, in the human-readable format, that policies are validated against:
-	// every declared entity type and action. Any actor may read it, so it checks no authorization: it holds
-	// only the names of types and actions, which are no secret.
-	Schema() string
+	// every declared entity type and action. It returns authz.ErrDenied unless the actor may do
+	// policy:readSchema to the policies as a whole, the Policy with the nil UUID, which no stored policy has.
+	Schema(ctx context.Context, actor uuid.UUID) (string, error)
 }
 
 type policyService struct {
@@ -316,8 +316,21 @@ func (s *policyService) Delete(ctx context.Context, actor, id uuid.UUID) error {
 	return nil
 }
 
-func (s *policyService) Schema() string {
-	return s.schema
+func (s *policyService) Schema(ctx context.Context, actor uuid.UUID) (string, error) {
+	decider, err := s.authorizer.For(ctx, actor)
+	if err != nil {
+		return "", fmt.Errorf("read policy schema: %w", err)
+	}
+
+	can, err := decider.Can(actionReadSchema, toResource(uuid.Nil()))
+	if err != nil {
+		return "", fmt.Errorf("read policy schema: %w", err)
+	}
+	if !can {
+		return "", fmt.Errorf("read policy schema: %w", authz.ErrDenied)
+	}
+
+	return s.schema, nil
 }
 
 // getReadable returns the record of the policy with the given ID. It reports a policy that the decider
@@ -367,7 +380,7 @@ func (s *policyService) checkPatched(
 }
 
 // checkTotal checks that the policies, with the policy with the given ID holding the given number of
-// statements, hold no more than maxStatements together. It runs in the write, which keeps other writes
+// statements, hold no more than MaxStatements together. It runs in the write, which keeps other writes
 // from changing the total until the commit.
 func checkTotal(ctx context.Context, w repository.PolicyWriter, id uuid.UUID, statements int) error {
 	recs, err := w.ListAll(ctx)
@@ -388,7 +401,7 @@ func checkTotal(ctx context.Context, w repository.PolicyWriter, id uuid.UUID, st
 		total += len(others)
 	}
 
-	if total > maxStatements {
+	if total > MaxStatements {
 		return tooManyStatements(total)
 	}
 

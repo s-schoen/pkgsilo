@@ -57,8 +57,8 @@ func TestObserve(t *testing.T) {
 		{span: "tools/call test_echo", want: with(call("test_echo"), "jsonrpc.request.id", "2")},
 		{
 			span:   "tools/call test_echo",
-			want:   with(with(call("test_echo"), "jsonrpc.request.id", "3"), "error.type", "tool_error"),
-			status: sdktrace.Status{Code: codes.Error, Description: "tool_error"},
+			want:   with(with(call("test_echo"), "jsonrpc.request.id", "3"), "error.type", "invalid_arguments"),
+			status: sdktrace.Status{Code: codes.Error, Description: "invalid_arguments"},
 		},
 		{
 			span:   "tools/call test_missing",

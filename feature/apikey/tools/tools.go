@@ -37,9 +37,6 @@ const (
 	// notFound says what apikey_not_found means.
 	notFound = "Fails with apikey_not_found if the identity has no API key with the ID, such as one of " +
 		"another identity, or if the policies do not allow you to read it: the cases look the same. "
-	// paging says how to page through a list.
-	paging = "Page through the list by calling it again with offset set to the nextOffset of the previous " +
-		"page, until there is no nextOffset. "
 )
 
 // Register adds the API key tools to reg.
@@ -49,7 +46,7 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 		Description: "Lists the API keys of an identity that the policies allow you to read, oldest first, one " +
 			"page at a time. " + apiKeyTerm +
 			"Use it to review which API keys an identity has and when they were last used, or to find the API " +
-			"key to revoke with apikey_delete, such as by its name or keySuffix. " + paging +
+			"key to revoke with apikey_delete, such as by its name or keySuffix. " + mcpserver.PagingDescription +
 			"API keys that you may not read are left out, as if they did not exist, though they still work. " +
 			masking + identityNotFound,
 		Kind: mcpserver.Read,

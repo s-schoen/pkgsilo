@@ -34,7 +34,7 @@ func (GetInput) Validate() error {
 // in the HTTP API and the fields of the policy:create actions.
 type CreateInput struct {
 	Name   string `json:"name"   jsonschema:"The unique name of the new policy, such as maintainers-read-everything: 1 to 128 characters, without line breaks."`
-	Source string `json:"source" jsonschema:"The Cedar statements of the policy, at most 16384 bytes, such as permit (principal in Group::\"<group ID>\", action in Action::\"read\", resource);"`
+	Source string `json:"source" jsonschema:"The Cedar statements of the policy, with the rules in the tool's description, such as permit (principal in Group::\"<group ID>\", action in Action::\"read\", resource);"`
 }
 
 // Validate reports the invalid members of in as validation.Errors, with the rules of the service. The
@@ -52,7 +52,7 @@ func (in CreateInput) toInput() service.PolicyInput {
 
 // UpdateInput is the input of policy_update, which changes the members that it sets and keeps the others.
 // Its members are named like the members of PatchPolicyRequest in the HTTP API and the fields of the
-// policy:update actions.
+// policy:update actions. Like a member of the patch, a member can't be null.
 type UpdateInput struct {
 	ID     uuid.UUID `json:"id"               jsonschema:"The ID of the policy to change."`
 	Name   *string   `json:"name,omitempty"   jsonschema:"The new name, with the rules of policy_create. Leave it out to keep the current one."`

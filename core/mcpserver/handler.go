@@ -1,7 +1,11 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,8 +44,13 @@ type callKey struct{}
 // in the context of the request and of the methods.
 type call struct {
 	mu sync.Mutex
-	// body holds the bytes of the request body that the SDK has read: all of it before any method is called.
+	// body holds the bytes of the request body that the SDK has read, until it has read all of them, which
+	// it does before it calls any method: then findID finds the request's ID in them and drops them.
 	body []byte
+	// found reports whether findID has looked for the ID, and id and hasID hold what it found.
+	found bool
+	id    jsonrpc.ID
+	hasID bool
 	// panic is the panic of a method, set before the SDK writes the method's response.
 	panic atomic.Pointer[methodPanicError]
 }
@@ -63,17 +72,71 @@ func callFrom(ctx context.Context) *call {
 func (c *call) requestID() (jsonrpc.ID, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.findID()
 
-	msg, err := jsonrpc.DecodeMessage(c.body)
-	if err != nil {
+	return c.id, c.hasID
+}
+
+// record records p, bytes of the body that the SDK has read, and finds the ID once eof says that it has
+// read all of them.
+func (c *call) record(p []byte, eof bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.found {
+		return
+	}
+
+	c.body = append(c.body, p...)
+	if eof {
+		c.findID()
+	}
+}
+
+// findID finds the request's ID in the body, unless it did before, and drops the body. The caller holds mu.
+func (c *call) findID() {
+	if c.found {
+		return
+	}
+
+	c.id, c.hasID = decodeRequestID(c.body)
+	c.body, c.found = nil, true
+}
+
+// decodeRequestID returns the ID of the JSON-RPC request in body, or false if it holds none, such as a
+// notification, a batch or no JSON object. It decodes only the top-level member id and skips the others,
+// such as the arguments of a tool.
+func decodeRequestID(body []byte) (jsonrpc.ID, bool) {
+	dec := jsontext.NewDecoder(bytes.NewReader(body))
+	if dec.PeekKind() != '{' {
 		return jsonrpc.ID{}, false
 	}
-	req, ok := msg.(*jsonrpc.Request)
-	if !ok || !req.ID.IsValid() {
+	if _, err := dec.ReadToken(); err != nil {
 		return jsonrpc.ID{}, false
 	}
 
-	return req.ID, true
+	for dec.PeekKind() == '"' {
+		name, err := dec.ReadToken()
+		if err != nil {
+			return jsonrpc.ID{}, false
+		}
+		if name.String() != "id" {
+			if err := dec.SkipValue(); err != nil {
+				return jsonrpc.ID{}, false
+			}
+			continue
+		}
+
+		// A string or a number, which decodes into a float64, as the SDK decodes it.
+		var raw any
+		if err := json.UnmarshalDecode(dec, &raw); err != nil {
+			return jsonrpc.ID{}, false
+		}
+		id, err := jsonrpc.MakeID(raw)
+
+		return id, err == nil && id.IsValid()
+	}
+
+	return jsonrpc.ID{}, false
 }
 
 // methodPanicError is the panic of an MCP method, recovered on the goroutine of the method, with the stack
@@ -99,7 +162,8 @@ func (p *methodPanicError) Unwrap() error {
 	return err
 }
 
-// recordingBody records the bytes of a request body that are read in its call.
+// recordingBody records the bytes of a request body that are read in its call, until the call has found
+// the request's ID in them.
 type recordingBody struct {
 	io.ReadCloser
 
@@ -108,9 +172,7 @@ type recordingBody struct {
 
 func (b *recordingBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
-	b.call.mu.Lock()
-	b.call.body = append(b.call.body, p[:n]...)
-	b.call.mu.Unlock()
+	b.call.record(p[:n], errors.Is(err, io.EOF))
 
 	return n, err //nolint:wrapcheck // A reader's io.EOF must stay unwrapped.
 }

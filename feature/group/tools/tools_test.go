@@ -10,6 +10,7 @@ import (
 	"uuid"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
 	"pkgsilo/core/audit"
@@ -316,27 +317,40 @@ func TestTools_InvalidArguments(t *testing.T) {
 	}
 }
 
-// TestTools_MissingArguments checks that the SDK answers a call without a required argument before the tool
-// is called.
-func TestTools_MissingArguments(t *testing.T) {
+// TestTools_ArgumentsNotMatchingTheSchema checks that a call whose arguments don't match the input schema,
+// such as one without a required argument, is answered with invalid_arguments before the tool is called.
+func TestTools_ArgumentsNotMatchingTheSchema(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
 		tool string
 		args string
-		want string
+		want validation.Errors
 	}{
 		{
 			name: "list members",
 			tool: "group_list_members",
 			args: `{"limit":1}`,
-			want: `validating "arguments": validating root: required: missing properties: ["groupId"]`,
+			want: validation.Errors{"groupId": errors.New("is required")},
 		},
 		{
 			name: "add member",
 			tool: "group_add_member",
 			args: `{"groupId":"` + maintainers.ID.String() + `"}`,
-			want: `validating "arguments": validating root: required: missing properties: ["identityId"]`,
+			want: validation.Errors{"identityId": errors.New("is required")},
+		},
+		{
+			name: "malformed ID",
+			tool: "group_add_member",
+			args: `{"groupId":"` + maintainers.ID.String() + `","identityId":"ada"}`,
+			want: validation.Errors{"identityId": errors.New("must be a UUID")},
+		},
+		// A member left out keeps its value, so null, as in the HTTP API's patch, can't clear it.
+		{
+			name: "null",
+			tool: "group_update",
+			args: `{"id":"` + maintainers.ID.String() + `","name":null}`,
+			want: validation.Errors{"name": errors.New("cannot be null")},
 		},
 	}
 	for _, tt := range tests {
@@ -344,9 +358,36 @@ func TestTools_MissingArguments(t *testing.T) {
 			t.Parallel()
 			mcp, _ := newTestClient(t)
 
-			mcp.Call(tt.tool, tt.args).AssertErrorText(tt.want)
+			mcp.Call(tt.tool, tt.args).AssertToolError(mcpserver.InvalidArgumentsError(tt.want))
 		})
 	}
+}
+
+// TestTools_DescribedLimits checks that the descriptions of the arguments name the limits of the service's
+// rules.
+func TestTools_DescribedLimits(t *testing.T) {
+	t.Parallel()
+
+	mcptest.AssertDescriptionContains(t, reflect.TypeFor[CreateInput](), "name",
+		fmt.Sprintf("1 to %d characters", service.MaxNameLength))
+}
+
+// TestTools_Hints checks what the annotations of the tools tell clients: group_create only adds a group,
+// while group_update overwrites its name and group_add_member can take away access, if a policy forbids
+// something to the group's members.
+func TestTools_Hints(t *testing.T) {
+	t.Parallel()
+	mcp, _ := newTestClient(t)
+
+	assert.Equal(t, map[string]string{
+		"group_list":          "read-only",
+		"group_get":           "read-only",
+		"group_list_members":  "read-only",
+		"group_create":        "additive",
+		"group_update":        "destructive, idempotent",
+		"group_add_member":    "destructive, idempotent",
+		"group_remove_member": "destructive, idempotent",
+	}, mcp.Hints())
 }
 
 // TestTools_ServiceErrors checks that each tool answers the errors of the service with its tool errors, and

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"strconv"
 	"uuid"
 
 	"pkgsilo/core/envelope"
@@ -30,12 +31,6 @@ const (
 		"in Group::\"<group ID>\", on resources, such as permit (principal in Group::\"<group ID>\", action " +
 		"in Action::\"read\", resource);. Everything that no statement permits is denied, and a forbid wins " +
 		"over every permit. A change applies to the next request. "
-	// checks says how a source is checked before it's saved, and what invalid_policy means.
-	checks = "Before it is saved, the source is checked: it must parse, hold at least one statement and at most " +
-		"16384 bytes, use only the actions and entity types of the schema that policy_get_schema returns, " +
-		"test with has only for attributes that the schema declares, and name only groups and identities that " +
-		"exist, by their IDs in lowercase with hyphens; all policies together may hold at most 1000 " +
-		"statements. Fails with invalid_policy, saying what to fix, if the source breaks these rules. "
 	// masking says what the output holds.
 	masking = "Fields that the policies do not allow you to read are absent from the output. createdBy and " +
 		"updatedBy are the nil UUID for changes that pkgsilo made itself, such as creating the administrators " +
@@ -43,17 +38,22 @@ const (
 	// notFound says what policy_not_found means.
 	notFound = "Fails with policy_not_found if the policy does not exist, or if the policies do not allow you " +
 		"to read it: the two cases look the same. "
-	// fieldsDenied says what fields_denied means for a tool that writes.
-	fieldsDenied = "Fails with fields_denied, naming the arguments, if the policies do not allow you to set " +
-		"some of them, and with invalid_arguments, naming each invalid argument and why, if they break the " +
-		"rules; nothing is changed then."
-	// lockout warns that a change can take away the actor's own access.
-	lockout = "Changing or deleting a policy that gives you access, such as the administrators policy, can " +
-		"take away your own access, which you may then be unable to restore. "
-	// paging says how to page through a list.
-	paging = "Page through the list by calling it again with offset set to the nextOffset of the previous " +
-		"page, until there is no nextOffset. "
+	// lockout warns that a policy that forbids, and a change to one that permits, can take away the actor's
+	// own access.
+	lockout = "A forbid takes away what it matches from everyone it matches, even what other policies permit, " +
+		"such as forbid (principal, action, resource); from every identity, and changing or deleting a " +
+		"policy that permits, such as the administrators policy, takes away what it gave: either can take " +
+		"away your own access, which you may then be unable to restore. "
 )
+
+// checks says how a source is checked before it's saved, and what invalid_policy means, with the limits of
+// the service.
+var checks = "Before it is saved, the source is checked: it must parse, hold at least one statement and at " +
+	"most " + strconv.Itoa(service.MaxSourceBytes) + " bytes, use only the actions and entity types of the " +
+	"schema that policy_get_schema returns, test with has only for attributes that the schema declares, and " +
+	"name only groups and identities that exist, by their IDs in lowercase with hyphens; all policies " +
+	"together may hold at most " + strconv.Itoa(service.MaxStatements) + " statements. Fails with " +
+	"invalid_policy, saying what to fix, if the source breaks these rules. "
 
 // Register adds the policy tools to reg.
 func (t *Tools) Register(reg *mcpserver.Registry) {
@@ -65,13 +65,15 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 			"writing a policy with policy_create or policy_update, so that the policy uses only declared " +
 			"actions and types. An action group, such as read or identity:readFields, matches every action in " +
 			"it with action in Action::\"<group>\". The actions on fields, such as identity:read:username, " +
-			"decide which fields of an object you can read or set. Any identity may read the schema.",
+			"decide which fields of an object you can read or set. Fails with forbidden if the policies do not " +
+			"allow you policy:readSchema, which the action group read holds.",
 		Kind: mcpserver.Read,
 	}, t.getSchema)
 	reg.Add(mcpserver.Tool{
 		Name: "policy_list",
 		Description: "Lists the policies that the policies allow you to read, oldest first, one page at a time. " +
-			policyTerm + "Use it to find a policy, such as by its name, since there is no search. " + paging +
+			policyTerm + "Use it to find a policy, such as by its name, since there is no search. " +
+			mcpserver.PagingDescription +
 			"Policies that you may not read are left out, as if they did not exist, though they still apply. " +
 			masking,
 		Kind: mcpserver.Read,
@@ -81,12 +83,13 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 		Description: "Returns the policy with the given ID. " + policyTerm + masking + notFound,
 		Kind:        mcpserver.Read,
 	}, t.get)
+	// Not additive: a forbid takes access away.
 	reg.Add(mcpserver.Tool{
 		Name: "policy_create",
 		Description: "Creates a policy and returns it. " + policyTerm +
-			"Call policy_get_schema first to learn the actions and entity types. " + checks +
+			"Call policy_get_schema first to learn the actions and entity types. " + checks + lockout +
 			"The output holds only its id if the policies do not allow you to read it. " + masking +
-			"Fails with policy_name_taken if another policy has the name. " + fieldsDenied,
+			"Fails with policy_name_taken if another policy has the name. " + mcpserver.WriteErrorsDescription,
 		Kind: mcpserver.Write,
 	}, t.create)
 	reg.Add(mcpserver.Tool{
@@ -96,8 +99,9 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 			"statements of the policy. " + checks + "The source is checked even if only the name changes, " +
 			"so a policy whose source names a group that was deleted since can't be renamed before its " +
 			"source is fixed. " + lockout + masking + notFound +
-			"Fails with policy_name_taken if another policy has the new name. " + fieldsDenied,
-		Kind: mcpserver.Write,
+			"Fails with policy_name_taken if another policy has the new name. " + mcpserver.WriteErrorsDescription,
+		Kind:       mcpserver.Write,
+		Idempotent: true,
 	}, t.update)
 	reg.Add(mcpserver.Tool{
 		Name: "policy_delete",
@@ -110,8 +114,13 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 	}, t.delete)
 }
 
-func (t *Tools) getSchema(context.Context, uuid.UUID, GetSchemaInput) (SchemaOutput, error) {
-	return SchemaOutput{Schema: envelope.Visible(t.service.Schema())}, nil
+func (t *Tools) getSchema(ctx context.Context, actor uuid.UUID, _ GetSchemaInput) (SchemaOutput, error) {
+	schema, err := t.service.Schema(ctx, actor)
+	if err != nil {
+		return SchemaOutput{}, translateError(err)
+	}
+
+	return SchemaOutput{Schema: envelope.Visible(schema)}, nil
 }
 
 func (t *Tools) list(
