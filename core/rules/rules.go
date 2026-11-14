@@ -1,4 +1,7 @@
-package request
+// Package rules holds the validation rules for free text, such as names, beyond what validation.Required and
+// validation.RuneLength check, for the field rules of the services. It depends on no transport, so that the
+// services, the HTTP API and the MCP tools can all use it.
+package rules
 
 import (
 	"strings"
@@ -7,8 +10,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 )
 
-// Rules for free text, such as names, beyond what validation.Required and validation.RuneLength
-// check. Like those length rules, they accept the empty string, which validation.Required rejects.
+// Like the length rules, they accept the empty string, which validation.Required rejects.
 var (
 	// NotBlank rejects text of only whitespace, which looks blank to clients.
 	NotBlank = validation.NewStringRuleWithError(

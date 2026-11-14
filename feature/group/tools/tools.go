@@ -33,13 +33,6 @@ const (
 	// notFound says what group_not_found means.
 	notFound = "Fails with group_not_found if the group does not exist, or if the policies do not allow you " +
 		"to read it: the two cases look the same. "
-	// fieldsDenied says what fields_denied means for a tool that writes.
-	fieldsDenied = "Fails with fields_denied, naming the arguments, if the policies do not allow you to set " +
-		"some of them, and with invalid_arguments, naming each invalid argument and why, if they break the " +
-		"rules; nothing is changed then."
-	// paging says how to page through a list.
-	paging = "Page through the list by calling it again with offset set to the nextOffset of the previous " +
-		"page, until there is no nextOffset. "
 )
 
 // Register adds the group tools to reg.
@@ -47,8 +40,9 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 	reg.Add(mcpserver.Tool{
 		Name: "group_list",
 		Description: "Lists the groups that the policies allow you to read, oldest first, one page at a time. " +
-			groupTerm + "Use it to find a group, such as by its name, since there is no search. " + paging +
-			"Groups that you may not read are left out, as if they did not exist. " + masking,
+			groupTerm + "Use it to find a group, such as by its name, since there is no search. " +
+			mcpserver.PagingDescription + "Groups that you may not read are left out, as if they did not exist. " +
+			masking,
 		Kind: mcpserver.Read,
 	}, t.list)
 	reg.Add(mcpserver.Tool{
@@ -61,35 +55,43 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 		Description: "Creates a group without members and returns it. " + groupTerm +
 			"Add members with group_add_member. The output holds only its id if the policies do not allow you " +
 			"to read it. " + masking + "Fails with group_name_taken if another group has the name. " +
-			fieldsDenied,
-		Kind: mcpserver.Write,
+			mcpserver.WriteErrorsDescription,
+		Kind:     mcpserver.Write,
+		Additive: true,
 	}, t.create)
 	reg.Add(mcpserver.Tool{
 		Name: "group_update",
 		Description: "Renames a group and returns it. " + groupTerm +
 			"Leave name out to change nothing. Its members stay as they are: change them with " +
 			"group_add_member and group_remove_member. " + masking + notFound +
-			"Fails with group_name_taken if another group has the new name. " + fieldsDenied,
-		Kind: mcpserver.Write,
+			"Fails with group_name_taken if another group has the new name. " + mcpserver.WriteErrorsDescription,
+		Kind:       mcpserver.Write,
+		Idempotent: true,
 	}, t.update)
+	t.registerMembers(reg)
+}
+
+// registerMembers adds the tools that list and change the members of a group to reg.
+func (t *Tools) registerMembers(reg *mcpserver.Registry) {
 	reg.Add(mcpserver.Tool{
 		Name: "group_list_members",
 		Description: "Lists the members of a group, in the order they were added, one page at a time. " +
 			groupTerm + "Each member is the ID of an identity, with who added it and when: get the identity " +
 			"with identity_get. The list holds every member, even identities that the policies do not allow " +
-			"you to read. " + paging + notFound +
+			"you to read. " + mcpserver.PagingDescription + notFound +
 			"Fails with forbidden if the policies allow you to read the group, but not its members.",
 		Kind: mcpserver.Read,
 	}, t.listMembers)
 	reg.Add(mcpserver.Tool{
 		Name: "group_add_member",
 		Description: "Adds an identity to the members of a group, so that the identity gets what the policies " +
-			"give to the group. " + groupTerm +
+			"give to the group, which takes away what they forbid to it. " + groupTerm +
 			"Adding a member again changes nothing and succeeds. The output is empty. " + notFound +
 			"Fails with identity_not_found if the identity does not exist, or if the policies do not allow you " +
 			"to read it, and with forbidden if the policies allow you to read the group, but not to add " +
 			"members to it; nothing is changed then.",
-		Kind: mcpserver.Write,
+		Kind:       mcpserver.Write,
+		Idempotent: true,
 	}, t.addMember)
 	reg.Add(mcpserver.Tool{
 		Name: "group_remove_member",

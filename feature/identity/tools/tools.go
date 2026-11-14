@@ -31,10 +31,6 @@ const (
 	// notFound says what identity_not_found means.
 	notFound = "Fails with identity_not_found if no identity has the ID, or if the policies do not allow you " +
 		"to read it: the two cases look the same. "
-	// fieldsDenied says what fields_denied means for a tool that writes.
-	fieldsDenied = "Fails with fields_denied, naming the arguments, if the policies do not allow you to set " +
-		"some of them, and with invalid_arguments, naming each invalid argument and why, if they break the " +
-		"rules; nothing is changed then."
 )
 
 // Register adds the identity tools to reg.
@@ -43,9 +39,9 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 		Name: "identity_list",
 		Description: "Lists the identities that the policies allow you to read, oldest first, one page at a " +
 			"time. " + identityTerm +
-			"Use it to find an identity, such as by its username, since there is no search: page through the " +
-			"list by calling it again with offset set to the nextOffset of the previous page, until there is " +
-			"no nextOffset. Identities that you may not read are left out, as if they did not exist. " + masking,
+			"Use it to find an identity, such as by its username, since there is no search. " +
+			mcpserver.PagingDescription +
+			"Identities that you may not read are left out, as if they did not exist. " + masking,
 		Kind: mcpserver.Read,
 	}, t.list)
 	reg.Add(mcpserver.Tool{
@@ -59,8 +55,9 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 			"The new identity has no API key and belongs to no group, so it can't authenticate and only the " +
 			"policies for every identity apply to it. The output holds only its id if the policies do not " +
 			"allow you to read it. " + masking +
-			"Fails with username_taken if another identity has the username. " + fieldsDenied,
-		Kind: mcpserver.Write,
+			"Fails with username_taken if another identity has the username. " + mcpserver.WriteErrorsDescription,
+		Kind:     mcpserver.Write,
+		Additive: true,
 	}, t.create)
 	reg.Add(mcpserver.Tool{
 		Name: "identity_update",
@@ -68,8 +65,10 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 			"identity. " + identityTerm +
 			"Set only the arguments to change: those that you leave out keep their values, even if they " +
 			"change at the same time. With neither set, it changes nothing. " + masking + notFound +
-			"Fails with username_taken if another identity has the new username. " + fieldsDenied,
-		Kind: mcpserver.Write,
+			"Fails with username_taken if another identity has the new username. " +
+			mcpserver.WriteErrorsDescription,
+		Kind:       mcpserver.Write,
+		Idempotent: true,
 	}, t.update)
 	reg.Add(mcpserver.Tool{
 		Name: "identity_whoami",

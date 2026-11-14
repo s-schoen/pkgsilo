@@ -9,6 +9,7 @@ import (
 	"uuid"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
 	"pkgsilo/core/audit"
@@ -248,14 +249,71 @@ func TestTools_InvalidArguments(t *testing.T) {
 	}
 }
 
-// TestTools_MissingArguments checks that the SDK answers a call without a required argument before the tool
-// is called.
-func TestTools_MissingArguments(t *testing.T) {
+// TestTools_ArgumentsNotMatchingTheSchema checks that a call whose arguments don't match the input schema,
+// such as one without a required argument, is answered with invalid_arguments before the tool is called.
+func TestTools_ArgumentsNotMatchingTheSchema(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		tool string
+		args string
+		want validation.Errors
+	}{
+		{
+			name: "missing",
+			tool: "identity_create",
+			args: `{"username":"ada"}`,
+			want: validation.Errors{"displayName": errors.New("is required")},
+		},
+		// A member left out keeps its value, so null, as in the HTTP API's patch, can't clear it.
+		{
+			name: "null",
+			tool: "identity_update",
+			args: `{"id":"` + ada.ID.String() + `","displayName":null}`,
+			want: validation.Errors{"displayName": errors.New("cannot be null")},
+		},
+		{
+			name: "malformed ID",
+			tool: "identity_get",
+			args: `{"id":"ada"}`,
+			want: validation.Errors{"id": errors.New("must be a UUID")},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			mcp, _ := newTestClient(t)
+
+			mcp.Call(tt.tool, tt.args).AssertToolError(mcpserver.InvalidArgumentsError(tt.want))
+		})
+	}
+}
+
+// TestTools_DescribedLimits checks that the descriptions of the arguments name the limits of the service's
+// rules.
+func TestTools_DescribedLimits(t *testing.T) {
+	t.Parallel()
+	create := reflect.TypeFor[CreateInput]()
+
+	mcptest.AssertDescriptionContains(t, create, "username",
+		fmt.Sprintf("%d to %d lowercase letters", service.MinUsernameLength, service.MaxUsernameLength))
+	mcptest.AssertDescriptionContains(t, create, "displayName",
+		fmt.Sprintf("1 to %d characters", service.MaxDisplayNameLength))
+}
+
+// TestTools_Hints checks what the annotations of the tools tell clients: identity_create only adds an
+// identity, and identity_update overwrites fields.
+func TestTools_Hints(t *testing.T) {
 	t.Parallel()
 	mcp, _ := newTestClient(t)
 
-	mcp.Call("identity_create", `{"username":"ada"}`).
-		AssertErrorText(`validating "arguments": validating root: required: missing properties: ["displayName"]`)
+	assert.Equal(t, map[string]string{
+		"identity_list":   "read-only",
+		"identity_get":    "read-only",
+		"identity_whoami": "read-only",
+		"identity_create": "additive",
+		"identity_update": "destructive, idempotent",
+	}, mcp.Hints())
 }
 
 func TestTools_Whoami(t *testing.T) {

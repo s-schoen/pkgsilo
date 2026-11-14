@@ -10,6 +10,7 @@ import (
 	"uuid"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
 	"pkgsilo/core/audit"
@@ -84,7 +85,7 @@ func TestTools_SettableMembers(t *testing.T) {
 func TestTools_GetSchema(t *testing.T) {
 	t.Parallel()
 	mcp, svc := newTestClient(t)
-	svc.EXPECT().Schema().Return("entity Identity;\naction \"identity:read\";\n")
+	svc.EXPECT().Schema(mock.Anything, apitest.Actor).Return("entity Identity;\naction \"identity:read\";\n", nil)
 
 	mcp.Call("policy_get_schema", "").AssertOutput(`{"schema":"entity Identity;\naction \"identity:read\";\n"}`)
 }
@@ -273,27 +274,40 @@ func TestTools_InvalidArguments(t *testing.T) {
 	}
 }
 
-// TestTools_MissingArguments checks that the SDK answers a call without a required argument before the tool
-// is called.
-func TestTools_MissingArguments(t *testing.T) {
+// TestTools_ArgumentsNotMatchingTheSchema checks that a call whose arguments don't match the input schema,
+// such as one without a required argument, is answered with invalid_arguments before the tool is called.
+func TestTools_ArgumentsNotMatchingTheSchema(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
 		tool string
 		args string
-		want string
+		want validation.Errors
 	}{
 		{
 			name: "create",
 			tool: "policy_create",
 			args: `{"name":"read-identities"}`,
-			want: `validating "arguments": validating root: required: missing properties: ["source"]`,
+			want: validation.Errors{"source": errors.New("is required")},
 		},
 		{
 			name: "delete",
 			tool: "policy_delete",
 			args: `{}`,
-			want: `validating "arguments": validating root: required: missing properties: ["id"]`,
+			want: validation.Errors{"id": errors.New("is required")},
+		},
+		{
+			name: "malformed ID",
+			tool: "policy_get",
+			args: `{"id":"read-identities"}`,
+			want: validation.Errors{"id": errors.New("must be a UUID")},
+		},
+		// A member left out keeps its value, so null, as in the HTTP API's patch, can't clear it.
+		{
+			name: "null",
+			tool: "policy_update",
+			args: `{"id":"` + readIdentities.ID.String() + `","source":null}`,
+			want: validation.Errors{"source": errors.New("cannot be null")},
 		},
 	}
 	for _, tt := range tests {
@@ -301,9 +315,34 @@ func TestTools_MissingArguments(t *testing.T) {
 			t.Parallel()
 			mcp, _ := newTestClient(t)
 
-			mcp.Call(tt.tool, tt.args).AssertErrorText(tt.want)
+			mcp.Call(tt.tool, tt.args).AssertToolError(mcpserver.InvalidArgumentsError(tt.want))
 		})
 	}
+}
+
+// TestTools_DescribedLimits checks that the descriptions of the arguments name the limits of the service's
+// rules. Those of the source are in the tools' descriptions, which name the service's constants.
+func TestTools_DescribedLimits(t *testing.T) {
+	t.Parallel()
+
+	mcptest.AssertDescriptionContains(t, reflect.TypeFor[CreateInput](), "name",
+		fmt.Sprintf("1 to %d characters", service.MaxNameLength))
+}
+
+// TestTools_Hints checks what the annotations of the tools tell clients: policy_create can take away access
+// with a forbid, and policy_update overwrites fields.
+func TestTools_Hints(t *testing.T) {
+	t.Parallel()
+	mcp, _ := newTestClient(t)
+
+	assert.Equal(t, map[string]string{
+		"policy_get_schema": "read-only",
+		"policy_list":       "read-only",
+		"policy_get":        "read-only",
+		"policy_create":     "destructive",
+		"policy_update":     "destructive, idempotent",
+		"policy_delete":     "destructive, idempotent",
+	}, mcp.Hints())
 }
 
 // TestTools_ServiceErrors checks that each tool answers the errors of the service with its tool errors, and
@@ -348,6 +387,9 @@ func TestTools_ServiceErrors(t *testing.T) {
 		expectDelete = func(svc *mocks.MockPolicyService, err error) {
 			svc.EXPECT().Delete(mock.Anything, apitest.Actor, readIdentities.ID).Return(err)
 		}
+		expectSchema = func(svc *mocks.MockPolicyService, err error) {
+			svc.EXPECT().Schema(mock.Anything, apitest.Actor).Return("", err)
+		}
 	)
 	tests := []struct {
 		name   string
@@ -357,6 +399,14 @@ func TestTools_ServiceErrors(t *testing.T) {
 		err    error
 		assert func(r *mcptest.Result)
 	}{
+		{
+			name: "schema forbidden", tool: "policy_get_schema", expect: expectSchema, err: denied,
+			assert: wantForbidden,
+		},
+		{
+			name: "schema unexpected", tool: "policy_get_schema", expect: expectSchema, err: unexpected,
+			assert: wantInternal,
+		},
 		{name: "list unexpected", tool: "policy_list", expect: expectList, err: unexpected, assert: wantInternal},
 		{
 			name: "get not found", tool: "policy_get", args: idArgs, expect: expectGet, err: policyNotFound,

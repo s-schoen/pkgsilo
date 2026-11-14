@@ -784,6 +784,7 @@ func TestPolicies_PatchFieldDenials(t *testing.T) {
 //  4. Change its source with policy_update: the new source under the same name, as policy_get returns it.
 //  5. Delete it with policy_delete: an empty output.
 //  6. Get it with policy_get: policy_not_found.
+//  7. Get the schema with policy_get_schema as an identity that no policy permits anything: forbidden.
 func TestPolicies_MCP(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
@@ -829,6 +830,11 @@ func TestPolicies_MCP(t *testing.T) {
 
 	// 6. Get again.
 	mcp.Call("policy_get", idArgs).AssertToolError(errPolicyNotFound)
+
+	// 7. Get the schema without access.
+	_, asAda := apptest.NewIdentity(api, "ada")
+	apptest.MCP(t, asAda).Call("policy_get_schema", "").
+		AssertToolError(mcpserver.DefineError("forbidden", "The policies do not allow this action."))
 }
 
 // policyArgs returns the members as the JSON arguments of a policy tool.

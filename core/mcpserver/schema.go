@@ -37,13 +37,38 @@ var (
 //     may hold one.
 //   - a uuid.UUID, an array of 16 bytes, is a string in the uuid format.
 //   - any other type that implements encoding.TextMarshaler is a string, as encoding/json encodes it.
+//
+// No member of the arguments allows null, even a pointer or a slice, which Registry.Add rejects (see
+// arguments.decode).
 func schemaFor(t reflect.Type, output bool) (*jsonschema.Schema, error) {
 	overrides := map[reflect.Type]*jsonschema.Schema{}
 	if err := collectOverrides(t, output, overrides, map[reflect.Type]bool{}); err != nil {
 		return nil, err
 	}
 
-	return jsonschema.ForType(t, &jsonschema.ForOptions{TypeSchemas: overrides}) //nolint:wrapcheck // Names t.
+	schema, err := jsonschema.ForType(t, &jsonschema.ForOptions{TypeSchemas: overrides})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // Names t.
+	}
+	if !output {
+		for _, member := range schema.Properties {
+			disallowNull(member)
+		}
+	}
+
+	return schema, nil
+}
+
+// disallowNull removes null from the types that schema allows, such as those of a pointer, ["null", "string"].
+func disallowNull(schema *jsonschema.Schema) {
+	if !slices.Contains(schema.Types, "null") {
+		return
+	}
+
+	schema.Types = slices.DeleteFunc(slices.Clone(schema.Types), func(t string) bool { return t == "null" })
+	if len(schema.Types) == 1 {
+		schema.Type, schema.Types = schema.Types[0], nil
+	}
 }
 
 // collectOverrides adds the schemas of the types inside t that schemaFor describes otherwise than

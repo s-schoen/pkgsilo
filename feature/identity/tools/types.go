@@ -51,7 +51,7 @@ func (in CreateInput) toInput() service.IdentityInput {
 
 // UpdateInput is the input of identity_update, which changes the members that it sets and keeps the others.
 // Its members are named like the members of PatchIdentityRequest in the HTTP API and the fields of the
-// identity:update actions.
+// identity:update actions. Like a member of the patch, a member can't be null.
 type UpdateInput struct {
 	ID          uuid.UUID `json:"id"                    jsonschema:"The ID of the identity to change."`
 	Username    *string   `json:"username,omitempty"    jsonschema:"The new username, with the rules of identity_create. Leave it out to keep the current one."`

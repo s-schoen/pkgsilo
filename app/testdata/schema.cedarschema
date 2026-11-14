@@ -51,6 +51,7 @@ action "apikey:create:name" in ["apikey:create"] appliesTo { principal: Identity
 action "apikey:create:expiresAt" in ["apikey:create"] appliesTo { principal: Identity, resource: APIKey, context: {} };
 action "policy:read" in ["read"] appliesTo { principal: Identity, resource: Policy, context: {} };
 action "policy:delete" appliesTo { principal: Identity, resource: Policy, context: {} };
+action "policy:readSchema" in ["read"] appliesTo { principal: Identity, resource: Policy, context: {} };
 action "policy:read:name" in ["policy:readFields", "read"] appliesTo { principal: Identity, resource: Policy, context: {} };
 action "policy:read:source" in ["policy:readFields", "read"] appliesTo { principal: Identity, resource: Policy, context: {} };
 action "policy:read:createdBy" in ["policy:readFields", "read"] appliesTo { principal: Identity, resource: Policy, context: {} };

@@ -3,6 +3,9 @@ package mcpserver_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
+	"reflect"
 	"strconv"
 	"testing"
 	"uuid"
@@ -14,6 +17,7 @@ import (
 	"pkgsilo/core/mcpserver"
 	"pkgsilo/core/pagination"
 	"pkgsilo/core/request"
+	"pkgsilo/test/mcptest"
 )
 
 // listTool registers test_list, which lists the numbers from 1 to 5 as strings and reports the page that it
@@ -68,14 +72,13 @@ func TestListInput_Schema(t *testing.T) {
 }
 
 // TestListInput_Defaults checks that a list without arguments requests the first page of the HTTP API's
-// default size, and that the description of the limit names the limits of the HTTP API, which a tag can't
-// refer to.
+// default size, and that the description of the limit names the limits of the HTTP API.
 func TestListInput_Defaults(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, request.Pagination{Offset: 0, Limit: 50}, mcpserver.ListInput{}.Pagination())
-	assert.Equal(t, 50, request.DefaultLimit, "the description of ListInput.Limit names the default")
-	assert.Equal(t, 100, request.MaxLimit, "the description of ListInput.Limit names the maximum")
+	assert.Equal(t, request.Pagination{Offset: 0, Limit: request.DefaultLimit}, mcpserver.ListInput{}.Pagination())
+	mcptest.AssertDescriptionContains(t, reflect.TypeFor[mcpserver.ListInput](), "limit",
+		fmt.Sprintf("from 1 to %d. Defaults to %d.", request.MaxLimit, request.DefaultLimit))
 }
 
 func TestListOutput_Pages(t *testing.T) {
@@ -109,8 +112,9 @@ func TestListOutput_Pages(t *testing.T) {
 			wantOutput: `{"items":["1","2","3","4","5"]}`,
 		},
 		{
-			name: "zero limit is the default", args: `{"limit":0}`, want: request.Pagination{Limit: 50},
-			wantOutput: `{"items":["1","2","3","4","5"]}`,
+			name: "largest offset", args: `{"offset":9223372036854775807}`,
+			want:       request.Pagination{Offset: math.MaxInt, Limit: 50},
+			wantOutput: `{"items":[]}`,
 		},
 	}
 	for _, tt := range tests {
@@ -140,9 +144,26 @@ func TestListInput_Invalid(t *testing.T) {
 			name: "negative limit", args: `{"limit":-1}`,
 			want: validation.Errors{"limit": errors.New("must be no less than 1")},
 		},
+		// As in the HTTP API: a limit of 0 isn't one that's left out.
+		{
+			name: "zero limit", args: `{"limit":0}`,
+			want: validation.Errors{"limit": errors.New("must be no less than 1")},
+		},
 		{
 			name: "limit too large", args: `{"limit":101}`,
 			want: validation.Errors{"limit": errors.New("must be no greater than 100")},
+		},
+		{
+			name: "offset too large", args: `{"offset":9223372036854775808}`,
+			want: validation.Errors{"offset": errors.New("is out of range")},
+		},
+		{
+			name: "fractional limit", args: `{"limit":1.5}`,
+			want: validation.Errors{"limit": errors.New("must be an integer")},
+		},
+		{
+			name: "null limit", args: `{"limit":null}`,
+			want: validation.Errors{"limit": errors.New("cannot be null")},
 		},
 	}
 	for _, tt := range tests {

@@ -1,4 +1,4 @@
-package request
+package rules
 
 import (
 	"testing"
@@ -45,7 +45,7 @@ func TestTextRules(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			// A validation.Error, which DecodeJSON reports as an invalid member, not as a bug.
+			// A validation.Error, which the API and the tools report as an invalid member, not as a bug.
 			var valueErr validation.Error
 			if assert.ErrorAs(t, err, &valueErr) {
 				assert.Equal(t, tt.wantErr, valueErr.Error())

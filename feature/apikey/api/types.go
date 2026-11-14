@@ -7,7 +7,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
 	"pkgsilo/core/envelope"
-	"pkgsilo/core/request"
+	"pkgsilo/core/rules"
 	"pkgsilo/feature/apikey/service"
 )
 
@@ -23,8 +23,8 @@ func (r CreateKeyRequest) Validate() error {
 	return validation.ValidateStruct(&r,
 		validation.Field(&r.Name,
 			validation.Required,
-			request.NotBlank,
-			request.NoControlCharacters,
+			rules.NotBlank,
+			rules.NoControlCharacters,
 			validation.RuneLength(1, 128),
 		),
 		validation.Field(&r.ExpiresAt,

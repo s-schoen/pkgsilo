@@ -121,6 +121,28 @@ type response struct {
 func (s server) post(t *testing.T, contentType, host, body string) response {
 	t.Helper()
 
+	return send(t, s.newRequest(t, contentType, host, body))
+}
+
+// postBody sends the JSON-RPC message body to the endpoint as a client would, and returns the body of the
+// response, which must be 200 OK.
+func (s server) postBody(t *testing.T, body string) string {
+	t.Helper()
+
+	resp, err := http.DefaultClient.Do(s.newRequest(t, "application/json", "", body))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	return string(b)
+}
+
+// newRequest returns the request of post.
+func (s server) newRequest(t *testing.T, contentType, host, body string) *http.Request {
+	t.Helper()
+
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.url, strings.NewReader(body))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", contentType)
@@ -129,7 +151,7 @@ func (s server) post(t *testing.T, contentType, host, body string) response {
 		req.Host = host
 	}
 
-	return send(t, req)
+	return req
 }
 
 // send sends req and returns its response, whose body it drops.
@@ -163,12 +185,30 @@ func TestAdd_PassesActorAndArguments(t *testing.T) {
 	t.Parallel()
 	s := serve(t, echoTool)
 
-	s.mcp.Call("test_echo", `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"ada","note":null}`).AssertOutput(`{
+	s.mcp.Call("test_echo", `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"ada"}`).AssertOutput(`{
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
 		"actor": "` + apitest.Actor.String() + `",
 		"name": "ada",
 		"at": "2026-11-14T12:00:00Z"
 	}`)
+}
+
+// TestAdd_TextContent checks that the text content leaves <, > and & as they are, which encoding/json
+// escapes, so that a model that reads only the text reads them as they are.
+func TestAdd_TextContent(t *testing.T) {
+	t.Parallel()
+	s := serve(t, echoTool)
+
+	result := s.mcp.Call("test_echo", `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"a<b&c>","note":"&&"}`)
+
+	result.AssertOutput(`{
+		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
+		"actor": "` + apitest.Actor.String() + `",
+		"name": "a<b&c>",
+		"note": "&&",
+		"at": "2026-11-14T12:00:00Z"
+	}`)
+	assert.Contains(t, result.Text(), `"name":"a<b&c>","note":"&&"`)
 }
 
 // TestAdd_VisibleNull checks that a visible field whose value is null is null in the output.
@@ -184,13 +224,21 @@ func TestAdd_VisibleNull(t *testing.T) {
 	s.mcp.Call("test_null", "").AssertOutput(`{"id":"00000000-0000-0000-0000-000000000000","note":null}`)
 }
 
+// TestAdd_Annotations checks the annotations of each kind of tool: a write is destructive unless it's
+// additive, and idempotent only if it says so.
 func TestAdd_Annotations(t *testing.T) {
 	t.Parallel()
 	s := serve(t, func(reg *mcpserver.Registry) {
-		for name, kind := range map[string]mcpserver.Kind{
-			"test_read": mcpserver.Read, "test_write": mcpserver.Write, "test_delete": mcpserver.Delete,
+		for _, tool := range []mcpserver.Tool{
+			{Name: "test_read", Kind: mcpserver.Read},
+			{Name: "test_write", Kind: mcpserver.Write},
+			{Name: "test_create", Kind: mcpserver.Write, Additive: true},
+			{Name: "test_update", Kind: mcpserver.Write, Idempotent: true},
+			{Name: "test_add", Kind: mcpserver.Write, Additive: true, Idempotent: true},
+			{Name: "test_delete", Kind: mcpserver.Delete},
 		} {
-			reg.Add(mcpserver.Tool{Name: name, Description: "A tool.", Kind: kind}, failing(nil))
+			tool.Description = "A tool."
+			reg.Add(tool, failing(nil))
 		}
 	})
 
@@ -201,13 +249,16 @@ func TestAdd_Annotations(t *testing.T) {
 
 	assert.Equal(t, map[string]string{
 		"test_read":   `{"destructiveHint":false,"idempotentHint":true,"openWorldHint":false,"readOnlyHint":true}`,
-		"test_write":  `{"destructiveHint":false,"idempotentHint":false,"openWorldHint":false,"readOnlyHint":false}`,
+		"test_write":  `{"destructiveHint":true,"idempotentHint":false,"openWorldHint":false,"readOnlyHint":false}`,
+		"test_create": `{"destructiveHint":false,"idempotentHint":false,"openWorldHint":false,"readOnlyHint":false}`,
+		"test_update": `{"destructiveHint":true,"idempotentHint":true,"openWorldHint":false,"readOnlyHint":false}`,
+		"test_add":    `{"destructiveHint":false,"idempotentHint":true,"openWorldHint":false,"readOnlyHint":false}`,
 		"test_delete": `{"destructiveHint":true,"idempotentHint":true,"openWorldHint":false,"readOnlyHint":false}`,
 	}, got)
 }
 
-// TestAdd_Schemas checks the schemas of a tool: a UUID is a string, and an envelope.Field has the schema of
-// its value, null included for a pointer, and is optional.
+// TestAdd_Schemas checks the schemas of a tool: a UUID is a string, a pointer in the input is optional but
+// not null, and an envelope.Field has the schema of its value, null included for a pointer, and is optional.
 func TestAdd_Schemas(t *testing.T) {
 	t.Parallel()
 	s := serve(t, echoTool)
@@ -220,7 +271,7 @@ func TestAdd_Schemas(t *testing.T) {
 		"properties": {
 			"id": {"type": "string", "format": "uuid", "description": "The ID to echo."},
 			"name": {"type": "string", "description": "The name to echo."},
-			"note": {"type": ["null", "string"], "description": "The note to echo, if any."}
+			"note": {"type": "string", "description": "The note to echo, if any."}
 		},
 		"required": ["id", "name"],
 		"additionalProperties": false
@@ -247,15 +298,92 @@ func TestAdd_InvalidArguments(t *testing.T) {
 		mcpserver.InvalidArgumentsError(validation.Errors{"name": errors.New("the length must be between 3 and 10")}))
 }
 
-// TestAdd_ArgumentsNotMatchingTheSchema checks that the SDK answers arguments that its schema rejects before
-// the tool is called.
+// TestAdd_ArgumentsNotMatchingTheSchema checks that arguments that don't match the input schema are answered
+// with invalid_arguments, naming each member and why, before they're validated and the tool is called.
 func TestAdd_ArgumentsNotMatchingTheSchema(t *testing.T) {
 	t.Parallel()
-	s := serve(t, echoTool)
+	const id = `"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"`
+	tests := []struct {
+		name string
+		args string
+		want validation.Errors
+	}{
+		{
+			name: "unknown member", args: `{` + id + `,"name":"ada","extra":1}`,
+			want: validation.Errors{"extra": errors.New("is not an argument of this tool")},
+		},
+		{
+			name: "missing members", args: `{"note":"x"}`,
+			want: validation.Errors{"id": errors.New("is required"), "name": errors.New("is required")},
+		},
+		{
+			name: "null", args: `{` + id + `,"name":"ada","note":null}`,
+			want: validation.Errors{"note": errors.New("cannot be null")},
+		},
+		// Checked before the input's Validate, which would report a name that's too short.
+		{
+			name: "null of a required member", args: `{` + id + `,"name":null}`,
+			want: validation.Errors{"name": errors.New("cannot be null")},
+		},
+		{
+			name: "malformed UUID", args: `{"id":"abc","name":"ada"}`,
+			want: validation.Errors{"id": errors.New("must be a UUID")},
+		},
+		{
+			name: "empty UUID", args: `{"id":"","name":"ada"}`,
+			want: validation.Errors{"id": errors.New("must be a UUID")},
+		},
+		{
+			name: "wrong type", args: `{` + id + `,"name":7}`,
+			want: validation.Errors{"name": errors.New("must be a string")},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := serve(t, echoTool)
 
-	result := s.mcp.Call("test_echo", `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"ada","extra":1}`)
+			result := s.mcp.Call("test_echo", tt.args)
 
-	result.AssertErrorText(`validating "arguments": validating root: unexpected additional properties ["extra"]`)
+			result.AssertToolError(mcpserver.InvalidArgumentsError(tt.want))
+		})
+	}
+}
+
+// TestAdd_MalformedArguments checks that arguments that the SDK's client can't send, since it decodes them
+// first, are answered with invalid_arguments: arguments that aren't a JSON object, and a member that appears
+// twice.
+func TestAdd_MalformedArguments(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		args string
+		want *mcpserver.ToolError
+	}{
+		{
+			name: "not an object", args: `[1]`,
+			want: mcpserver.DefineError("invalid_arguments", "The arguments must be a JSON object."),
+		},
+		{
+			name: "duplicate member", args: `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"ada","name":"bob"}`,
+			want: mcpserver.InvalidArgumentsError(validation.Errors{"name": errors.New("appears more than once")}),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := serve(t, echoTool)
+
+			body := s.postBody(t,
+				`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"test_echo","arguments":`+tt.args+`}}`)
+
+			assert.JSONEq(t, `{
+				"jsonrpc": "2.0",
+				"id": 1,
+				"result": {"content": [{"type": "text", "text": `+marshal(t, tt.want.Error())+`}], "isError": true}
+			}`, body)
+		})
+	}
 }
 
 func TestAdd_Errors(t *testing.T) {
@@ -351,6 +479,21 @@ func TestAdd_Rejects(t *testing.T) {
 			name: "unknown kind",
 			add: func(reg *mcpserver.Registry) {
 				reg.Add(mcpserver.Tool{Name: "test_tool", Description: "A tool."}, failing(nil))
+			},
+		},
+		{
+			name: "additive read",
+			add: func(reg *mcpserver.Registry) {
+				reg.Add(mcpserver.Tool{Name: "test_tool", Description: "A tool.", Kind: mcpserver.Read, Additive: true},
+					failing(nil))
+			},
+		},
+		{
+			name: "idempotent delete",
+			add: func(reg *mcpserver.Registry) {
+				reg.Add(mcpserver.Tool{
+					Name: "test_tool", Description: "A tool.", Kind: mcpserver.Delete, Idempotent: true,
+				}, failing(nil))
 			},
 		},
 		{

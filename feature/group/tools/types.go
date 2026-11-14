@@ -42,7 +42,7 @@ func (in CreateInput) toInput() service.GroupInput {
 
 // UpdateInput is the input of group_update, which changes the members that it sets and keeps the others.
 // Its members are named like the members of PatchGroupRequest in the HTTP API and the fields of the
-// group:update actions.
+// group:update actions. Like a member of the patch, a member can't be null.
 type UpdateInput struct {
 	ID   uuid.UUID `json:"id"             jsonschema:"The ID of the group to change."`
 	Name *string   `json:"name,omitempty" jsonschema:"The new name, with the rules of group_create. Leave it out to keep the current one."`

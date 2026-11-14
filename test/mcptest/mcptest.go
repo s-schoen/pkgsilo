@@ -11,6 +11,7 @@
 package mcptest
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
@@ -43,7 +44,7 @@ var internalErrorText = regexp.MustCompile(`^internal_error: internal error \(re
 
 // New returns a client for toolsets, served with mcpserver.NewHandler, without telemetry and logs, as Serve
 // serves it. Every call is authenticated as apitest.Actor. It fails the test unless every tool and every
-// member of its input has a description (see Client.AssertDescriptions).
+// member of its input and output has a description (see Client.AssertDescriptions).
 func New(tb testing.TB, toolsets ...mcpserver.Toolset) *Client {
 	tb.Helper()
 
@@ -165,6 +166,36 @@ func (c *Client) Tools() []*mcp.Tool {
 	return tools
 }
 
+// Hints returns what the annotations of each tool of the endpoint tell clients, by the tool's name:
+// "read-only" for a tool that changes nothing, and otherwise "destructive" or "additive", followed by
+// ", idempotent" for one that changes nothing more when it's called again.
+func (c *Client) Hints() map[string]string {
+	c.tb.Helper()
+	hints := map[string]string{}
+	for _, tool := range c.Tools() {
+		a := tool.Annotations
+		if !assert.NotNilf(c.tb, a, "annotations of tool %s", tool.Name) {
+			continue
+		}
+
+		switch {
+		case a.ReadOnlyHint:
+			hints[tool.Name] = "read-only"
+			continue
+		// A missing destructiveHint means true.
+		case a.DestructiveHint == nil || *a.DestructiveHint:
+			hints[tool.Name] = "destructive"
+		default:
+			hints[tool.Name] = "additive"
+		}
+		if a.IdempotentHint {
+			hints[tool.Name] += ", idempotent"
+		}
+	}
+
+	return hints
+}
+
 // ToolNames returns the names of the tools that the endpoint lists, sorted.
 func (c *Client) ToolNames() []string {
 	c.tb.Helper()
@@ -177,27 +208,46 @@ func (c *Client) ToolNames() []string {
 }
 
 // AssertDescriptions asserts that every tool of the endpoint has a description, and so does every member of
-// its input, since an agent chooses a tool and fills in its arguments from the descriptions alone.
+// its input and of its output, nested ones included, such as those of the items of a list, since an agent
+// chooses a tool, fills in its arguments and reads its output from the descriptions alone.
 func (c *Client) AssertDescriptions() {
 	c.tb.Helper()
 	for _, tool := range c.Tools() {
 		assert.NotEmpty(c.tb, tool.Description, "description of tool %s", tool.Name)
 
-		var schema jsonschema.Schema
-		remarshal(c.tb, tool.InputSchema, &schema)
-		for name, member := range schema.Properties {
-			assert.NotEmpty(c.tb, member.Description,
-				"description of member %s of the input of tool %s: tag it with jsonschema", name, tool.Name)
+		for part, schema := range map[string]any{"input": tool.InputSchema, "output": tool.OutputSchema} {
+			var s jsonschema.Schema
+			remarshal(c.tb, schema, &s)
+			walkMembers(&s, "", func(path string, member *jsonschema.Schema) {
+				assert.NotEmpty(c.tb, member.Description,
+					"description of member %s of the %s of tool %s: tag it with jsonschema", path, part, tool.Name)
+			})
 		}
 	}
 }
 
-// Call calls the tool with the given name with args, a JSON object, or no arguments if args is empty.
+// walkMembers calls visit with every member of the objects in schema, nested ones included, and its path,
+// such as items.id, under the prefix path.
+func walkMembers(schema *jsonschema.Schema, path string, visit func(path string, member *jsonschema.Schema)) {
+	if schema == nil {
+		return
+	}
+
+	for name, member := range schema.Properties {
+		visit(path+name, member)
+		walkMembers(member, path+name+".", visit)
+	}
+	walkMembers(schema.Items, path, visit)
+	walkMembers(schema.AdditionalProperties, path, visit)
+}
+
+// Call calls the tool with the given name with args, a JSON object, or no arguments if args is empty. Each
+// member is sent as it's written, so that a number keeps its digits.
 func (c *Client) Call(name, args string) *Result {
 	c.tb.Helper()
 	params := &mcp.CallToolParams{Name: name}
 	if args != "" {
-		var arguments map[string]any
+		var arguments map[string]jsontext.Value
 		require.NoError(c.tb, json.Unmarshal([]byte(args), &arguments), "decode the arguments")
 		params.Arguments = arguments
 	}
@@ -235,7 +285,7 @@ func (r *Result) AssertOutput(want string) {
 
 	got := marshal(r.tb, r.result.StructuredContent)
 	if assert.JSONEq(r.tb, want, got, "structured output") {
-		assert.JSONEq(r.tb, want, r.text(), "text content")
+		assert.JSONEq(r.tb, want, r.Text(), "text content")
 	}
 }
 
@@ -266,16 +316,16 @@ func (r *Result) AssertToolError(want *mcpserver.ToolError) {
 func (r *Result) AssertInternalError() {
 	r.tb.Helper()
 	if r.isError() {
-		assert.Regexp(r.tb, internalErrorText, r.text(), "text of the error result")
+		assert.Regexp(r.tb, internalErrorText, r.Text(), "text of the error result")
 	}
 }
 
-// AssertErrorText asserts a result that is an error with the text want, such as the SDK's answer to arguments
-// that don't match the tool's input schema.
+// AssertErrorText asserts a result that is an error with the text want, such as a tool error whose message
+// depends on the call, "<code>: <message>".
 func (r *Result) AssertErrorText(want string) {
 	r.tb.Helper()
 	if r.isError() {
-		assert.Equal(r.tb, want, r.text(), "text of the error result")
+		assert.Equal(r.tb, want, r.Text(), "text of the error result")
 		assert.Nil(r.tb, r.result.StructuredContent, "structured output of the error result")
 	}
 }
@@ -292,26 +342,9 @@ func (r *Result) AssertProtocolError(code int64, message string) {
 	assert.Equal(r.tb, message, wireErr.Message, "message of the JSON-RPC error")
 }
 
-// succeeded asserts that the call returned a result that isn't an error. It stops the test if the call
-// failed without a result.
-func (r *Result) succeeded() bool {
-	r.tb.Helper()
-	require.NoError(r.tb, r.err, "call the tool")
-
-	return assert.Falsef(r.tb, r.result.IsError, "the result is an error: %s", r.text())
-}
-
-// isError asserts that the call returned a result that is an error. It stops the test if the call failed
-// without a result.
-func (r *Result) isError() bool {
-	r.tb.Helper()
-	require.NoError(r.tb, r.err, "call the tool")
-
-	return assert.Truef(r.tb, r.result.IsError, "the result is no error: %s", r.text())
-}
-
-// text returns the text of the result's only content, or "" if it has no single text content.
-func (r *Result) text() string {
+// Text returns the text of the result's only content, as a model that reads no structured output reads it.
+// It asserts that the result has a single text content, and returns "" otherwise.
+func (r *Result) Text() string {
 	r.tb.Helper()
 	if !assert.Len(r.tb, r.result.Content, 1, "content of the result") {
 		return ""
@@ -322,6 +355,24 @@ func (r *Result) text() string {
 	}
 
 	return text.Text
+}
+
+// succeeded asserts that the call returned a result that isn't an error. It stops the test if the call
+// failed without a result.
+func (r *Result) succeeded() bool {
+	r.tb.Helper()
+	require.NoError(r.tb, r.err, "call the tool")
+
+	return assert.Falsef(r.tb, r.result.IsError, "the result is an error: %s", r.Text())
+}
+
+// isError asserts that the call returned a result that is an error. It stops the test if the call failed
+// without a result.
+func (r *Result) isError() bool {
+	r.tb.Helper()
+	require.NoError(r.tb, r.err, "call the tool")
+
+	return assert.Truef(r.tb, r.result.IsError, "the result is no error: %s", r.Text())
 }
 
 // marshal returns v as JSON.
@@ -352,6 +403,27 @@ func AssertReadableMembers(tb testing.TB, output reflect.Type, readable []string
 			tb.Errorf("member %q of %s isn't tagged omitzero, so a hidden field would fail the call", name, output)
 		}
 	}
+}
+
+// AssertDescriptionContains asserts that the description of the member of t with the given JSON name, its
+// jsonschema tag, contains each of want, such as the limits of the member's rules, written from their
+// constants: a tag can't refer to a constant, so when one changes, the test fails until the description
+// names the new value.
+func AssertDescriptionContains(tb testing.TB, t reflect.Type, member string, want ...string) {
+	tb.Helper()
+	for field := range t.Fields() {
+		if name, _, _ := strings.Cut(field.Tag.Get("json"), ","); name != member {
+			continue
+		}
+
+		description := field.Tag.Get("jsonschema")
+		for _, w := range want {
+			assert.Contains(tb, description, w, "description of member %s of %s", member, t)
+		}
+		return
+	}
+
+	tb.Errorf("%s has no member %s", t, member)
 }
 
 // AssertSettableMembers asserts that the members of the input type of a tool that creates or changes an

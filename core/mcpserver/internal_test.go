@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -147,6 +148,46 @@ func TestSchemaFor(t *testing.T) {
 		"required": ["items", "owners"],
 		"additionalProperties": false
 	}`, string(b))
+}
+
+// TestDecodeRequestID checks that the ID of a JSON-RPC request is found wherever it is in the body, without
+// decoding the other members, and that a body without one has none.
+func TestDecodeRequestID(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		body string
+		// want is the ID as the span names it, or "" for none.
+		want string
+	}{
+		{name: "number", body: `{"jsonrpc":"2.0","id":7,"method":"ping"}`, want: "7"},
+		{name: "string", body: `{"jsonrpc":"2.0","id":"abc","method":"ping"}`, want: "abc"},
+		{
+			name: "after the params",
+			body: `{"jsonrpc":"2.0","method":"tools/call","params":{"name":"x","arguments":{"id":"inner"}},"id":8}`,
+			want: "8",
+		},
+		{name: "notification", body: `{"jsonrpc":"2.0","method":"notifications/initialized"}`},
+		{name: "null", body: `{"jsonrpc":"2.0","id":null,"method":"ping"}`},
+		{name: "object", body: `{"jsonrpc":"2.0","id":{},"method":"ping"}`},
+		{name: "batch", body: `[{"jsonrpc":"2.0","id":7,"method":"ping"}]`},
+		{name: "empty", body: ``},
+		{name: "malformed", body: `{"jsonrpc":`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			id, ok := decodeRequestID([]byte(tt.body))
+
+			if tt.want == "" {
+				assert.False(t, ok, "found the ID %v", id.Raw())
+				return
+			}
+			require.True(t, ok)
+			assert.Equal(t, tt.want, fmt.Sprint(id.Raw()))
+		})
+	}
 }
 
 // TestMethodPanic_Unwrap checks that the panic of a method unwraps to its value if that's an error.

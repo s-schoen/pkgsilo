@@ -17,12 +17,13 @@ import (
 	"pkgsilo/feature/policy/repository"
 )
 
-// The limits of the policies. Deciding can't be canceled, so they cap the time that a decision takes.
+// The limits of the policies. Deciding can't be canceled, so they cap the time that a decision takes. They're
+// exported for the descriptions of the transports that name them.
 const (
-	// maxSourceBytes is the largest source of one policy.
-	maxSourceBytes = 16 << 10
-	// maxStatements is the most statements that all policies together may hold.
-	maxStatements = 1000
+	// MaxSourceBytes is the largest source of one policy.
+	MaxSourceBytes = 16 << 10
+	// MaxStatements is the most statements that all policies together may hold.
+	MaxStatements = 1000
 )
 
 // The Cedar entity types of the objects that policies reference by ID, which must exist.
@@ -80,12 +81,12 @@ func newChecker(cedarSchema string) (*checker, error) {
 
 // check checks the source, as far as that needs no database: its size, that it parses into at least one
 // statement, and that every statement matches the schema and tests only for declared attributes with has.
-// It reports a mistake with an *InvalidPolicyError. The size limit keeps a source far below maxStatements,
+// It reports a mistake with an *InvalidPolicyError. The size limit keeps a source far below MaxStatements,
 // which the total of all policies is checked against when it's written.
 func (c *checker) check(source string) (checkedSource, error) {
-	if len(source) > maxSourceBytes {
+	if len(source) > MaxSourceBytes {
 		return checkedSource{}, &InvalidPolicyError{
-			Reason: fmt.Sprintf("the source is larger than %d bytes", maxSourceBytes),
+			Reason: fmt.Sprintf("the source is larger than %d bytes", MaxSourceBytes),
 		}
 	}
 
@@ -220,7 +221,7 @@ func missingReference(kind, id string) *InvalidPolicyError {
 // tooManyStatements reports that the policies would hold more statements than they may.
 func tooManyStatements(total int) *InvalidPolicyError {
 	return &InvalidPolicyError{Reason: fmt.Sprintf(
-		"the policies would hold %d statements, more than the %d that they may hold together", total, maxStatements)}
+		"the policies would hold %d statements, more than the %d that they may hold together", total, MaxStatements)}
 }
 
 // checkWithReferences runs check on the source, and checks that the groups and identities that it

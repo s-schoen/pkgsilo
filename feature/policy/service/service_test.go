@@ -179,13 +179,33 @@ func TestNewPolicyService_InvalidSchema(t *testing.T) {
 	}
 }
 
-// TestPolicyService_Schema checks that the service returns the schema that it was given, without asking the
-// authorizer, whose mock fails any call.
+// schemaResource is the policies as a whole, the resource of policy:readSchema.
+var schemaResource = authz.Resource{Type: "Policy", ID: uuid.Nil()}
+
+// TestPolicyService_Schema checks that the service returns the schema that it was given to an actor that may
+// read it.
 func TestPolicyService_Schema(t *testing.T) {
 	t.Parallel()
-	svc := NewPolicyService(mocks.NewMockPolicyRepository(t), authzmocks.NewMockAuthorizer(t), testSchema)
+	authorizer, decider := newDeciding(t)
+	decider.EXPECT().Can(actionReadSchema, schemaResource).Return(true, nil)
+	svc, _, _ := newTestServiceWith(t, authorizer)
 
-	assert.Equal(t, testSchema, svc.Schema())
+	got, err := svc.Schema(t.Context(), actor)
+
+	require.NoError(t, err)
+	assert.Equal(t, testSchema, got)
+}
+
+func TestPolicyService_Schema_Denied(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	decider.EXPECT().Can(actionReadSchema, schemaResource).Return(false, nil)
+	svc, _, _ := newTestServiceWith(t, authorizer)
+
+	got, err := svc.Schema(t.Context(), actor)
+
+	require.ErrorIs(t, err, authz.ErrDenied)
+	assert.Empty(t, got)
 }
 
 func TestPolicyService_Create(t *testing.T) {
@@ -329,7 +349,7 @@ func TestPolicyService_Declaration(t *testing.T) {
 	svc, _, _ := newTestService(t)
 
 	for _, action := range []string{
-		"policy:read", "policy:delete", "policy:read:name", "policy:read:source",
+		"policy:read", "policy:delete", "policy:readSchema", "policy:read:name", "policy:read:source",
 		"policy:create:name", "policy:create:source", "policy:update:name", "policy:update:source",
 	} {
 		_, err := svc.checker.check(`permit (principal, action == Action::"` + action + `", resource is Policy);`)
@@ -349,9 +369,9 @@ func TestPolicyService_Create_InvalidSource(t *testing.T) {
 		name, source, reason string
 	}{
 		{name: "parse error", source: `permit (`, reason: "the source can't be parsed"},
-		{name: "largest", source: readSource + strings.Repeat(" ", maxSourceBytes-len(readSource))},
+		{name: "largest", source: readSource + strings.Repeat(" ", MaxSourceBytes-len(readSource))},
 		{
-			name: "oversized", source: readSource + strings.Repeat(" ", maxSourceBytes-len(readSource)+1),
+			name: "oversized", source: readSource + strings.Repeat(" ", MaxSourceBytes-len(readSource)+1),
 			reason: "the source is larger than 16384 bytes",
 		},
 		{name: "no statements", source: "// Nothing yet.\n", reason: "the source holds no statements"},
@@ -1101,6 +1121,10 @@ func TestPolicyService_AuthorizationFails(t *testing.T) {
 		"delete": func(svc *policyService) error {
 			return svc.Delete(t.Context(), actor, stored.ID)
 		},
+		"schema": func(svc *policyService) error {
+			_, err := svc.Schema(t.Context(), actor)
+			return err
+		},
 	}
 	for name, call := range calls {
 		t.Run(name+" no decider", func(t *testing.T) {
@@ -1133,7 +1157,7 @@ func TestPolicyService_AuthorizationFails(t *testing.T) {
 		})
 		// The field read decisions, after every other decision allowed the request. They come before any
 		// write, so that a failed one can't fail a request whose write succeeded.
-		if name != "delete" {
+		if name != "delete" && name != "schema" {
 			t.Run(name+" no field decision", func(t *testing.T) {
 				t.Parallel()
 				authorizer, decider := newDeciding(t)
