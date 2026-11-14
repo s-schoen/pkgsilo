@@ -11,14 +11,6 @@ import (
 	"pkgsilo/feature/group/service"
 )
 
-// nameRules are the rules of the group name, shared by the request bodies that set it.
-var nameRules = []validation.Rule{
-	validation.Required,
-	request.NotBlank,
-	request.NoControlCharacters,
-	validation.RuneLength(1, 128),
-}
-
 // CreateGroupRequest is the body of a request that creates a group.
 type CreateGroupRequest struct {
 	Name string `json:"name"`
@@ -27,7 +19,7 @@ type CreateGroupRequest struct {
 // Validate reports the invalid members of r as validation.Errors.
 func (r CreateGroupRequest) Validate() error {
 	return validation.ValidateStruct(&r,
-		validation.Field(&r.Name, nameRules...),
+		validation.Field(&r.Name, service.NameRules...),
 	)
 }
 
@@ -43,7 +35,7 @@ type ReplaceGroupRequest struct {
 // Validate reports the invalid members of r as validation.Errors.
 func (r ReplaceGroupRequest) Validate() error {
 	return validation.ValidateStruct(&r,
-		validation.Field(&r.Name, nameRules...),
+		validation.Field(&r.Name, service.NameRules...),
 	)
 }
 
@@ -60,7 +52,7 @@ type PatchGroupRequest struct {
 // Validate reports the invalid members of r as validation.Errors.
 func (r PatchGroupRequest) Validate() error {
 	return validation.ValidateStruct(&r,
-		validation.Field(&r.Name, request.IfSet(nameRules...)),
+		validation.Field(&r.Name, request.IfSet(service.NameRules...)),
 	)
 }
 
