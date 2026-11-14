@@ -207,8 +207,10 @@ linters:
       context-todo: true
       os-temp-dir: true
     wrapcheck:
-      # ozzo-validation errors must reach core/request unwrapped.
+      # ozzo-validation errors must reach core/request unwrapped, and a tools layer's translateError replaces a
+      # service error with a tool error of mcpserver.DefineError, as an API's writeError does with a problem.
       extra-ignore-sigs:
+        - pkgsilo/core/mcpserver.DefineError(
         - ozzo-validation/v4.Validate(
         - ozzo-validation/v4.ValidateStruct(
         - ozzo-validation/v4.NewError(

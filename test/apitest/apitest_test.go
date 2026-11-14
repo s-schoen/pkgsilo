@@ -165,6 +165,24 @@ func TestClient_Anonymous(t *testing.T) {
 	assert.Empty(t, api.Anonymous().Get("/").Body.String())
 }
 
+// TestClient_HandlerAndHeader checks that a client reveals its handler and a copy of its headers, so that a
+// test can serve the same handler to another client with the same credential.
+func TestClient_HandlerAndHeader(t *testing.T) {
+	t.Parallel()
+	api := newHeaderClient(t).WithHeader("X-Test", "ada")
+
+	header := api.Header()
+	header.Set("X-Test", "grace")
+
+	assert.Equal(t, "ada", api.Header().Get("X-Test"), "the client's headers stay as they are")
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	req.Header = header
+	api.Handler().ServeHTTP(rec, req)
+	assert.Equal(t, "grace", rec.Body.String(), "the handler is the client's")
+	assert.Empty(t, api.Anonymous().Header(), "an anonymous client sets no headers")
+}
+
 func TestMount(t *testing.T) {
 	t.Parallel()
 	api := newTestClient(t)

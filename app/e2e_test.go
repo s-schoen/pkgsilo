@@ -163,6 +163,93 @@ func TestTracing(t *testing.T) {
 		"no span of the policy revision query under the authorization span")
 }
 
+const mcpPath = "/mcp"
+
+// TestMCP checks what the app assembles at its MCP endpoint:
+//
+//  1. Send an MCP request without a key: 401 with the ApiKey challenge, and an MCP client without a key
+//     can't connect.
+//  2. List the tools as admin: exactly the tools that the features register.
+//  3. Send a GET with the key: 405, since the endpoint is stateless and serves no event stream.
+//  4. Call identity_whoami as admin: admin, as the API lists it.
+func TestMCP(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	mcp := apptest.MCP(t, api)
+
+	// 1. Without a key.
+	resp := api.Anonymous().Post(mcpPath, `{"jsonrpc":"2.0","id":1,"method":"ping"}`)
+	resp.AssertProblem(envelope.UnauthorizedProblem.New(envelope.Occurrence{}))
+	assert.Equal(t, []string{`ApiKey realm="pkgsilo"`}, resp.Header().Values("WWW-Authenticate"))
+	err := apptest.MCP(t, api.Anonymous()).Connect()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Unauthorized")
+
+	// 2. List the tools.
+	assert.Equal(t, []string{"identity_whoami"}, mcp.ToolNames())
+
+	// 3. GET.
+	get := api.Get(mcpPath)
+	get.AssertStatus(http.StatusMethodNotAllowed)
+	assert.Equal(t, http.MethodPost, get.Header().Get("Allow"))
+
+	// 4. Who am I.
+	admin := onlyIdentity(t, api.Get("/api/v1/identities").DecodeCollection[identityapi.IdentityResponse](http.StatusOK))
+	assert.Equal(t, admin, mcp.Call("identity_whoami", "").Decode[identityapi.IdentityResponse]())
+}
+
+// TestMCP_Telemetry checks the telemetry of a tool call:
+//
+//  1. Call identity_whoami with tracing on: the span tools/call identity_whoami, a child of the server span
+//     POST /mcp, with the tool's attributes.
+//  2. Call identity_whoami with metrics on, and scrape the metrics: one tools/call of identity_whoami in
+//     mcp_server_operation_duration_seconds, without an error, and the request in the HTTP server metrics
+//     under the route /mcp.
+func TestMCP_Telemetry(t *testing.T) {
+	t.Parallel()
+
+	// 1. Tracing.
+	traced, spans := apptest.NewWithTracing(t)
+	apptest.MCP(t, traced).Call("identity_whoami", "").Decode[identityapi.IdentityResponse]()
+	call := onlySpan(t, spans.Spans(), "tools/call identity_whoami")
+	byID := map[trace.SpanID]sdktrace.ReadOnlySpan{}
+	for _, span := range spans.Spans() {
+		byID[span.SpanContext().SpanID()] = span
+	}
+	server, ok := byID[call.Parent().SpanID()]
+	require.True(t, ok, "the parent of the call's span ended")
+	assert.Equal(t, "POST /mcp", server.Name())
+	assert.Equal(t, trace.SpanKindServer, server.SpanKind())
+	attrs := attribute.NewSet(call.Attributes()...)
+	for key, want := range map[attribute.Key]string{
+		"mcp.method.name": "tools/call", "gen_ai.tool.name": "identity_whoami", "gen_ai.operation.name": "execute_tool",
+	} {
+		got, _ := attrs.Value(key)
+		assert.Equal(t, want, got.AsString(), key)
+	}
+	assert.False(t, attrs.HasValue("error.type"), "error.type")
+
+	// 2. Metrics.
+	measured, metrics := apptest.NewWithMetrics(t)
+	apptest.MCP(t, measured).Call("identity_whoami", "").Decode[identityapi.IdentityResponse]()
+	body := metrics.Get(telemetry.MetricsPath).Body.String()
+	assert.Regexp(t, `(?m)^mcp_server_operation_duration_seconds_count\{gen_ai_operation_name="execute_tool",`+
+		`gen_ai_tool_name="identity_whoami",mcp_method_name="tools/call",[^}]*\} 1$`, body)
+	assert.NotRegexp(t, `(?m)^mcp_server_operation_duration_seconds_count\{[^}]*error_type=`, body)
+	assert.Regexp(t, `(?m)^http_server_request_duration_seconds_count\{http_request_method="POST",`+
+		`http_response_status_code="200",http_route="/mcp",[^}]*\} [1-9]\d*$`, body)
+}
+
+// onlyIdentity returns the only identity of a listing, failing the test if there are others.
+func onlyIdentity(
+	t *testing.T, listing envelope.Collection[identityapi.IdentityResponse],
+) identityapi.IdentityResponse {
+	t.Helper()
+	require.Len(t, listing.Data, 1)
+
+	return listing.Data[0]
+}
+
 // hasQueryUnder reports whether one of the database spans in queries, which maps each to its query text,
 // descends from ancestor and runs a query that contains fragment.
 func hasQueryUnder(

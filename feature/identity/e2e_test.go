@@ -713,3 +713,19 @@ func TestIdentities_PatchOneField(t *testing.T) {
 		assert.Equal(t, asAda.Patch(missingPath, body).Body.String(), hidden.Body.String(), body)
 	}
 }
+
+// TestIdentities_MCPWhoami checks that an MCP client acts as the identity whose key it sends:
+//
+//  1. Create ada with an API key: 201.
+//  2. As ada, call identity_whoami over MCP: ada, as the API created her, since the seeded policies let
+//     an identity read itself.
+func TestIdentities_MCPWhoami(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+
+	// 2. Who am I.
+	assert.Equal(t, ada, apptest.MCP(t, asAda).Call("identity_whoami", "").Decode[identity]())
+}

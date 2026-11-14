@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"reflect"
 )
 
 // errHiddenFieldEncoded is the error of a hidden field that's encoded instead of left out.
@@ -40,6 +41,12 @@ func Visible[T any](value T) Field[T] {
 }
 
 func (Field[T]) isField() {}
+
+// ValueType returns T, the type of the field's value, for code that describes a representation by its Go
+// type, such as the output schema of an MCP tool, which is that of T.
+func (Field[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 
 // IsZero reports whether the field is hidden, so that Resource and Collection leave it out.
 func (f Field[T]) IsZero() bool {

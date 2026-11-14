@@ -107,6 +107,18 @@ func (c *Client) WithHandler(h http.Handler) *Client {
 	return &Client{tb: c.tb, handler: h, header: c.header}
 }
 
+// Handler returns the handler that the client sends its requests to, such as to serve it on a listener of
+// its own.
+func (c *Client) Handler() http.Handler {
+	return c.handler
+}
+
+// Header returns a copy of the headers that the client sets on every request, such as the credential of
+// a test's caller.
+func (c *Client) Header() http.Header {
+	return c.header.Clone()
+}
+
 // Anonymous returns a client for the same handler that sets no headers on its requests of its own, so
 // that they hold no credential.
 func (c *Client) Anonymous() *Client {
