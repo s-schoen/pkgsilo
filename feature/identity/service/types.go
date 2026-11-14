@@ -2,10 +2,37 @@
 package service
 
 import (
+	"regexp"
 	"time"
 	"uuid"
 
+	validation "github.com/go-ozzo/ozzo-validation/v4"
+
 	"pkgsilo/core/authz"
+	"pkgsilo/core/request"
+)
+
+var usernamePattern = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*$`)
+
+// The rules of the identity fields that callers set, for the inputs of every transport that sets them: the
+// request bodies of the HTTP API and the arguments of the MCP tools. Callers must not modify them.
+var (
+	// UsernameRules are the rules of a username: 3 to 64 lowercase letters and digits, optionally separated by
+	// single '.', '_' or '-'.
+	UsernameRules = []validation.Rule{
+		validation.Required,
+		validation.Length(3, 64),
+		validation.Match(usernamePattern).
+			Error("must consist of lowercase letters and digits, optionally separated by single '.', '_' or '-'"),
+	}
+	// DisplayNameRules are the rules of a display name: 1 to 128 characters, not all whitespace, and no
+	// control characters.
+	DisplayNameRules = []validation.Rule{
+		validation.Required,
+		request.NotBlank,
+		request.NoControlCharacters,
+		validation.RuneLength(1, 128),
+	}
 )
 
 // Identity is a user of pkgsilo, as an actor sees it: every field but the ID is hidden unless the actor may
