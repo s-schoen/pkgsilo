@@ -1,6 +1,6 @@
-// End-to-end tests of the API key endpoints: each test drives the whole app through /api/v1, as
-// cmd/main.go serves it, on a fresh database. The doc comment of each test lists its steps in order,
-// each with the result it expects; the numbered comments in the test mark where each step starts.
+// End-to-end tests of the API key endpoints and tools: each test drives the whole app through /api/v1 and
+// /mcp, as cmd/main.go serves it, on a fresh database. The doc comment of each test lists its steps in
+// order, each with the result it expects; the numbered comments in the test mark where each step starts.
 package apikey_test
 
 import (
@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"pkgsilo/core/envelope"
+	"pkgsilo/core/mcpserver"
 	apikeyapi "pkgsilo/feature/apikey/api"
 	groupapi "pkgsilo/feature/group/api"
 	identityapi "pkgsilo/feature/identity/api"
@@ -30,6 +31,11 @@ var (
 	fieldsDenied     = envelope.DefineProblemType("fields-denied", "Fields denied", http.StatusForbidden)
 	forbidden        = envelope.ProblemType{Type: "about:blank", Title: "Forbidden", Status: http.StatusForbidden}
 )
+
+// The tool errors of the API key tools, written out independently of the code: agents tell errors apart by
+// their codes and act on their messages, so a changed code or message must fail these tests.
+var errAPIKeyNotFound = mcpserver.DefineError("apikey_not_found",
+	"The identity has no API key with this ID, or the policies do not allow you to read it.")
 
 const identitiesPath = "/api/v1/identities"
 
@@ -809,4 +815,42 @@ func TestAPIKeys_HiddenExpiry(t *testing.T) {
 	assert.Equal(t, visible, hidden, "every other field must stay visible")
 	assert.Equal(t, envelope.Visible[*time.Time](nil),
 		api.Get(keyPath).DecodeResource[apiKey](http.StatusOK).ExpiresAt)
+}
+
+// TestAPIKeys_MCP reviews and revokes an API key of ada through the API key tools, as admin:
+//
+//  1. Create ada, then an API key of hers through the API: 201 with the key.
+//  2. List her API keys with apikey_list: that API key alone, as the API lists it, without the key, and
+//     without a nextOffset.
+//  3. Delete it with apikey_delete: an empty output.
+//  4. Get it with apikey_get: apikey_not_found. List her API keys with apikey_list: none.
+//  5. Use its key on the API: 401 with the challenge.
+func TestAPIKeys_MCP(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	mcp := apptest.MCP(t, api)
+
+	// 1. Create.
+	ada, keysPath := createIdentity(api, "ada")
+	created := createKey(api, keysPath, "ci")
+	listArgs := `{"identityId":"` + ada.ID.String() + `"}`
+	keyArgs := `{"identityId":"` + ada.ID.String() + `","id":"` + created.ID.String() + `"}`
+
+	// 2. List. Decoding fails on a key in the output, which has no member for it.
+	type page struct {
+		Items      []apiKey `json:"items"`
+		NextOffset *int     `json:"nextOffset"`
+	}
+	assert.Equal(t, page{Items: []apiKey{created.KeyResponse}}, mcp.Call("apikey_list", listArgs).Decode[page]())
+	assert.Equal(t, []apiKey{created.KeyResponse}, listKeys(api, keysPath))
+
+	// 3. Delete.
+	mcp.Call("apikey_delete", keyArgs).AssertOutput(`{}`)
+
+	// 4. Get and list again.
+	mcp.Call("apikey_get", keyArgs).AssertToolError(errAPIKeyNotFound)
+	mcp.Call("apikey_list", listArgs).AssertOutput(`{"items":[]}`)
+
+	// 5. Use the key.
+	assertUnauthorized(t, api.WithHeader("X-API-Key", created.Key.Value).Get(identitiesPath))
 }
