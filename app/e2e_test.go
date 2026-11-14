@@ -186,7 +186,9 @@ func TestMCP(t *testing.T) {
 	assert.Contains(t, err.Error(), "Unauthorized")
 
 	// 2. List the tools.
-	assert.Equal(t, []string{"identity_whoami"}, mcp.ToolNames())
+	assert.Equal(t, []string{
+		"identity_create", "identity_get", "identity_list", "identity_update", "identity_whoami",
+	}, mcp.ToolNames())
 
 	// 3. GET.
 	get := api.Get(mcpPath)
