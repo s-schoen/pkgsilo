@@ -6,7 +6,7 @@ idiomatic_version_file_enable_tools = ["go"]
 [tools]
 golangci-lint = "2.15.0"
 gomigrate = "4.20.1"
-mockery = "3.9.0"
+mockery = "3.9.1"
 task = "3.54.0"
 # Runs `task test`, to write a JUnit report next to the coverage profile.
 gotestsum = "1.13.0"
