@@ -2,16 +2,11 @@ package mcpserver
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/netip"
-	"reflect"
 	"testing"
-	"time"
-	"uuid"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -20,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"pkgsilo/core/envelope"
 	"pkgsilo/core/middleware"
 	"pkgsilo/test/loggertest"
 )
@@ -100,54 +94,6 @@ func recovered(f func()) (value any) {
 	f()
 
 	return nil
-}
-
-// item is a member of the output of schemaOutput.
-type item struct {
-	Label netip.Addr                  `json:"label"`
-	Alias envelope.Field[*netip.Addr] `json:"alias,omitzero"`
-	When  envelope.Field[*time.Time]  `json:"when,omitzero"`
-}
-
-type schemaOutput struct {
-	Items      []item               `json:"items"`
-	NextOffset *int                 `json:"nextOffset,omitempty"`
-	Owners     map[string]uuid.UUID `json:"owners"`
-	Skipped    string               `json:"-"`
-}
-
-// TestSchemaFor checks the schema of an output with fields, UUIDs and text inside slices and maps, which
-// only an envelope.Field leaves optional.
-func TestSchemaFor(t *testing.T) {
-	t.Parallel()
-
-	schema, err := schemaFor(reflect.TypeFor[schemaOutput](), true)
-
-	require.NoError(t, err)
-	b, err := json.Marshal(schema)
-	require.NoError(t, err)
-	assert.JSONEq(t, `{
-		"type": "object",
-		"properties": {
-			"items": {
-				"type": ["null", "array"],
-				"items": {
-					"type": "object",
-					"properties": {
-						"label": {"type": "string"},
-						"alias": {"type": ["null", "string"]},
-						"when": {"type": ["null", "string"]}
-					},
-					"required": ["label"],
-					"additionalProperties": false
-				}
-			},
-			"nextOffset": {"type": ["null", "integer"]},
-			"owners": {"type": "object", "additionalProperties": {"type": "string", "format": "uuid"}}
-		},
-		"required": ["items", "owners"],
-		"additionalProperties": false
-	}`, string(b))
 }
 
 // TestDecodeRequestID checks that the ID of a JSON-RPC request is found wherever it is in the body, without

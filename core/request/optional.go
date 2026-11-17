@@ -4,6 +4,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"reflect"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 )
@@ -46,6 +47,12 @@ func (o Optional[T]) Pointer() *T {
 	}
 
 	return &o.Value
+}
+
+// ValueType returns T, the type of the member's value, for code that describes a request body by its Go
+// type, such as the schema of the OpenAPI document, which is that of T.
+func (Optional[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
 }
 
 // optional is an Optional of any type, for IfSet, whose rule is called with the Optional as any.

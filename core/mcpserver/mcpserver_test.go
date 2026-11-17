@@ -283,7 +283,7 @@ func TestAdd_Schemas(t *testing.T) {
 			"actor": {"type": "string", "format": "uuid", "description": "The actor."},
 			"name": {"type": "string"},
 			"note": {"type": ["null", "string"]},
-			"at": {"type": "string"}
+			"at": {"type": "string", "format": "date-time"}
 		},
 		"required": ["id"],
 		"additionalProperties": false
