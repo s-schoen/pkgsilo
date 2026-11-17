@@ -199,6 +199,37 @@ func TestRequire_AnswersMissingCredentialsWith401(t *testing.T) {
 	assertNotPassed(t, got, codes.Unset)
 }
 
+// TestRequire_LeavesOutEmptyChallenges checks that a method without a challenge, such as a cookie, adds none
+// to WWW-Authenticate.
+func TestRequire_LeavesOutEmptyChallenges(t *testing.T) {
+	t.Parallel()
+	first := newAuthenticator(t, "first")
+	first.EXPECT().Authenticate(mock.Anything).Return(authn.Principal{}, authn.ErrNoCredentials)
+	cookie := mocks.NewMockAuthenticator(t)
+	cookie.EXPECT().Challenge().Return("")
+	cookie.EXPECT().Method().Return("cookie")
+	cookie.EXPECT().Authenticate(mock.Anything).Return(authn.Principal{}, authn.ErrNoCredentials)
+
+	got := serve(t, loggertest.Discard(), first, cookie)
+
+	assert.Equal(t, http.StatusUnauthorized, got.rec.Code)
+	assert.Equal(t, []string{"first"}, got.rec.Header().Values("WWW-Authenticate"))
+}
+
+// TestRequire_KeepsTheCredentialID checks that the principal holds the ID of the credential that the method
+// returned.
+func TestRequire_KeepsTheCredentialID(t *testing.T) {
+	t.Parallel()
+	id, credentialID := uuid.NewV7(), uuid.NewV7()
+	first := newAuthenticator(t, "first")
+	first.EXPECT().Authenticate(mock.Anything).Return(authn.Principal{IdentityID: id, CredentialID: credentialID}, nil)
+
+	got := serve(t, loggertest.Discard(), first)
+
+	require.NotNil(t, got.principal)
+	assert.Equal(t, authn.Principal{IdentityID: id, Method: "first", CredentialID: credentialID}, *got.principal)
+}
+
 func TestRequire_AnswersRejectedCredentialsWith401(t *testing.T) {
 	t.Parallel()
 	logger, buf := loggertest.NewJSON()
