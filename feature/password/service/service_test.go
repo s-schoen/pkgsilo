@@ -27,14 +27,10 @@ var (
 
 	// identityGroups are the groups that the identity of the password is a member of.
 	identityGroups = []uuid.UUID{uuid.MustParse("5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b")}
-	// identityResource is the identity of the password as a resource of decisions, with its groups.
-	identityResource = authz.Resource{Type: "Identity", ID: identityID, Groups: identityGroups}
 	// passwordResource is the identity's password as a resource of decisions.
 	passwordResource = authz.Resource{
 		Type: "Password", ID: identityID, Owner: &authz.Owner{ID: identityID, Groups: identityGroups},
 	}
-	// readIdentity is the action of reading an identity, as the identity feature declares it.
-	readIdentity = authz.NewAction("identity:read", "read")
 
 	errDB = errors.New("connection refused")
 )
@@ -66,7 +62,8 @@ func newTestService(
 }
 
 // newTestServiceWith returns a service that asks authorizer, on a mock repository and a mock session
-// terminator. The terminator fails the test if sessions end without being expected.
+// terminator, whose owner loader finds the password's identity readable. The terminator fails the test if
+// sessions end without being expected.
 func newTestServiceWith(
 	t *testing.T, authorizer authz.Authorizer,
 ) (*passwordService, *mocks.MockPasswordRepository, *MockSessionTerminator) {
@@ -74,8 +71,20 @@ func newTestServiceWith(
 
 	repo := mocks.NewMockPasswordRepository(t)
 	terminator := NewMockSessionTerminator(t)
+	owners := authzmocks.NewMockOwnerLoader(t)
+	owners.EXPECT().ReadableOwner(mock.Anything, mock.Anything, identityID).
+		Return(&authz.Owner{ID: identityID, Groups: identityGroups}, nil).Maybe()
 
-	return newPasswordService(repo, authorizer, terminator, func() time.Time { return now }), repo, terminator
+	return newPasswordService(repo, authorizer, owners, terminator, func() time.Time { return now }), repo, terminator
+}
+
+// failOwner makes the service's owner loader fail with err.
+func failOwner(t *testing.T, svc *passwordService, err error) {
+	t.Helper()
+
+	owners := authzmocks.NewMockOwnerLoader(t)
+	owners.EXPECT().ReadableOwner(mock.Anything, mock.Anything, identityID).Return(nil, err)
+	svc.owners = owners
 }
 
 // newDeciding returns an authorizer that answers actor's requests with a mock decider.
@@ -87,18 +96,6 @@ func newDeciding(t *testing.T) (*authzmocks.MockAuthorizer, *authzmocks.MockDeci
 	authorizer.EXPECT().For(mock.Anything, actor).Return(decider, nil)
 
 	return authorizer, decider
-}
-
-// expectOwner makes the repository return the groups of the password's identity.
-func expectOwner(repo *mocks.MockPasswordRepository) {
-	repo.EXPECT().IdentityGroups(mock.Anything, identityID).Return(identityGroups, nil)
-}
-
-// expectOwnerReadable makes the repository return the groups of the password's identity, and the decider
-// allow reading it.
-func expectOwnerReadable(repo *mocks.MockPasswordRepository, decider *authzmocks.MockDecider) {
-	expectOwner(repo)
-	decider.EXPECT().Can(readIdentity, identityResource).Return(true, nil)
 }
 
 // expectStored makes the repository return stored, or no password if exists is false.
@@ -125,6 +122,16 @@ func expectSet(repo *mocks.MockPasswordRepository) *repository.PasswordRecord {
 	return &set
 }
 
+// expectChange makes the repository store a changed password while it still has the hash of stored,
+// returning it as stored, and returns the stored record.
+func expectChange(repo *mocks.MockPasswordRepository) *repository.PasswordRecord {
+	var changed repository.PasswordRecord
+	repo.EXPECT().Change(mock.Anything, servicetest.Capture(&changed), storedHash).Return(
+		repository.PasswordRecord{IdentityID: identityID, Hash: "changed", SetAt: now}, nil)
+
+	return &changed
+}
+
 // expectSessionsEnded makes the terminator end the identity's sessions, and fails the test if that happens
 // before the password is written: otherwise someone with the old password could log in before the write and
 // keep their session.
@@ -135,7 +142,7 @@ func expectSessionsEnded(
 
 	terminator.EXPECT().EndSessions(mock.Anything, identityID).Return(nil).Run(
 		func(context.Context, uuid.UUID) {
-			writes := []string{"Set", "Delete"}
+			writes := []string{"Set", "Change", "Delete"}
 			assert.True(t, slices.ContainsFunc(repo.Calls, func(call mock.Call) bool {
 				return slices.Contains(writes, call.Method)
 			}), "sessions must end after the password is written")
@@ -165,7 +172,6 @@ func TestPasswordService_Declaration(t *testing.T) {
 func TestPasswordService_Get(t *testing.T) {
 	t.Parallel()
 	svc, repo, _ := newTestService(t)
-	expectOwner(repo)
 	expectStored(repo, true)
 
 	got, err := svc.Get(t.Context(), actor, identityID)
@@ -178,7 +184,6 @@ func TestPasswordService_Get_HiddenFields(t *testing.T) {
 	t.Parallel()
 	authorizer, decider := newDeciding(t)
 	svc, repo, _ := newTestServiceWith(t, authorizer)
-	expectOwnerReadable(repo, decider)
 	expectStored(repo, true)
 	expectCan(decider, actions.Read(), true)
 	servicetest.ExpectReadableFields(decider, actions.ReadFields(), passwordResource)
@@ -192,7 +197,6 @@ func TestPasswordService_Get_HiddenFields(t *testing.T) {
 func TestPasswordService_Get_NotFound(t *testing.T) {
 	t.Parallel()
 	svc, repo, _ := newTestService(t)
-	expectOwner(repo)
 	repoErr := fmt.Errorf("get password: %w", repository.ErrNotFound)
 	repo.EXPECT().Get(mock.Anything, identityID).Return(repository.PasswordRecord{}, repoErr)
 
@@ -221,7 +225,6 @@ func TestPasswordService_Set_Reset(t *testing.T) {
 			authorizer, decider := newDeciding(t)
 			// The mock fails the test if change is checked.
 			svc, repo, terminator := newTestServiceWith(t, authorizer)
-			expectOwnerReadable(repo, decider)
 			expectStored(repo, tt.exists)
 			expectCan(decider, actions.Read(), true)
 			expectCan(decider, resetAction, true)
@@ -248,22 +251,44 @@ func TestPasswordService_Set_Change(t *testing.T) {
 	t.Parallel()
 	authorizer, decider := newDeciding(t)
 	svc, repo, terminator := newTestServiceWith(t, authorizer)
-	expectOwnerReadable(repo, decider)
 	expectStored(repo, true)
 	expectCan(decider, actions.Read(), true)
 	expectCan(decider, resetAction, false)
 	expectCan(decider, changeAction, true)
 	servicetest.ExpectReadableFields(decider, actions.ReadFields(), passwordResource, "setAt")
-	set := expectSet(repo)
+	changed := expectChange(repo)
 	expectSessionsEnded(t, repo, terminator)
 
 	got, err := svc.Set(t.Context(), actor, identityID,
 		PasswordInput{NewPassword: "battery staple", CurrentPassword: new(currentPassword)})
 	require.NoError(t, err)
 
-	assert.Equal(t, now, set.SetAt)
-	assertHashOf(t, "battery staple", set.Hash)
+	assert.Equal(t, identityID, changed.IdentityID)
+	assert.Equal(t, now, changed.SetAt)
+	assertHashOf(t, "battery staple", changed.Hash)
 	assert.Equal(t, Password{SetAt: authz.Visible(now)}, got)
+}
+
+// TestPasswordService_Set_ChangedMeanwhile checks that a change fails like a wrong current password, and ends
+// no session, when the password is reset or deleted while the current password is checked, so that a change
+// never overwrites a reset.
+func TestPasswordService_Set_ChangedMeanwhile(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	// The terminator mock fails the test if sessions end.
+	svc, repo, _ := newTestServiceWith(t, authorizer)
+	expectStored(repo, true)
+	expectCan(decider, actions.Read(), true)
+	expectCan(decider, resetAction, false)
+	expectCan(decider, changeAction, true)
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), passwordResource, "setAt")
+	repoErr := fmt.Errorf("change password: %w", repository.ErrHashChanged)
+	repo.EXPECT().Change(mock.Anything, mock.Anything, storedHash).Return(repository.PasswordRecord{}, repoErr)
+
+	_, err := svc.Set(t.Context(), actor, identityID,
+		PasswordInput{NewPassword: "battery staple", CurrentPassword: new(currentPassword)})
+
+	servicetest.AssertTranslated(t, err, ErrWrongCurrentPassword, repository.ErrHashChanged)
 }
 
 // TestPasswordService_Set_ChangeRejected checks that a change without the right current password, or of a
@@ -287,7 +312,6 @@ func TestPasswordService_Set_ChangeRejected(t *testing.T) {
 			authorizer, decider := newDeciding(t)
 			// The mock fails the test on a write.
 			svc, repo, _ := newTestServiceWith(t, authorizer)
-			expectOwnerReadable(repo, decider)
 			expectStored(repo, tt.exists)
 			expectCan(decider, actions.Read(), true)
 			expectCan(decider, resetAction, false)
@@ -309,7 +333,6 @@ func TestPasswordService_Set_Denied(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	// The mock fails the test on a write.
 	svc, repo, _ := newTestServiceWith(t, authorizer)
-	expectOwnerReadable(repo, decider)
 	expectStored(repo, true)
 	expectCan(decider, actions.Read(), true)
 	expectCan(decider, resetAction, false)
@@ -332,7 +355,6 @@ func TestPasswordService_Set_Unreadable(t *testing.T) {
 		authorizer, decider := newDeciding(t)
 		// The mocks fail the test on any other decision or on a write.
 		svc, repo, _ := newTestServiceWith(t, authorizer)
-		expectOwnerReadable(repo, decider)
 		expectStored(repo, true)
 		expectCan(decider, actions.Read(), false)
 
@@ -345,7 +367,6 @@ func TestPasswordService_Set_Unreadable(t *testing.T) {
 		authorizer, decider := newDeciding(t)
 		// The mock fails the test if a field is checked.
 		svc, repo, terminator := newTestServiceWith(t, authorizer)
-		expectOwnerReadable(repo, decider)
 		expectStored(repo, false)
 		expectCan(decider, actions.Read(), false)
 		expectCan(decider, resetAction, true)
@@ -362,7 +383,6 @@ func TestPasswordService_Set_Unreadable(t *testing.T) {
 func TestPasswordService_Set_IdentityDeletedMeanwhile(t *testing.T) {
 	t.Parallel()
 	svc, repo, _ := newTestService(t)
-	expectOwner(repo)
 	expectStored(repo, false)
 	repoErr := fmt.Errorf("set password: %w", repository.ErrIdentityNotFound)
 	repo.EXPECT().Set(mock.Anything, mock.Anything).Return(repository.PasswordRecord{}, repoErr)
@@ -377,7 +397,6 @@ func TestPasswordService_Set_Canceled(t *testing.T) {
 	t.Parallel()
 	// The mock fails the test on a write.
 	svc, repo, _ := newTestService(t)
-	expectOwner(repo)
 	expectStored(repo, false)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -391,7 +410,6 @@ func TestPasswordService_Delete(t *testing.T) {
 	t.Parallel()
 	authorizer, decider := newDeciding(t)
 	svc, repo, terminator := newTestServiceWith(t, authorizer)
-	expectOwnerReadable(repo, decider)
 	expectStored(repo, true)
 	expectCan(decider, actions.Read(), true)
 	expectCan(decider, actions.Delete(), true)
@@ -428,7 +446,6 @@ func TestPasswordService_EndSessionsFails(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			svc, repo, terminator := newTestService(t)
-			expectOwner(repo)
 			expectStored(repo, true)
 			tt.expectWrite(repo)
 			terminator.EXPECT().EndSessions(mock.Anything, identityID).Return(errEnd)
@@ -443,7 +460,6 @@ func TestPasswordService_Delete_Denied(t *testing.T) {
 	authorizer, decider := newDeciding(t)
 	// The mock fails the test on a write.
 	svc, repo, _ := newTestServiceWith(t, authorizer)
-	expectOwnerReadable(repo, decider)
 	expectStored(repo, true)
 	expectCan(decider, actions.Read(), true)
 	expectCan(decider, actions.Delete(), false)
@@ -457,7 +473,6 @@ func TestPasswordService_Delete_NotFound(t *testing.T) {
 	t.Run("no password", func(t *testing.T) {
 		t.Parallel()
 		svc, repo, _ := newTestService(t)
-		expectOwner(repo)
 		expectStored(repo, false)
 
 		err := svc.Delete(t.Context(), actor, identityID)
@@ -467,7 +482,6 @@ func TestPasswordService_Delete_NotFound(t *testing.T) {
 	t.Run("deleted meanwhile", func(t *testing.T) {
 		t.Parallel()
 		svc, repo, _ := newTestService(t)
-		expectOwner(repo)
 		expectStored(repo, true)
 		repo.EXPECT().Delete(mock.Anything, identityID).Return(fmt.Errorf("delete password: %w", repository.ErrNotFound))
 
@@ -497,43 +511,23 @@ func calls(t *testing.T) map[string]func(*passwordService) error {
 	}
 }
 
-// TestPasswordService_IdentityHidden checks that every method reports an identity that the actor may not
-// read like a missing one, before anything else is looked up or decided.
-func TestPasswordService_IdentityHidden(t *testing.T) {
-	t.Parallel()
-	for name, call := range calls(t) {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			authorizer, decider := newDeciding(t)
-			// The mocks fail the test on any other decision or repository call.
-			svc, repo, _ := newTestServiceWith(t, authorizer)
-			expectOwner(repo)
-			decider.EXPECT().Can(readIdentity, identityResource).Return(false, nil)
-
-			err := call(svc)
-
-			require.ErrorIs(t, err, ErrIdentityNotFound)
-			assert.NotErrorIs(t, err, authz.ErrDenied)
-		})
-	}
-}
-
-// TestPasswordService_IdentityNotFound checks that every method reports a missing identity in the same way as
-// a hidden one, without deciding anything.
+// TestPasswordService_IdentityNotFound checks that every method reports an identity that the owner loader
+// doesn't find, since it doesn't exist or the actor may not read it, with ErrIdentityNotFound, before anything
+// else is looked up or decided.
 func TestPasswordService_IdentityNotFound(t *testing.T) {
 	t.Parallel()
 	for name, call := range calls(t) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			authorizer, _ := newDeciding(t)
-			// The mocks fail the test on any decision or other repository call.
-			svc, repo, _ := newTestServiceWith(t, authorizer)
-			repoErr := fmt.Errorf("list password identity groups: %w", repository.ErrIdentityNotFound)
-			repo.EXPECT().IdentityGroups(mock.Anything, identityID).Return(nil, repoErr)
+			// The mocks fail the test on any decision or repository call.
+			svc, _, _ := newTestServiceWith(t, authorizer)
+			failOwner(t, svc, authz.ErrOwnerNotFound)
 
 			err := call(svc)
 
-			servicetest.AssertTranslated(t, err, ErrIdentityNotFound, repository.ErrIdentityNotFound)
+			servicetest.AssertTranslated(t, err, ErrIdentityNotFound, authz.ErrOwnerNotFound)
+			assert.NotErrorIs(t, err, authz.ErrDenied)
 		})
 	}
 }
@@ -548,7 +542,6 @@ func TestPasswordService_PasswordHidden(t *testing.T) {
 			authorizer, decider := newDeciding(t)
 			// The mocks fail the test on any other decision or on a write.
 			svc, repo, _ := newTestServiceWith(t, authorizer)
-			expectOwnerReadable(repo, decider)
 			expectStored(repo, true)
 			expectCan(decider, actions.Read(), false)
 
@@ -567,8 +560,8 @@ func TestPasswordService_RepositoryFails(t *testing.T) {
 	for name, call := range calls(t) {
 		t.Run(name+" identity lookup", func(t *testing.T) {
 			t.Parallel()
-			svc, repo, _ := newTestService(t)
-			repo.EXPECT().IdentityGroups(mock.Anything, identityID).Return(nil, errDB)
+			svc, _, _ := newTestService(t)
+			failOwner(t, svc, errDB)
 
 			err := call(svc)
 
@@ -578,7 +571,6 @@ func TestPasswordService_RepositoryFails(t *testing.T) {
 		t.Run(name+" password lookup", func(t *testing.T) {
 			t.Parallel()
 			svc, repo, _ := newTestService(t)
-			expectOwner(repo)
 			repo.EXPECT().Get(mock.Anything, identityID).Return(repository.PasswordRecord{}, errDB)
 
 			err := call(svc)
@@ -614,11 +606,10 @@ func TestPasswordService_AuthorizationFails(t *testing.T) {
 		})
 		t.Run(name+" no identity decision", func(t *testing.T) {
 			t.Parallel()
-			authorizer, decider := newDeciding(t)
-			// The mock fails the test on any other repository call.
-			svc, repo, _ := newTestServiceWith(t, authorizer)
-			expectOwner(repo)
-			decider.EXPECT().Can(readIdentity, identityResource).Return(false, errDecision)
+			authorizer, _ := newDeciding(t)
+			// The mocks fail the test on any decision or repository call.
+			svc, _, _ := newTestServiceWith(t, authorizer)
+			failOwner(t, svc, fmt.Errorf("check owner read: %w", errDecision))
 
 			assertFailed(t, call(svc))
 		})
@@ -631,7 +622,6 @@ func TestPasswordService_AuthorizationFails(t *testing.T) {
 				t.Parallel()
 				authorizer, decider := newDeciding(t)
 				svc, repo, terminator := newTestServiceWith(t, authorizer)
-				expectOwnerReadable(repo, decider)
 				expectStored(repo, true)
 				terminator.EXPECT().EndSessions(mock.Anything, identityID).Return(nil).Maybe()
 				decider.EXPECT().Can(failing, passwordResource).Return(false, errDecision).Maybe()
@@ -641,6 +631,11 @@ func TestPasswordService_AuthorizationFails(t *testing.T) {
 				wrote := false
 				repo.EXPECT().Set(mock.Anything, mock.Anything).RunAndReturn(
 					func(context.Context, repository.PasswordRecord) (repository.PasswordRecord, error) {
+						wrote = true
+						return stored, nil
+					}).Maybe()
+				repo.EXPECT().Change(mock.Anything, mock.Anything, mock.Anything).RunAndReturn(
+					func(context.Context, repository.PasswordRecord, string) (repository.PasswordRecord, error) {
 						wrote = true
 						return stored, nil
 					}).Maybe()

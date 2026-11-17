@@ -18,6 +18,10 @@ type PasswordRepository interface {
 	// Set stores the record as the identity's password, replacing the one it has, and returns it as stored.
 	// It returns ErrIdentityNotFound if the identity doesn't exist.
 	Set(ctx context.Context, rec PasswordRecord) (PasswordRecord, error)
+	// Change replaces the identity's password with the record, but only while its hash is still oldHash, so
+	// that a change checked against the old hash can't overwrite one that happened since. It returns the
+	// record as stored, or ErrHashChanged if the password was changed or deleted since oldHash was read.
+	Change(ctx context.Context, rec PasswordRecord, oldHash string) (PasswordRecord, error)
 	// UpdateHash replaces the hash of the identity's password with newHash, but only while it's still
 	// oldHash, so that a rehash can't undo a change that happened since the old hash was read. It reports
 	// whether it replaced the hash.
@@ -27,9 +31,6 @@ type PasswordRepository interface {
 	// GetCredentials returns the identity with the given username and the hash of its password, if it has
 	// one. It returns ErrIdentityNotFound if no identity has the username.
 	GetCredentials(ctx context.Context, username string) (CredentialsRecord, error)
-	// IdentityGroups returns the IDs of the groups that the identity with the given ID is a member of, in
-	// no particular order. It returns ErrIdentityNotFound if the identity doesn't exist.
-	IdentityGroups(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error)
 }
 
 const passwordColumns = "identity_id, hash, set_at"
@@ -69,6 +70,28 @@ func (r *PostgresPasswordRepository) Set(ctx context.Context, rec PasswordRecord
 	)
 	if err != nil {
 		return PasswordRecord{}, fmt.Errorf("set password: %w", translateError(err))
+	}
+
+	return stored, nil
+}
+
+// Change replaces the identity's password with the record, but only while its hash is still oldHash, in one
+// statement, which waits for a concurrent write of the password and then checks the hash it left.
+func (r *PostgresPasswordRepository) Change(
+	ctx context.Context, rec PasswordRecord, oldHash string,
+) (PasswordRecord, error) {
+	var stored PasswordRecord
+	err := r.db.GetContext(ctx, &stored, `
+		UPDATE passwords SET hash = $3, set_at = $4
+		WHERE identity_id = $1 AND hash = $2
+		RETURNING `+passwordColumns,
+		rec.IdentityID, oldHash, rec.Hash, rec.SetAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PasswordRecord{}, fmt.Errorf("change password: %w", ErrHashChanged)
+	}
+	if err != nil {
+		return PasswordRecord{}, fmt.Errorf("change password: %w", err)
 	}
 
 	return stored, nil
@@ -128,35 +151,4 @@ func (r *PostgresPasswordRepository) GetCredentials(ctx context.Context, usernam
 	}
 
 	return rec, nil
-}
-
-// IdentityGroups returns the IDs of the groups that the identity with the given ID is a member of, in no
-// particular order. It returns ErrIdentityNotFound if the identity doesn't exist. One query tells both, so
-// that the identity can't be deleted between them.
-func (r *PostgresPasswordRepository) IdentityGroups(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error) {
-	// One row per group, or one row without a group for an identity in none.
-	var rows []struct {
-		GroupID *uuid.UUID `db:"group_id"`
-	}
-	err := r.db.SelectContext(ctx, &rows, `
-		SELECT m.group_id FROM identities i
-		LEFT JOIN group_members m ON m.identity_id = i.id
-		WHERE i.id = $1`,
-		identityID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list password identity groups: %w", err)
-	}
-	if len(rows) == 0 {
-		return nil, fmt.Errorf("list password identity groups: %w", ErrIdentityNotFound)
-	}
-
-	var groups []uuid.UUID
-	for _, row := range rows {
-		if row.GroupID != nil {
-			groups = append(groups, *row.GroupID)
-		}
-	}
-
-	return groups, nil
 }

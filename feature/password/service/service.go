@@ -10,7 +10,6 @@ import (
 	"uuid"
 
 	"pkgsilo/core/authz"
-	identityservice "pkgsilo/feature/identity/service"
 	"pkgsilo/feature/password/repository"
 )
 
@@ -27,7 +26,8 @@ type PasswordService interface {
 	// sets it without the current one, which is the only way to set a first password, and in.CurrentPassword
 	// is ignored. An actor that may only change it must give the current one: Set returns
 	// ErrCurrentPasswordRequired if in.CurrentPassword is nil, and ErrWrongCurrentPassword if it doesn't
-	// match. It returns ErrPasswordNotFound for an identity without a password, and authz.ErrDenied if the
+	// match, also when the password is reset or deleted while it's checked, so that a change never overwrites
+	// a reset. It returns ErrPasswordNotFound for an identity without a password, and authz.ErrDenied if the
 	// actor may read the password but neither reset nor change it. It writes nothing on an error.
 	Set(ctx context.Context, actor, identityID uuid.UUID, in PasswordInput) (Password, error)
 	// Delete removes the identity's password, which then can't be used to log in. A password that the actor
@@ -49,24 +49,26 @@ type SessionTerminator interface {
 type passwordService struct {
 	repo       repository.PasswordRepository
 	authorizer authz.Authorizer
+	owners     authz.OwnerLoader
 	terminator SessionTerminator
 	now        func() time.Time
 }
 
 // NewPasswordService returns a PasswordService that stores passwords in repo, hashed with Argon2id, asks
-// authorizer what an actor may do, and ends the sessions of an identity whose password changes with
-// terminator.
+// authorizer what an actor may do, loads the identities that own passwords with owners, and ends the sessions
+// of an identity whose password changes with terminator.
 func NewPasswordService(
-	repo repository.PasswordRepository, authorizer authz.Authorizer, terminator SessionTerminator,
+	repo repository.PasswordRepository, authorizer authz.Authorizer, owners authz.OwnerLoader,
+	terminator SessionTerminator,
 ) PasswordService {
-	return newPasswordService(repo, authorizer, terminator, time.Now)
+	return newPasswordService(repo, authorizer, owners, terminator, time.Now)
 }
 
 func newPasswordService(
-	repo repository.PasswordRepository, authorizer authz.Authorizer, terminator SessionTerminator,
-	now func() time.Time,
+	repo repository.PasswordRepository, authorizer authz.Authorizer, owners authz.OwnerLoader,
+	terminator SessionTerminator, now func() time.Time,
 ) *passwordService {
-	return &passwordService{repo: repo, authorizer: authorizer, terminator: terminator, now: now}
+	return &passwordService{repo: repo, authorizer: authorizer, owners: owners, terminator: terminator, now: now}
 }
 
 func (s *passwordService) Get(ctx context.Context, actor, identityID uuid.UUID) (Password, error) {
@@ -75,9 +77,9 @@ func (s *passwordService) Get(ctx context.Context, actor, identityID uuid.UUID) 
 		return Password{}, fmt.Errorf("get password: %w", err)
 	}
 
-	owner, err := s.readableOwner(ctx, decider, identityID)
+	owner, err := s.owners.ReadableOwner(ctx, decider, identityID)
 	if err != nil {
-		return Password{}, fmt.Errorf("get password: %w", err)
+		return Password{}, fmt.Errorf("get password: %w", translateError(err))
 	}
 
 	rec, err := s.getReadable(ctx, decider, owner)
@@ -101,9 +103,9 @@ func (s *passwordService) Set(
 		return Password{}, fmt.Errorf("set password: %w", err)
 	}
 
-	owner, err := s.readableOwner(ctx, decider, identityID)
+	owner, err := s.owners.ReadableOwner(ctx, decider, identityID)
 	if err != nil {
-		return Password{}, fmt.Errorf("set password: %w", err)
+		return Password{}, fmt.Errorf("set password: %w", translateError(err))
 	}
 
 	rec, err := s.repo.Get(ctx, identityID)
@@ -122,7 +124,8 @@ func (s *passwordService) Set(
 		return Password{}, fmt.Errorf("set password: %w", err)
 	}
 
-	stored, err := s.repo.Set(ctx, repository.PasswordRecord{IdentityID: identityID, Hash: hash, SetAt: s.now()})
+	stored, err := s.write(ctx, reset, repository.PasswordRecord{IdentityID: identityID, Hash: hash, SetAt: s.now()},
+		rec.Hash)
 	if err != nil {
 		return Password{}, fmt.Errorf("set password: %w", translateError(err))
 	}
@@ -230,9 +233,9 @@ func (s *passwordService) Delete(ctx context.Context, actor, identityID uuid.UUI
 		return fmt.Errorf("delete password: %w", err)
 	}
 
-	owner, err := s.readableOwner(ctx, decider, identityID)
+	owner, err := s.owners.ReadableOwner(ctx, decider, identityID)
 	if err != nil {
-		return fmt.Errorf("delete password: %w", err)
+		return fmt.Errorf("delete password: %w", translateError(err))
 	}
 
 	if _, err := s.getReadable(ctx, decider, owner); err != nil {
@@ -258,27 +261,17 @@ func (s *passwordService) Delete(ctx context.Context, actor, identityID uuid.UUI
 	return nil
 }
 
-// readableOwner returns the identity with the given ID as the owner of its password, with its groups. It
-// reports an identity that the decider doesn't allow to read like a missing one, with ErrIdentityNotFound,
-// so that no endpoint of its password reveals whether it exists.
-func (s *passwordService) readableOwner(
-	ctx context.Context, decider authz.Decider, identityID uuid.UUID,
-) (*authz.Owner, error) {
-	groups, err := s.repo.IdentityGroups(ctx, identityID)
-	if err != nil {
-		return nil, translateError(err)
+// write stores rec as its identity's password. A reset replaces whatever password there is. A change, whose
+// current password was checked against currentHash, writes only while the password still has that hash, so
+// that it can't overwrite a reset that happened during the check.
+func (s *passwordService) write(
+	ctx context.Context, reset bool, rec repository.PasswordRecord, currentHash string,
+) (repository.PasswordRecord, error) {
+	if reset {
+		return s.repo.Set(ctx, rec) //nolint:wrapcheck // Translated by the caller.
 	}
 
-	can, err := decider.Can(identityservice.Actions().Read(),
-		authz.Resource{Type: authz.IdentityType, ID: identityID, Groups: groups})
-	if err != nil {
-		return nil, fmt.Errorf("check identity read: %w", err)
-	}
-	if !can {
-		return nil, ErrIdentityNotFound
-	}
-
-	return &authz.Owner{ID: identityID, Groups: groups}, nil
+	return s.repo.Change(ctx, rec, currentHash) //nolint:wrapcheck // Translated by the caller.
 }
 
 // getReadable returns the record of the owner's password. It reports a password that the decider doesn't

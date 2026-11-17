@@ -83,7 +83,8 @@ func TestBootstrap_FirstStart(t *testing.T) {
 	assert.Equal(t, authz.Visible(audit.SystemActor()), admin.CreatedBy)
 	assertAdministrator(t, db, admin.ID)
 
-	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authz.AllowAll(), testPepper)
+	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authz.AllowAll(),
+		authz.NewOwners(db, identityservice.Actions().Read()), testPepper)
 	authenticated, err := apiKeys.Authenticate(t.Context(), key)
 	require.NoError(t, err, "the returned key must authenticate")
 	assert.Equal(t, admin.ID, authenticated.IdentityID)

@@ -48,6 +48,78 @@ func (_m *MockPasswordRepository) EXPECT() *MockPasswordRepository_Expecter {
 	return &MockPasswordRepository_Expecter{mock: &_m.Mock}
 }
 
+// Change provides a mock function for the type MockPasswordRepository
+func (_mock *MockPasswordRepository) Change(ctx context.Context, rec repository.PasswordRecord, oldHash string) (repository.PasswordRecord, error) {
+	ret := _mock.Called(ctx, rec, oldHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Change")
+	}
+
+	var r0 repository.PasswordRecord
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.PasswordRecord, string) (repository.PasswordRecord, error)); ok {
+		return returnFunc(ctx, rec, oldHash)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.PasswordRecord, string) repository.PasswordRecord); ok {
+		r0 = returnFunc(ctx, rec, oldHash)
+	} else {
+		r0 = ret.Get(0).(repository.PasswordRecord)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.PasswordRecord, string) error); ok {
+		r1 = returnFunc(ctx, rec, oldHash)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPasswordRepository_Change_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Change'
+type MockPasswordRepository_Change_Call struct {
+	*mock.Call
+}
+
+// Change is a helper method to define mock.On call
+//   - ctx context.Context
+//   - rec repository.PasswordRecord
+//   - oldHash string
+func (_e *MockPasswordRepository_Expecter) Change(ctx any, rec any, oldHash any) *MockPasswordRepository_Change_Call {
+	return &MockPasswordRepository_Change_Call{Call: _e.mock.On("Change", ctx, rec, oldHash)}
+}
+
+func (_c *MockPasswordRepository_Change_Call) Run(run func(ctx context.Context, rec repository.PasswordRecord, oldHash string)) *MockPasswordRepository_Change_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 repository.PasswordRecord
+		if args[1] != nil {
+			arg1 = args[1].(repository.PasswordRecord)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPasswordRepository_Change_Call) Return(passwordRecord repository.PasswordRecord, err error) *MockPasswordRepository_Change_Call {
+	_c.Call.Return(passwordRecord, err)
+	return _c
+}
+
+func (_c *MockPasswordRepository_Change_Call) RunAndReturn(run func(ctx context.Context, rec repository.PasswordRecord, oldHash string) (repository.PasswordRecord, error)) *MockPasswordRepository_Change_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Delete provides a mock function for the type MockPasswordRepository
 func (_mock *MockPasswordRepository) Delete(ctx context.Context, identityID uuid.UUID) error {
 	ret := _mock.Called(ctx, identityID)
@@ -233,74 +305,6 @@ func (_c *MockPasswordRepository_GetCredentials_Call) Return(credentialsRecord r
 }
 
 func (_c *MockPasswordRepository_GetCredentials_Call) RunAndReturn(run func(ctx context.Context, username string) (repository.CredentialsRecord, error)) *MockPasswordRepository_GetCredentials_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// IdentityGroups provides a mock function for the type MockPasswordRepository
-func (_mock *MockPasswordRepository) IdentityGroups(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error) {
-	ret := _mock.Called(ctx, identityID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for IdentityGroups")
-	}
-
-	var r0 []uuid.UUID
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) ([]uuid.UUID, error)); ok {
-		return returnFunc(ctx, identityID)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) []uuid.UUID); ok {
-		r0 = returnFunc(ctx, identityID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]uuid.UUID)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
-		r1 = returnFunc(ctx, identityID)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockPasswordRepository_IdentityGroups_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IdentityGroups'
-type MockPasswordRepository_IdentityGroups_Call struct {
-	*mock.Call
-}
-
-// IdentityGroups is a helper method to define mock.On call
-//   - ctx context.Context
-//   - identityID uuid.UUID
-func (_e *MockPasswordRepository_Expecter) IdentityGroups(ctx any, identityID any) *MockPasswordRepository_IdentityGroups_Call {
-	return &MockPasswordRepository_IdentityGroups_Call{Call: _e.mock.On("IdentityGroups", ctx, identityID)}
-}
-
-func (_c *MockPasswordRepository_IdentityGroups_Call) Run(run func(ctx context.Context, identityID uuid.UUID)) *MockPasswordRepository_IdentityGroups_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 uuid.UUID
-		if args[1] != nil {
-			arg1 = args[1].(uuid.UUID)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockPasswordRepository_IdentityGroups_Call) Return(uUIDs []uuid.UUID, err error) *MockPasswordRepository_IdentityGroups_Call {
-	_c.Call.Return(uUIDs, err)
-	return _c
-}
-
-func (_c *MockPasswordRepository_IdentityGroups_Call) RunAndReturn(run func(ctx context.Context, identityID uuid.UUID) ([]uuid.UUID, error)) *MockPasswordRepository_IdentityGroups_Call {
 	_c.Call.Return(run)
 	return _c
 }
