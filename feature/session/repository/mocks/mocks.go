@@ -169,6 +169,63 @@ func (_c *MockSessionRepository_DeleteByHash_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
+// DeleteByIdentity provides a mock function for the type MockSessionRepository
+func (_mock *MockSessionRepository) DeleteByIdentity(ctx context.Context, identityID uuid.UUID) error {
+	ret := _mock.Called(ctx, identityID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteByIdentity")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, identityID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockSessionRepository_DeleteByIdentity_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteByIdentity'
+type MockSessionRepository_DeleteByIdentity_Call struct {
+	*mock.Call
+}
+
+// DeleteByIdentity is a helper method to define mock.On call
+//   - ctx context.Context
+//   - identityID uuid.UUID
+func (_e *MockSessionRepository_Expecter) DeleteByIdentity(ctx any, identityID any) *MockSessionRepository_DeleteByIdentity_Call {
+	return &MockSessionRepository_DeleteByIdentity_Call{Call: _e.mock.On("DeleteByIdentity", ctx, identityID)}
+}
+
+func (_c *MockSessionRepository_DeleteByIdentity_Call) Run(run func(ctx context.Context, identityID uuid.UUID)) *MockSessionRepository_DeleteByIdentity_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockSessionRepository_DeleteByIdentity_Call) Return(err error) *MockSessionRepository_DeleteByIdentity_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockSessionRepository_DeleteByIdentity_Call) RunAndReturn(run func(ctx context.Context, identityID uuid.UUID) error) *MockSessionRepository_DeleteByIdentity_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeleteExpired provides a mock function for the type MockSessionRepository
 func (_mock *MockSessionRepository) DeleteExpired(ctx context.Context, now time.Time, idleSince time.Time) error {
 	ret := _mock.Called(ctx, now, idleSince)

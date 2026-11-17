@@ -25,6 +25,9 @@ type SessionRepository interface {
 	Delete(ctx context.Context, identityID, id uuid.UUID) error
 	// DeleteByHash removes the record with the given token hash, if there is one.
 	DeleteByHash(ctx context.Context, tokenHash []byte) error
+	// DeleteByIdentity removes every record of the given identity. An identity without records is not an
+	// error.
+	DeleteByIdentity(ctx context.Context, identityID uuid.UUID) error
 	// DeleteExpired removes every record that expires at or before now, or was last seen at or before
 	// idleSince.
 	DeleteExpired(ctx context.Context, now, idleSince time.Time) error
@@ -123,6 +126,15 @@ func (r *PostgresSessionRepository) Delete(ctx context.Context, identityID, id u
 func (r *PostgresSessionRepository) DeleteByHash(ctx context.Context, tokenHash []byte) error {
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash = $1`, tokenHash); err != nil {
 		return fmt.Errorf("delete session by hash: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteByIdentity removes every record of the given identity, in one statement.
+func (r *PostgresSessionRepository) DeleteByIdentity(ctx context.Context, identityID uuid.UUID) error {
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM sessions WHERE identity_id = $1`, identityID); err != nil {
+		return fmt.Errorf("delete sessions of identity: %w", err)
 	}
 
 	return nil

@@ -35,6 +35,13 @@ packages:
   pkgsilo/feature/password/service:
     interfaces:
       PasswordService: {}
+      # In the package, as a test file: the service's own tests use it, and the mocks package imports the
+      # service.
+      SessionTerminator:
+        config:
+          dir: "{{.InterfaceDir}}"
+          pkgname: service
+          filename: terminator_mock_test.go
       Verifier: {}
   pkgsilo/feature/policy/repository:
     interfaces:

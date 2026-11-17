@@ -32,25 +32,41 @@ type PasswordService interface {
 	Set(ctx context.Context, actor, identityID uuid.UUID, in PasswordInput) (Password, error)
 	// Delete removes the identity's password, which then can't be used to log in. A password that the actor
 	// may read but not delete is reported with authz.ErrDenied.
+	//
+	// Set and Delete end every session of the identity once the password is written, the actor's own
+	// included, so that a stolen session doesn't survive. If that fails, the password stays written and they
+	// return the error, so that the request fails and can be retried.
 	Delete(ctx context.Context, actor, identityID uuid.UUID) error
+}
+
+// SessionTerminator ends the sessions of identities. The password service owns it, so that the session
+// feature, which checks passwords with the Verifier, implements it without an import cycle.
+type SessionTerminator interface {
+	// EndSessions ends every session of the identity. An identity without sessions is not an error.
+	EndSessions(ctx context.Context, identityID uuid.UUID) error
 }
 
 type passwordService struct {
 	repo       repository.PasswordRepository
 	authorizer authz.Authorizer
+	terminator SessionTerminator
 	now        func() time.Time
 }
 
-// NewPasswordService returns a PasswordService that stores passwords in repo, hashed with Argon2id, and asks
-// authorizer what an actor may do.
-func NewPasswordService(repo repository.PasswordRepository, authorizer authz.Authorizer) PasswordService {
-	return newPasswordService(repo, authorizer, time.Now)
+// NewPasswordService returns a PasswordService that stores passwords in repo, hashed with Argon2id, asks
+// authorizer what an actor may do, and ends the sessions of an identity whose password changes with
+// terminator.
+func NewPasswordService(
+	repo repository.PasswordRepository, authorizer authz.Authorizer, terminator SessionTerminator,
+) PasswordService {
+	return newPasswordService(repo, authorizer, terminator, time.Now)
 }
 
 func newPasswordService(
-	repo repository.PasswordRepository, authorizer authz.Authorizer, now func() time.Time,
+	repo repository.PasswordRepository, authorizer authz.Authorizer, terminator SessionTerminator,
+	now func() time.Time,
 ) *passwordService {
-	return &passwordService{repo: repo, authorizer: authorizer, now: now}
+	return &passwordService{repo: repo, authorizer: authorizer, terminator: terminator, now: now}
 }
 
 func (s *passwordService) Get(ctx context.Context, actor, identityID uuid.UUID) (Password, error) {
@@ -101,13 +117,7 @@ func (s *passwordService) Set(
 		return Password{}, fmt.Errorf("set password: %w", err)
 	}
 
-	if !reset {
-		if err := checkCurrentPassword(ctx, *in.CurrentPassword, rec.Hash); err != nil {
-			return Password{}, fmt.Errorf("set password: %w", err)
-		}
-	}
-
-	hash, err := hashPassword(ctx, in.NewPassword)
+	hash, err := hashNewPassword(ctx, reset, in, rec.Hash)
 	if err != nil {
 		return Password{}, fmt.Errorf("set password: %w", err)
 	}
@@ -115,6 +125,12 @@ func (s *passwordService) Set(
 	stored, err := s.repo.Set(ctx, repository.PasswordRecord{IdentityID: identityID, Hash: hash, SetAt: s.now()})
 	if err != nil {
 		return Password{}, fmt.Errorf("set password: %w", translateError(err))
+	}
+
+	// Only after the write: otherwise someone with the old password could log in before it and keep their
+	// session.
+	if err := s.terminator.EndSessions(ctx, identityID); err != nil {
+		return Password{}, fmt.Errorf("set password: %w", err)
 	}
 
 	return toPassword(stored, fields), nil
@@ -158,6 +174,18 @@ func authorizeSet(
 	}
 
 	return reset, fields, nil
+}
+
+// hashNewPassword returns the hash of in.NewPassword. Unless the actor resets the password, it first checks
+// that in.CurrentPassword, which must be set, is the password of currentHash.
+func hashNewPassword(ctx context.Context, reset bool, in PasswordInput, currentHash string) (string, error) {
+	if !reset {
+		if err := checkCurrentPassword(ctx, *in.CurrentPassword, currentHash); err != nil {
+			return "", err
+		}
+	}
+
+	return hashPassword(ctx, in.NewPassword)
 }
 
 // checkCurrentPassword returns ErrWrongCurrentPassword if current isn't the password of hash.
@@ -221,6 +249,10 @@ func (s *passwordService) Delete(ctx context.Context, actor, identityID uuid.UUI
 
 	if err := s.repo.Delete(ctx, identityID); err != nil {
 		return fmt.Errorf("delete password: %w", translateError(err))
+	}
+
+	if err := s.terminator.EndSessions(ctx, identityID); err != nil {
+		return fmt.Errorf("delete password: %w", err)
 	}
 
 	return nil

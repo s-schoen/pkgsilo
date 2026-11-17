@@ -177,6 +177,63 @@ func (_c *MockSessionService_Delete_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// EndSessions provides a mock function for the type MockSessionService
+func (_mock *MockSessionService) EndSessions(ctx context.Context, identityID uuid.UUID) error {
+	ret := _mock.Called(ctx, identityID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for EndSessions")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, identityID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockSessionService_EndSessions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EndSessions'
+type MockSessionService_EndSessions_Call struct {
+	*mock.Call
+}
+
+// EndSessions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - identityID uuid.UUID
+func (_e *MockSessionService_Expecter) EndSessions(ctx any, identityID any) *MockSessionService_EndSessions_Call {
+	return &MockSessionService_EndSessions_Call{Call: _e.mock.On("EndSessions", ctx, identityID)}
+}
+
+func (_c *MockSessionService_EndSessions_Call) Run(run func(ctx context.Context, identityID uuid.UUID)) *MockSessionService_EndSessions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockSessionService_EndSessions_Call) Return(err error) *MockSessionService_EndSessions_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockSessionService_EndSessions_Call) RunAndReturn(run func(ctx context.Context, identityID uuid.UUID) error) *MockSessionService_EndSessions_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Get provides a mock function for the type MockSessionService
 func (_mock *MockSessionService) Get(ctx context.Context, actor uuid.UUID, id uuid.UUID) (service.Session, error) {
 	ret := _mock.Called(ctx, actor, id)
