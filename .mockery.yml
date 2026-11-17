@@ -29,6 +29,13 @@ packages:
   pkgsilo/feature/apikey/service:
     interfaces:
       APIKeyService: {}
+  pkgsilo/feature/password/repository:
+    interfaces:
+      PasswordRepository: {}
+  pkgsilo/feature/password/service:
+    interfaces:
+      PasswordService: {}
+      Verifier: {}
   pkgsilo/feature/policy/repository:
     interfaces:
       PolicyRepository: {}

@@ -117,3 +117,44 @@ func TestExtendSelfServicePoliciesMigration(t *testing.T) {
 		`SELECT source FROM policies WHERE id = 'b52e0d47-6c19-4f3a-8e75-2a9c14d7e608'`))
 	assert.Equal(t, edited, source)
 }
+
+// TestManageOwnPasswordMigration checks that the migration lets every identity read and change its own
+// password and nobody else's, and never reset one, and that every instance applies it and its reversal on its
+// next request.
+func TestManageOwnPasswordMigration(t *testing.T) {
+	t.Parallel()
+	const (
+		up   = "20261117130950_create_manage_own_password_policy.up.sql"
+		down = "20261117130950_create_manage_own_password_policy.down.sql"
+	)
+	db := databasetest.New(t)
+	engine := authz.New(db, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
+	ada := insertIdentityRow(t, db, "ada", uuid.NewV4())
+	grace := insertIdentityRow(t, db, "grace", uuid.NewV4())
+	readSetAt := authz.NewAction("password:read:setAt", "read", "password:readFields")
+	change := authz.NewAction("password:change")
+	reset := authz.NewAction("password:reset")
+	passwordOf := func(owner uuid.UUID) authz.Resource {
+		return authz.Resource{Type: "Password", ID: owner, Owner: &authz.Owner{ID: owner}}
+	}
+	assertCan := func(want bool, action authz.Action, resource authz.Resource) {
+		t.Helper()
+		decider, err := engine.For(t.Context(), ada)
+		require.NoError(t, err)
+		can, err := decider.Can(action, resource)
+		require.NoError(t, err)
+		assert.Equal(t, want, can)
+	}
+
+	assertCan(true, readSetAt, passwordOf(ada))
+	assertCan(true, change, passwordOf(ada))
+	assertCan(false, reset, passwordOf(ada))
+	assertCan(false, readSetAt, passwordOf(grace))
+	assertCan(false, change, passwordOf(grace))
+
+	databasetest.RunMigration(t, db, down)
+	assertCan(false, change, passwordOf(ada))
+
+	databasetest.RunMigration(t, db, up)
+	assertCan(true, change, passwordOf(ada))
+}

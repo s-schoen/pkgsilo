@@ -1,6 +1,7 @@
 entity Group;
 entity Identity in [Group];
 entity APIKey { owner: Identity };
+entity Password { owner: Identity };
 entity Policy;
 action "read";
 action "identity:readFields";
@@ -11,6 +12,7 @@ action "group:create";
 action "group:update";
 action "apikey:readFields";
 action "apikey:create";
+action "password:readFields";
 action "policy:readFields";
 action "policy:create";
 action "policy:update";
@@ -49,6 +51,11 @@ action "apikey:read:createdBy" in ["apikey:readFields", "read"] appliesTo { prin
 action "apikey:read:createdAt" in ["apikey:readFields", "read"] appliesTo { principal: Identity, resource: APIKey, context: {} };
 action "apikey:create:name" in ["apikey:create"] appliesTo { principal: Identity, resource: APIKey, context: {} };
 action "apikey:create:expiresAt" in ["apikey:create"] appliesTo { principal: Identity, resource: APIKey, context: {} };
+action "password:read" in ["read"] appliesTo { principal: Identity, resource: Password, context: {} };
+action "password:delete" appliesTo { principal: Identity, resource: Password, context: {} };
+action "password:change" appliesTo { principal: Identity, resource: Password, context: {} };
+action "password:reset" appliesTo { principal: Identity, resource: Password, context: {} };
+action "password:read:setAt" in ["password:readFields", "read"] appliesTo { principal: Identity, resource: Password, context: {} };
 action "policy:read" in ["read"] appliesTo { principal: Identity, resource: Policy, context: {} };
 action "policy:delete" appliesTo { principal: Identity, resource: Policy, context: {} };
 action "policy:readSchema" in ["read"] appliesTo { principal: Identity, resource: Policy, context: {} };

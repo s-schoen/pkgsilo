@@ -19,6 +19,10 @@
       "description": "An API key authenticates requests as the identity that it belongs to, in the X-API-Key header. Its key is returned only once, when it's created. Fields that the policies don't allow the caller to read are absent from a response."
     },
     {
+      "name": "Passwords",
+      "description": "An identity can have one password, besides its API keys. No response holds a password or its hash. Fields that the policies don't allow the caller to read are absent from a response."
+    },
+    {
       "name": "Groups",
       "description": "A group is a named set of identities, its members, which policies can apply to all at once. Fields that the policies don't allow the caller to read are absent from a response."
     },
@@ -2781,6 +2785,491 @@
         }
       }
     },
+    "/api/v1/identities/{identityID}/password": {
+      "delete": {
+        "tags": [
+          "Passwords"
+        ],
+        "summary": "Delete a password",
+        "description": "Deletes an identity's password. The identity can then only use its API keys.",
+        "operationId": "deletePassword",
+        "parameters": [
+          {
+            "name": "identityID",
+            "in": "path",
+            "description": "The ID of the identity that the password belongs to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The password is deleted."
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Cross-origin request: `https://pkgsilo/problems/cross-origin-request`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/cross-origin-request"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Identity not found: `https://pkgsilo/problems/identity-not-found`\n- Password not found: `https://pkgsilo/problems/password-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/identity-not-found",
+                        "https://pkgsilo/problems/password-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Passwords"
+        ],
+        "summary": "Get a password",
+        "description": "Returns when an identity's password was set. An identity without a password, or one whose password the caller may not read, is answered with password-not-found.",
+        "operationId": "getPassword",
+        "parameters": [
+          {
+            "name": "identityID",
+            "in": "path",
+            "description": "The ID of the identity that the password belongs to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PasswordResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Identity not found: `https://pkgsilo/problems/identity-not-found`\n- Password not found: `https://pkgsilo/problems/password-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/identity-not-found",
+                        "https://pkgsilo/problems/password-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Passwords"
+        ],
+        "summary": "Set a password",
+        "description": "Sets an identity's password. A caller that the policies allow to reset it needs no current password, which is the only way to set a first password. A caller that may only change it must send the current password in currentPassword, or gets an invalid-body problem on that member. Changing a password that doesn't exist answers password-not-found.",
+        "operationId": "setPassword",
+        "parameters": [
+          {
+            "name": "identityID",
+            "in": "path",
+            "description": "The ID of the identity that the password belongs to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The new password.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The password as set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PasswordResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Cross-origin request: `https://pkgsilo/problems/cross-origin-request`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/cross-origin-request"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Identity not found: `https://pkgsilo/problems/identity-not-found`\n- Password not found: `https://pkgsilo/problems/password-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/identity-not-found",
+                        "https://pkgsilo/problems/password-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/identities/{id}": {
       "delete": {
         "tags": [
@@ -5037,6 +5526,17 @@
         ],
         "additionalProperties": false
       },
+      "PasswordResponse": {
+        "type": "object",
+        "properties": {
+          "setAt": {
+            "type": "string",
+            "description": "When the password was last set.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
       "PatchGroupRequest": {
         "type": "object",
         "properties": {
@@ -5190,6 +5690,26 @@
         "required": [
           "name",
           "source"
+        ],
+        "additionalProperties": false
+      },
+      "SetPasswordRequest": {
+        "type": "object",
+        "properties": {
+          "newPassword": {
+            "type": "string",
+            "description": "The new password. It must not be empty; there are no other rules, and it's used exactly as sent."
+          },
+          "currentPassword": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The password that the new one replaces. Required unless the policies allow the caller to reset the password, in which case it's ignored."
+          }
+        },
+        "required": [
+          "newPassword"
         ],
         "additionalProperties": false
       },
