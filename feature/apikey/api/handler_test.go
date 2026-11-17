@@ -59,14 +59,15 @@ var (
 )
 
 // newTestClient returns a client for a handler that is backed by a mock service and mounted on the
-// application router.
+// application router, which checks every response against Docs.
 func newTestClient(t *testing.T, logger *slog.Logger) (*apitest.Client, *mocks.MockAPIKeyService) {
 	t.Helper()
 
 	svc := mocks.NewMockAPIKeyService(t)
 	routes := NewHandler(svc, logger).Routes()
 
-	return apitest.NewClient(t, apitest.Mount("/identities/{identityID}/api-keys", routes)), svc
+	return apitest.NewClient(t, apitest.Mount("/identities/{identityID}/api-keys", routes)).
+		WithDocs("/identities/{identityID}/api-keys", Docs()), svc
 }
 
 func TestHandler_List(t *testing.T) {

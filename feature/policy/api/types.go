@@ -50,8 +50,8 @@ func (r ReplacePolicyRequest) toInput() service.PolicyInput {
 // PatchPolicyRequest is the body of a request that changes some settable fields of a policy, a JSON Merge
 // Patch: a member that it leaves out stays unchanged.
 type PatchPolicyRequest struct {
-	Name   request.Optional[string] `json:"name"`
-	Source request.Optional[string] `json:"source"`
+	Name   request.Optional[string] `json:"name,omitzero"`
+	Source request.Optional[string] `json:"source,omitzero"`
 }
 
 // Validate reports the invalid members of r as validation.Errors.
@@ -70,12 +70,12 @@ func (r PatchPolicyRequest) toPatch() service.PolicyPatch {
 // absent.
 type PolicyResponse struct {
 	ID        uuid.UUID                 `json:"id"`
-	Name      envelope.Field[string]    `json:"name"`
-	Source    envelope.Field[string]    `json:"source"`
-	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy"`
-	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy"`
-	CreatedAt envelope.Field[time.Time] `json:"createdAt"`
-	UpdatedAt envelope.Field[time.Time] `json:"updatedAt"`
+	Name      envelope.Field[string]    `json:"name,omitzero"`
+	Source    envelope.Field[string]    `json:"source,omitzero"`
+	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy,omitzero"`
+	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy,omitzero"`
+	CreatedAt envelope.Field[time.Time] `json:"createdAt,omitzero"`
+	UpdatedAt envelope.Field[time.Time] `json:"updatedAt,omitzero"`
 }
 
 func toPolicyResponse(p service.Policy) PolicyResponse {

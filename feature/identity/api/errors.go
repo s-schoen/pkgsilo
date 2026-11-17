@@ -10,16 +10,16 @@ import (
 	"pkgsilo/feature/identity/service"
 )
 
-// Problem types of the identity endpoints.
-var (
-	identityNotFoundType = envelope.DefineProblemType("identity-not-found", "Identity not found", http.StatusNotFound)
-	usernameTakenType    = envelope.DefineProblemType("username-taken", "Username taken", http.StatusConflict)
-)
+// IdentityNotFoundType is the problem type of IdentityNotFoundProblem, for the OpenAPI document of the
+// features that answer with it too.
+var IdentityNotFoundType = envelope.DefineProblemType("identity-not-found", "Identity not found", http.StatusNotFound)
+
+var usernameTakenType = envelope.DefineProblemType("username-taken", "Username taken", http.StatusConflict)
 
 // IdentityNotFoundProblem answers a request for an identity that doesn't exist. Other features
 // answer a reference to a missing identity with it too, so that clients recognize a missing
 // identity in one way.
-var IdentityNotFoundProblem = identityNotFoundType.New(envelope.Occurrence{Detail: "The identity does not exist."})
+var IdentityNotFoundProblem = IdentityNotFoundType.New(envelope.Occurrence{Detail: "The identity does not exist."})
 
 var usernameTakenProblem = usernameTakenType.New(envelope.Occurrence{Detail: "The username is already taken."})
 
