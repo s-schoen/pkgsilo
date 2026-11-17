@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -30,6 +31,10 @@ type Config struct {
 	DatabaseMaxConns int `env:"DATABASE_MAX_CONNS" envDefault:"10"`
 	// APIKeyPepper is the secret key of the stored API key hashes. Changing it invalidates every API key.
 	APIKeyPepper Pepper `env:"API_KEY_PEPPER,notEmpty"`
+	// SessionIdleTimeout is how long a session lasts without a request, and SessionMaxAge how long it lasts at
+	// most after its login. The defaults are the limits of NIST SP 800-63B-4 for AAL2.
+	SessionIdleTimeout Lifetime `env:"SESSION_IDLE_TIMEOUT" envDefault:"1h"`
+	SessionMaxAge      Lifetime `env:"SESSION_MAX_AGE"      envDefault:"24h"`
 	// OTELExporterOTLPEndpoint and OTELExporterOTLPTracesEndpoint are the standard OpenTelemetry variables
 	// of the OTLP exporter's endpoint. Either turns tracing on. The exporter reads them, and every other
 	// OTEL_* variable, itself.
@@ -121,6 +126,24 @@ func (p *Pepper) UnmarshalText(text []byte) error {
 	}
 
 	*p = slices.Clone(text)
+
+	return nil
+}
+
+// Lifetime is a positive duration, such as 30m or 12h, parsed with time.ParseDuration.
+type Lifetime time.Duration
+
+// UnmarshalText parses a positive duration.
+func (l *Lifetime) UnmarshalText(text []byte) error {
+	d, err := time.ParseDuration(string(text))
+	if err != nil {
+		return fmt.Errorf("parse duration: %w", err)
+	}
+	if d <= 0 {
+		return fmt.Errorf("must be positive, not %s", d)
+	}
+
+	*l = Lifetime(d)
 
 	return nil
 }

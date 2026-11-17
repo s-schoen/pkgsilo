@@ -37,7 +37,7 @@ func (c *Client) WithDocs(path string, section openapi.Section) *Client {
 	c.tb.Helper()
 	spec := openapi.Spec{
 		Info:     openapi.Info{Title: "Test", Version: "test"},
-		Security: openapi.SecurityScheme{Name: "apiKey", Header: "X-API-Key"},
+		Security: []openapi.SecurityScheme{{Name: "apiKey", Header: "X-API-Key"}},
 	}
 	spec.Mount(path, section)
 	doc, err := spec.Build()

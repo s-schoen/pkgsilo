@@ -7,7 +7,7 @@
 //
 // An operation names only what's specific to it. Build adds what the shared packages of the API do: the
 // envelopes of core/envelope around its bodies, the problems of core/request for its request body and
-// pagination, the 401 of authn.Require unless the routes are public, and the 500 of every route.
+// pagination, the 401 of authn.Require unless the route is public, and the 500 of every route.
 package openapi
 
 import (
@@ -41,12 +41,14 @@ type Info struct {
 	Description string
 }
 
-// SecurityScheme is the authentication that every route but the public ones needs: an API key in a header.
+// SecurityScheme is a way to authenticate the routes that aren't public: a credential in a header or a cookie.
 type SecurityScheme struct {
 	// Name identifies the scheme in the document.
 	Name string
-	// Header is the name of the header that holds the key.
-	Header      string
+	// Header is the name of the header that holds the credential, or empty for a cookie.
+	Header string
+	// Cookie is the name of the cookie that holds the credential, or empty for a header.
+	Cookie      string
 	Description string
 }
 
@@ -79,6 +81,9 @@ type Operation struct {
 	Responses []Response
 	// Problems are the problems that the route answers with, besides those that Build adds.
 	Problems []envelope.ProblemType
+	// Public tells that the route needs no authentication, in a section whose other routes do, such as a
+	// login. A section whose routes are all public is mounted with MountPublic instead.
+	Public bool
 }
 
 // Parameter is a path or query parameter.
@@ -175,8 +180,8 @@ func JSON[T any](status int, description string) Response {
 // Spec collects the sections of the API for Build.
 type Spec struct {
 	Info Info
-	// Security is the authentication of every section that isn't public.
-	Security SecurityScheme
+	// Security are the ways to authenticate the routes that aren't public, any one of which is enough.
+	Security []SecurityScheme
 	// CrossOriginProtected tells that middleware.CrossOriginProtection guards every route, so that every POST,
 	// PUT, PATCH and DELETE may answer with its problem.
 	CrossOriginProtected bool

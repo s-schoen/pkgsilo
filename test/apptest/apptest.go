@@ -6,10 +6,12 @@ package apptest
 
 import (
 	"context"
+	"encoding/json/v2"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/jmoiron/sqlx"
@@ -27,6 +29,8 @@ import (
 	apikeyapi "pkgsilo/feature/apikey/api"
 	groupapi "pkgsilo/feature/group/api"
 	identityapi "pkgsilo/feature/identity/api"
+	sessionapi "pkgsilo/feature/session/api"
+	sessionservice "pkgsilo/feature/session/service"
 	"pkgsilo/test/apitest"
 	"pkgsilo/test/databasetest"
 	"pkgsilo/test/mcptest"
@@ -38,7 +42,13 @@ const (
 	apiKeyPepper = "test-pepper-of-at-least-32-characters"
 	// apiKeyHeader is the header that holds a request's API key.
 	apiKeyHeader = "X-API-Key" //nolint:gosec // The name of a header, not a credential.
+	// sessionCookie is the name of the session cookie.
+	sessionCookie = "__Host-session"
 )
+
+// DefaultSessionLifetimes are the session lifetimes of the configuration's defaults, which New serves the
+// application with.
+var DefaultSessionLifetimes = sessionservice.Lifetimes{IdleTimeout: time.Hour, MaxAge: 24 * time.Hour}
 
 // New returns a client for the application, wired as cmd/main.go serves it with metrics disabled, on a
 // new database with all migrations applied and the first start done. The client authenticates as its
@@ -57,7 +67,17 @@ func New(t *testing.T) *apitest.Client {
 func NewWithDB(t *testing.T) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
-	return newApp(t, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
+	return newApp(t, noop.NewMeterProvider(), tracenoop.NewTracerProvider(), DefaultSessionLifetimes)
+}
+
+// NewWithSessionLifetimes is like New, but its sessions expire after lifetimes, such as short ones that a test
+// can wait for.
+func NewWithSessionLifetimes(t *testing.T, lifetimes sessionservice.Lifetimes) *apitest.Client {
+	t.Helper()
+
+	api, _ := newApp(t, noop.NewMeterProvider(), tracenoop.NewTracerProvider(), lifetimes)
+
+	return api
 }
 
 // NewWithMetrics is like New, but with metrics enabled, and also returns a client for the application's
@@ -66,7 +86,7 @@ func NewWithMetrics(t *testing.T) (api, metrics *apitest.Client) {
 	t.Helper()
 
 	tel := newTelemetry(t)
-	api, _ = newApp(t, tel.MeterProvider(), tracenoop.NewTracerProvider())
+	api, _ = newApp(t, tel.MeterProvider(), tracenoop.NewTracerProvider(), DefaultSessionLifetimes)
 
 	return api, apitest.NewClient(t, tel.Handler())
 }
@@ -77,7 +97,7 @@ func NewWithTracing(t *testing.T) (api *apitest.Client, spans *telemetrytest.Rec
 	t.Helper()
 
 	spans = telemetrytest.New(t)
-	api, _ = newApp(t, noop.NewMeterProvider(), spans.TracerProvider())
+	api, _ = newApp(t, noop.NewMeterProvider(), spans.TracerProvider(), DefaultSessionLifetimes)
 
 	return api, spans
 }
@@ -89,16 +109,18 @@ func NewWithTracing(t *testing.T) (api *apitest.Client, spans *telemetrytest.Rec
 func NewInstance(t *testing.T, api *apitest.Client, db *sqlx.DB) *apitest.Client {
 	t.Helper()
 
-	return api.WithHandler(newHandler(t, db, noop.NewMeterProvider(), tracenoop.NewTracerProvider()))
+	return api.WithHandler(newHandler(t, db, noop.NewMeterProvider(), tracenoop.NewTracerProvider(),
+		DefaultSessionLifetimes))
 }
 
 // newApp returns a client for the application on a new database with all migrations applied and the
 // first start done, and that database. The client authenticates as admin and checks every response against
 // the OpenAPI document of the application. As in cmd/main.go, the
 // application and its database record their metrics with meterProvider and create their spans with
-// tracerProvider.
+// tracerProvider. Its sessions expire after lifetimes.
 func newApp(
 	t *testing.T, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
+	lifetimes sessionservice.Lifetimes,
 ) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
@@ -107,7 +129,8 @@ func newApp(
 	key, err := app.Bootstrap(t.Context(), db, []byte(apiKeyPepper))
 	require.NoError(t, err)
 
-	client := apitest.NewClient(t, newHandler(t, db, meterProvider, tracerProvider)).WithDocument(app.Docs().JSON())
+	client := apitest.NewClient(t, newHandler(t, db, meterProvider, tracerProvider, lifetimes)).
+		WithDocument(app.Docs().JSON())
 
 	return client.WithHeader(apiKeyHeader, key), db
 }
@@ -128,13 +151,15 @@ func newTelemetry(t *testing.T) *telemetry.Telemetry {
 }
 
 // newHandler returns the application, wired as cmd/main.go serves it, on db, recording its metrics with
-// meterProvider and creating its spans with tracerProvider. It logs to the test's output.
+// meterProvider and creating its spans with tracerProvider, with sessions that expire after lifetimes. It logs
+// to the test's output.
 func newHandler(
 	t *testing.T, db *sqlx.DB, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
+	lifetimes sessionservice.Lifetimes,
 ) http.Handler {
 	t.Helper()
 
-	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper),
+	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper), lifetimes,
 		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), meterProvider, tracerProvider)
 }
 
@@ -185,4 +210,44 @@ func AdministratorsGroup(t *testing.T, admin *apitest.Client) uuid.UUID {
 	require.FailNow(t, "no group named administrators on the first page")
 
 	return uuid.Nil()
+}
+
+// SetPassword resets the password of the identity with the given ID to password through the client admin.
+func SetPassword(admin *apitest.Client, identityID uuid.UUID, password string) {
+	body, err := json.Marshal(map[string]string{"newPassword": password})
+	if err != nil {
+		panic(err)
+	}
+	admin.Put("/api/v1/identities/"+identityID.String()+"/password", string(body)).AssertStatus(http.StatusOK)
+}
+
+// LogIn logs in as the identity with the given username and password through the client api, which sends no
+// credential for it. It returns the new session and a client that sends only its session cookie, like a
+// browser on the API's origin.
+func LogIn(
+	t *testing.T, api *apitest.Client, username, password string,
+) (sessionapi.SessionResponse, *apitest.Client) {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]string{"username": username, "password": password})
+	require.NoError(t, err)
+	resp := api.Anonymous().Post("/api/v1/sessions", string(body))
+	session := resp.DecodeResource[sessionapi.SessionResponse](http.StatusCreated)
+
+	return session, api.Anonymous().WithHeader("Cookie", SessionCookie(t, resp))
+}
+
+// SessionCookie returns the session cookie that resp sets as a browser sends it back in its Cookie header,
+// failing the test if resp sets none.
+func SessionCookie(t *testing.T, resp *apitest.Response) string {
+	t.Helper()
+
+	for _, cookie := range resp.Result().Cookies() {
+		if cookie.Name == sessionCookie {
+			return cookie.Name + "=" + cookie.Value
+		}
+	}
+	require.FailNow(t, "the response sets no session cookie")
+
+	return ""
 }

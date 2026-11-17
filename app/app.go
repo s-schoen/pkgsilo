@@ -41,6 +41,9 @@ import (
 	policyrepo "pkgsilo/feature/policy/repository"
 	policyservice "pkgsilo/feature/policy/service"
 	policytools "pkgsilo/feature/policy/tools"
+	sessionapi "pkgsilo/feature/session/api"
+	sessionrepo "pkgsilo/feature/session/repository"
+	sessionservice "pkgsilo/feature/session/service"
 )
 
 const (
@@ -51,6 +54,7 @@ const (
 	identitiesPath = "/identities"
 	apiKeysPath    = "/identities/{identityID}/api-keys"
 	passwordPath   = "/identities/{identityID}/password"
+	sessionsPath   = "/sessions"
 	groupsPath     = "/groups"
 	policiesPath   = "/policies"
 	// specPath is the path of the OpenAPI document, under apiPath.
@@ -64,26 +68,35 @@ const (
 // features to agents. The OpenAPI document of the API is at /api/v1/openapi.json. All routes but the health
 // check and the document need an authenticated request. The routes under /api/v1 reject state-changing
 // requests that a browser sends from another origin, and no response is stored unless its handler says so.
-// API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger, and
-// metrics are recorded with meterProvider: every request but a health check is measured, and so are
-// authentications and authorization decisions. Every request but a health check gets a server span from
-// tracerProvider.
+// API keys are hashed under the secret apiKeyPepper. A login with a password creates a session, whose cookie
+// authenticates the routes under /api/v1, but not /mcp, until it exceeds sessionLifetimes. Requests and errors
+// are logged to logger, and metrics are recorded with meterProvider: every request but a health check is
+// measured, and so are authentications and authorization decisions. Every request but a health check gets a
+// server span from tracerProvider.
 func NewHandler(
-	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, logger *slog.Logger, meterProvider metric.MeterProvider,
-	tracerProvider trace.TracerProvider,
+	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, sessionLifetimes sessionservice.Lifetimes,
+	logger *slog.Logger, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
 ) http.Handler {
 	authorizer := authz.New(db, meterProvider, tracerProvider)
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db), authorizer)
 	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db), authorizer)
 	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authorizer, apiKeyPepper)
-	passwords := passwordservice.NewPasswordService(passwordrepo.NewPostgresPasswordRepository(db), authorizer)
+	passwordRepo := passwordrepo.NewPostgresPasswordRepository(db)
+	sessions := sessionservice.NewSessionService(sessionrepo.NewPostgresSessionRepository(db),
+		passwordservice.NewVerifier(passwordRepo), sessionLifetimes)
+	passwords := passwordservice.NewPasswordService(passwordRepo, authorizer)
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema())
 
 	opts.UnmeasuredPaths = slices.Concat(opts.UnmeasuredPaths, []string{apiPath + healthPath})
-	authenticate := authn.Require(logger, meterProvider, tracerProvider, apikeyapi.NewAuthenticator(apiKeys))
+	// API keys first, so that an API key wins when a request carries a session cookie too. Only the API takes
+	// the cookie: MCP clients aren't browsers.
+	authenticateMCP := authn.Require(logger, meterProvider, tracerProvider, apikeyapi.NewAuthenticator(apiKeys))
+	authenticate := authn.Require(logger, meterProvider, tracerProvider,
+		apikeyapi.NewAuthenticator(apiKeys), sessionapi.NewAuthenticator(sessions))
+	logins := authn.NewLoginRecorder(meterProvider, tracerProvider, "password")
 	r := router.New(opts, logger, meterProvider, tracerProvider)
-	r.With(authenticate).Handle(mcpPath, mcpserver.NewHandler(logger, meterProvider, tracerProvider,
+	r.With(authenticateMCP).Handle(mcpPath, mcpserver.NewHandler(logger, meterProvider, tracerProvider,
 		identitytools.New(identities),
 		grouptools.New(groups),
 		policytools.New(policies),
@@ -95,6 +108,8 @@ func NewHandler(
 		r.Use(middleware.CrossOriginProtection)
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())
 		r.Get(specPath, Docs().ServeHTTP)
+		// The login is public, and the routes of the current session are behind authenticate.
+		r.Mount(sessionsPath, sessionapi.NewHandler(sessions, logins, logger).Routes(authenticate))
 		r.Group(func(r chi.Router) {
 			r.Use(authenticate)
 			r.Mount(identitiesPath, identityapi.NewHandler(identities, logger).Routes())
@@ -119,13 +134,14 @@ func Docs() *openapi.Document {
 				"problems are RFC 9457 Problem Details. Policies decide what the caller may do: an object that the " +
 				"caller may not read is answered like a missing one, and fields that it may not read are absent.",
 		},
-		Security:             apikeyapi.SecurityScheme(),
+		Security:             []openapi.SecurityScheme{apikeyapi.SecurityScheme(), sessionapi.SecurityScheme()},
 		CrossOriginProtected: true,
 	}
 	spec.MountPublic(apiPath+healthPath, healthapi.Docs())
 	spec.Mount(apiPath+identitiesPath, identityapi.Docs())
 	spec.Mount(apiPath+apiKeysPath, apikeyapi.Docs())
 	spec.Mount(apiPath+passwordPath, passwordapi.Docs())
+	spec.Mount(apiPath+sessionsPath, sessionapi.Docs())
 	spec.Mount(apiPath+groupsPath, groupapi.Docs())
 	spec.Mount(apiPath+policiesPath, policyapi.Docs())
 

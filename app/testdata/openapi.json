@@ -23,6 +23,10 @@
       "description": "An identity can have one password, besides its API keys. No response holds a password or its hash. Fields that the policies don't allow the caller to read are absent from a response."
     },
     {
+      "name": "Sessions",
+      "description": "A session keeps a browser logged in as an identity, in an HttpOnly cookie that a login with a password sets. It ends after an hour without a request or a day after the login, as the operator configures, or when it's deleted. No policy applies to logging in, nor to reading or ending your own session, so that no policy can block a logout."
+    },
+    {
       "name": "Groups",
       "description": "A group is a named set of identities, its members, which policies can apply to all at once. Fields that the policies don't allow the caller to read are absent from a response."
     },
@@ -5203,6 +5207,439 @@
           }
         }
       }
+    },
+    "/api/v1/sessions": {
+      "post": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Log in",
+        "description": "Logs in with a username and password, and sets the session cookie __Host-session (Secure, HttpOnly, SameSite=Strict, ending with the browser). The response never holds the session's token. A session cookie that the request already carries ends. A wrong password, an unknown username and an identity without a password all get the same 401.",
+        "operationId": "createSession",
+        "requestBody": {
+          "description": "The credentials.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new session.",
+            "headers": {
+              "Location": {
+                "description": "The path of the new resource.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Cross-origin request: `https://pkgsilo/problems/cross-origin-request`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/cross-origin-request"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/sessions/current": {
+      "delete": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Log out",
+        "description": "Ends the session that the request is authenticated with and deletes its cookie. A request with an API key has no session.",
+        "operationId": "deleteCurrentSession",
+        "responses": {
+          "204": {
+            "description": "The session has ended."
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Cross-origin request: `https://pkgsilo/problems/cross-origin-request`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/cross-origin-request"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Session not found: `https://pkgsilo/problems/session-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/session-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Get the current session",
+        "description": "Returns the session that the request is authenticated with, which tells a browser who it's logged in as. A request with an API key has no session.",
+        "operationId": "getCurrentSession",
+        "responses": {
+          "200": {
+            "description": "The current session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Session not found: `https://pkgsilo/problems/session-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/session-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5479,6 +5916,24 @@
         ],
         "additionalProperties": false
       },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "The username of the identity to log in as."
+          },
+          "password": {
+            "type": "string",
+            "description": "The identity's password, exactly as it was set."
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "additionalProperties": false
+      },
       "MemberResponse": {
         "type": "object",
         "properties": {
@@ -5693,6 +6148,35 @@
         ],
         "additionalProperties": false
       },
+      "SessionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The session's ID.",
+            "format": "uuid"
+          },
+          "identityId": {
+            "type": "string",
+            "description": "The identity that the session is logged in as.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the session was created by a login.",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the session ends at the latest, however often it's used. It ends earlier if it's idle for too long.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
       "SetPasswordRequest": {
         "type": "object",
         "properties": {
@@ -5738,12 +6222,21 @@
         "description": "An API key of an identity, which the request acts as.",
         "name": "X-API-Key",
         "in": "header"
+      },
+      "session": {
+        "type": "apiKey",
+        "description": "The session cookie that a login sets, for browsers on the same origin as the API. It authenticates the routes under /api/v1 only, not the MCP endpoint. An API key wins over it when a request carries both.",
+        "name": "__Host-session",
+        "in": "cookie"
       }
     }
   },
   "security": [
     {
       "apiKey": []
+    },
+    {
+      "session": []
     }
   ]
 }

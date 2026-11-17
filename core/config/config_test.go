@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,10 +36,14 @@ func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
 	t.Setenv("OTEL_SDK_DISABLED", "")
 	t.Setenv("OTEL_TRACES_EXPORTER", "")
+	t.Setenv("SESSION_IDLE_TIMEOUT", "")
+	t.Setenv("SESSION_MAX_AGE", "")
 
 	cfg, err := Load()
 	require.NoError(t, err)
 
+	assert.Equal(t, Lifetime(time.Hour), cfg.SessionIdleTimeout)
+	assert.Equal(t, Lifetime(24*time.Hour), cfg.SessionMaxAge)
 	assert.Equal(t, "prod", cfg.Env)
 	assert.False(t, cfg.IsDev())
 	assert.Equal(t, ":8080", cfg.HTTPAddr)
@@ -64,6 +69,8 @@ func TestLoad_FromEnv(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://collector:4318/v1/traces")
 	t.Setenv("OTEL_SDK_DISABLED", "false")
 	t.Setenv("OTEL_TRACES_EXPORTER", "OTLP")
+	t.Setenv("SESSION_IDLE_TIMEOUT", "15m")
+	t.Setenv("SESSION_MAX_AGE", "12h")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -83,6 +90,8 @@ func TestLoad_FromEnv(t *testing.T) {
 	assert.Equal(t, "http://collector:4318/v1/traces", cfg.OTELExporterOTLPTracesEndpoint)
 	assert.Equal(t, "false", cfg.OTELSDKDisabled)
 	assert.Equal(t, TracesExporterOTLP, cfg.OTELTracesExporter)
+	assert.Equal(t, Lifetime(15*time.Minute), cfg.SessionIdleTimeout)
+	assert.Equal(t, Lifetime(12*time.Hour), cfg.SessionMaxAge)
 	assert.True(t, cfg.TracingEnabled())
 }
 
@@ -170,6 +179,8 @@ func TestLoad_Invalid(t *testing.T) {
 		"DATABASE_MAX_CONNS":   "many",
 		"API_KEY_PEPPER":       "",
 		"OTEL_TRACES_EXPORTER": "zipkin",
+		"SESSION_IDLE_TIMEOUT": "0s",
+		"SESSION_MAX_AGE":      "a day",
 	}
 
 	for key, value := range tests {

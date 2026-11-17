@@ -123,23 +123,48 @@ func (b *builder) addSection(m mount) error {
 	return nil
 }
 
-// secure adds the security scheme of the spec to the document, which every operation needs unless it
-// overrides it.
+// secure adds the security schemes of the spec to the document, any one of which every operation needs unless
+// it overrides them.
 func (b *builder) secure() error {
 	if b.doc.Components.SecuritySchemes != nil {
 		return nil
 	}
-	scheme := b.spec.Security
-	if scheme.Name == "" || scheme.Header == "" {
-		return fmt.Errorf("%w: the security scheme of the routes that need authentication needs a name and a "+
-			"header", errInvalidSpec)
+	if len(b.spec.Security) == 0 {
+		return fmt.Errorf("%w: the routes that need authentication need a security scheme", errInvalidSpec)
 	}
-	b.doc.Components.SecuritySchemes = map[string]securitySchemeObject{
-		scheme.Name: {Type: "apiKey", Description: scheme.Description, Name: scheme.Header, In: "header"},
+	schemes := map[string]securitySchemeObject{}
+	requirements := make([]securityRequirement, 0, len(b.spec.Security))
+	for _, scheme := range b.spec.Security {
+		obj, err := securitySchemeOf(scheme)
+		if err != nil {
+			return err
+		}
+		if _, taken := schemes[scheme.Name]; taken {
+			return fmt.Errorf("%w: security scheme name %q is taken", errInvalidSpec, scheme.Name)
+		}
+		schemes[scheme.Name] = obj
+		requirements = append(requirements, securityRequirement{scheme.Name: {}})
 	}
-	b.doc.Security = []securityRequirement{{scheme.Name: {}}}
+	b.doc.Components.SecuritySchemes = schemes
+	b.doc.Security = requirements
 
 	return nil
+}
+
+// securitySchemeOf returns the object of scheme. It fails for a scheme without a name, or without exactly one
+// of a header and a cookie.
+func securitySchemeOf(scheme SecurityScheme) (securitySchemeObject, error) {
+	if scheme.Name == "" || (scheme.Header == "") == (scheme.Cookie == "") {
+		return securitySchemeObject{}, fmt.Errorf("%w: security scheme %q needs a name and either a header or "+
+			"a cookie", errInvalidSpec, scheme.Name)
+	}
+	if scheme.Cookie != "" {
+		return securitySchemeObject{Type: "apiKey", Description: scheme.Description, Name: scheme.Cookie, In: "cookie"},
+			nil
+	}
+
+	return securitySchemeObject{Type: "apiKey", Description: scheme.Description, Name: scheme.Header, In: "header"},
+		nil
 }
 
 func (b *builder) addOperation(m mount, op Operation) error {
@@ -196,7 +221,8 @@ func (b *builder) operationObject(m mount, op Operation, method, fullPath string
 		Tags: []string{m.section.Name}, Summary: op.Summary, Description: op.Description, OperationID: op.ID,
 		Responses: map[string]responseObject{},
 	}
-	if m.public {
+	public := m.public || op.Public
+	if public {
 		obj.Security = []securityRequirement{}
 	}
 	problems := slices.Clone(op.Problems)
@@ -219,7 +245,7 @@ func (b *builder) operationObject(m mount, op Operation, method, fullPath string
 			problems = append(problems, request.InvalidQueryType)
 		}
 	}
-	problems = append(problems, b.middlewareProblems(m, method)...)
+	problems = append(problems, b.middlewareProblems(public, method)...)
 	if err := addProblems(obj, problems); err != nil {
 		return nil, err
 	}
@@ -232,12 +258,12 @@ func (b *builder) operationObject(m mount, op Operation, method, fullPath string
 	return obj, nil
 }
 
-// middlewareProblems returns the problems that the middleware in front of an operation mounted with m under
-// method answers with: the 401 of authn.Require unless m is public, the 403 of
-// middleware.CrossOriginProtection for an unsafe method if the spec is protected, and the 500.
-func (b *builder) middlewareProblems(m mount, method string) []envelope.ProblemType {
+// middlewareProblems returns the problems that the middleware in front of an operation under method answers
+// with: the 401 of authn.Require unless the operation is public, the 403 of middleware.CrossOriginProtection
+// for an unsafe method if the spec is protected, and the 500.
+func (b *builder) middlewareProblems(public bool, method string) []envelope.ProblemType {
 	var problems []envelope.ProblemType
-	if !m.public {
+	if !public {
 		problems = append(problems, envelope.UnauthorizedProblem)
 	}
 	if b.spec.CrossOriginProtected && slices.Contains(unsafeMethods, method) {

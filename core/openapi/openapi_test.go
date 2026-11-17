@@ -70,7 +70,7 @@ func things() openapi.Section {
 func newSpec() *openapi.Spec {
 	return &openapi.Spec{
 		Info:     openapi.Info{Title: "Test", Version: "1"},
-		Security: openapi.SecurityScheme{Name: "apiKey", Header: "X-API-Key"},
+		Security: []openapi.SecurityScheme{{Name: "apiKey", Header: "X-API-Key"}},
 	}
 }
 
@@ -297,6 +297,66 @@ func TestBuild_Security(t *testing.T) {
 	require.True(t, ok)
 	assert.ElementsMatch(t, []string{"200", "500"}, keys(responses), "no 401 for a public route")
 	assert.NotContains(t, lookup(t, doc, "paths", "/things", "get"), "security")
+}
+
+// TestBuild_SecuritySchemes checks that a route needs any one of the security schemes, in a header or a
+// cookie, and that a public operation of a section that needs them needs none.
+func TestBuild_SecuritySchemes(t *testing.T) {
+	t.Parallel()
+	spec := newSpec()
+	spec.Security = append(spec.Security,
+		openapi.SecurityScheme{Name: "session", Cookie: "__Host-session", Description: "A session."})
+	spec.Mount("/sessions", openapi.Section{Name: "Sessions", Operations: []openapi.Operation{
+		{
+			Method: http.MethodPost, Pattern: "/", ID: "logIn", Summary: "Log in", Public: true,
+			Responses: []openapi.Response{openapi.NoContent("Logged in.")},
+		},
+		{
+			Method: http.MethodGet, Pattern: "/current", ID: "getSession", Summary: "Get the session",
+			Responses: []openapi.Response{openapi.NoContent("The session.")},
+		},
+	}})
+
+	doc := build(t, spec)
+
+	assert.JSONEq(t, `[{"apiKey": []}, {"session": []}]`, marshal(t, lookup(t, doc, "security")))
+	assert.JSONEq(t, `{
+		"apiKey": {"type": "apiKey", "name": "X-API-Key", "in": "header"},
+		"session": {"type": "apiKey", "description": "A session.", "name": "__Host-session", "in": "cookie"}
+	}`, marshal(t, lookup(t, doc, "components", "securitySchemes")))
+	login := lookup(t, doc, "paths", "/sessions", "post")
+	assert.JSONEq(t, `[]`, marshal(t, lookup(t, login, "security")))
+	responses, ok := lookup(t, login, "responses").(map[string]any)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []string{"204", "500"}, keys(responses), "no 401 for a public operation")
+	current := lookup(t, doc, "paths", "/sessions/current", "get")
+	assert.NotContains(t, current, "security")
+	assert.Contains(t, lookup(t, current, "responses"), "401")
+}
+
+// TestBuild_InvalidSecurity checks that Build fails for routes that need authentication without a valid
+// security scheme.
+func TestBuild_InvalidSecurity(t *testing.T) {
+	t.Parallel()
+	tests := map[string][]openapi.SecurityScheme{
+		"none":              nil,
+		"no name":           {{Header: "X-API-Key"}},
+		"no header":         {{Name: "apiKey"}},
+		"header and cookie": {{Name: "apiKey", Header: "X-API-Key", Cookie: "key"}},
+		"name taken":        {{Name: "apiKey", Header: "X-API-Key"}, {Name: "apiKey", Cookie: "key"}},
+	}
+	for name, security := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			spec := newSpec()
+			spec.Security = security
+			spec.Mount("/things", things())
+
+			_, err := spec.Build()
+
+			assert.Error(t, err)
+		})
+	}
 }
 
 // TestBuild_Invalid checks that Build fails for an operation that it can't describe.
