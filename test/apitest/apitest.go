@@ -73,6 +73,8 @@ type Client struct {
 	handler http.Handler
 	// header holds the headers of every request, unless the request sets them itself.
 	header http.Header
+	// docs checks every response against an OpenAPI document, unless it's nil.
+	docs *docs
 }
 
 // NewClient returns a client that sends requests to h and reports to tb.
@@ -86,7 +88,7 @@ func NewClient(tb testing.TB, h http.Handler) *Client {
 func (c *Client) For(tb testing.TB) *Client {
 	tb.Helper()
 
-	return &Client{tb: tb, handler: c.handler, header: c.header}
+	return &Client{tb: tb, handler: c.handler, header: c.header, docs: c.docs}
 }
 
 // WithHeader returns a client for the same handler that also sets the given header on every request,
@@ -98,13 +100,13 @@ func (c *Client) WithHeader(name, value string) *Client {
 	}
 	header.Set(name, value)
 
-	return &Client{tb: c.tb, handler: c.handler, header: header}
+	return &Client{tb: c.tb, handler: c.handler, header: header, docs: c.docs}
 }
 
 // WithHandler returns a client that sends requests with the same headers to h, such as another instance of
 // the same application.
 func (c *Client) WithHandler(h http.Handler) *Client {
-	return &Client{tb: c.tb, handler: h, header: c.header}
+	return &Client{tb: c.tb, handler: h, header: c.header, docs: c.docs}
 }
 
 // Handler returns the handler that the client sends its requests to, such as to serve it on a listener of
@@ -122,7 +124,7 @@ func (c *Client) Header() http.Header {
 // Anonymous returns a client for the same handler that sets no headers on its requests of its own, so
 // that they hold no credential.
 func (c *Client) Anonymous() *Client {
-	return &Client{tb: c.tb, handler: c.handler}
+	return &Client{tb: c.tb, handler: c.handler, docs: c.docs}
 }
 
 // Get sends a GET request to target.
@@ -180,6 +182,10 @@ func (c *Client) Do(req *http.Request) *Response {
 
 	rec := httptest.NewRecorder()
 	c.handler.ServeHTTP(rec, req)
+	if c.docs != nil {
+		c.tb.Helper()
+		c.docs.check(c.tb, req, rec)
+	}
 
 	return &Response{ResponseRecorder: rec, tb: c.tb}
 }

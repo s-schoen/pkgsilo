@@ -67,13 +67,15 @@ const (
 )
 
 // newTestClient returns a client for a handler that is backed by a mock service and mounted on the
-// application router.
+// application router, which checks every response against Docs.
 func newTestClient(t *testing.T, logger *slog.Logger) (*apitest.Client, *mocks.MockGroupService) {
 	t.Helper()
 
 	svc := mocks.NewMockGroupService(t)
 
-	return apitest.NewClient(t, apitest.Mount("/groups", NewHandler(svc, logger).Routes())), svc
+	routes := apitest.Mount("/groups", NewHandler(svc, logger).Routes())
+
+	return apitest.NewClient(t, routes).WithDocs("/groups", Docs()), svc
 }
 
 func TestHandler_List(t *testing.T) {

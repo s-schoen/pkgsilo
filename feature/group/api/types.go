@@ -46,7 +46,7 @@ func (r ReplaceGroupRequest) toInput() service.GroupInput {
 // PatchGroupRequest is the body of a request that changes some settable fields of a group, a JSON Merge
 // Patch: a member that it leaves out stays unchanged.
 type PatchGroupRequest struct {
-	Name request.Optional[string] `json:"name"`
+	Name request.Optional[string] `json:"name,omitzero"`
 }
 
 // Validate reports the invalid members of r as validation.Errors.
@@ -64,11 +64,11 @@ func (r PatchGroupRequest) toPatch() service.GroupPatch {
 // absent.
 type GroupResponse struct {
 	ID        uuid.UUID                 `json:"id"`
-	Name      envelope.Field[string]    `json:"name"`
-	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy"`
-	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy"`
-	CreatedAt envelope.Field[time.Time] `json:"createdAt"`
-	UpdatedAt envelope.Field[time.Time] `json:"updatedAt"`
+	Name      envelope.Field[string]    `json:"name,omitzero"`
+	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy,omitzero"`
+	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy,omitzero"`
+	CreatedAt envelope.Field[time.Time] `json:"createdAt,omitzero"`
+	UpdatedAt envelope.Field[time.Time] `json:"updatedAt,omitzero"`
 }
 
 func toGroupResponse(g service.Group) GroupResponse {
@@ -86,9 +86,9 @@ func toGroupResponse(g service.Group) GroupResponse {
 // it when. Reading the members of a group is one action for the whole member list, so no member of it is
 // hidden; they are envelope.Fields only because every member of a representation is.
 type MemberResponse struct {
-	IdentityID envelope.Field[uuid.UUID] `json:"identityId"`
-	CreatedBy  envelope.Field[uuid.UUID] `json:"createdBy"`
-	CreatedAt  envelope.Field[time.Time] `json:"createdAt"`
+	IdentityID envelope.Field[uuid.UUID] `json:"identityId,omitzero"`
+	CreatedBy  envelope.Field[uuid.UUID] `json:"createdBy,omitzero"`
+	CreatedAt  envelope.Field[time.Time] `json:"createdAt,omitzero"`
 }
 
 func toMemberResponse(m service.Member) MemberResponse {
