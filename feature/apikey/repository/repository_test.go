@@ -254,63 +254,6 @@ func TestPostgresAPIKeyRepository_Delete_NotFound(t *testing.T) {
 	assert.NoError(t, err, "the key must survive a delete through another identity")
 }
 
-// insertGroup stores a group row with the identities as members and returns its ID. The tables belong to
-// the group feature, so the rows are written directly.
-func insertGroup(t *testing.T, db *sqlx.DB, members ...uuid.UUID) uuid.UUID {
-	t.Helper()
-
-	id := uuid.NewV4()
-	_, err := db.ExecContext(t.Context(), `
-		INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
-		VALUES ($1, $2, $1, $1, $3, $3)`,
-		id, "group-"+id.String(), baseTime,
-	)
-	require.NoError(t, err)
-	for _, member := range members {
-		_, err := db.ExecContext(t.Context(), `
-			INSERT INTO group_members (group_id, identity_id, created_by, created_at) VALUES ($1, $2, $2, $3)`,
-			id, member, baseTime,
-		)
-		require.NoError(t, err)
-	}
-
-	return id
-}
-
-func TestPostgresAPIKeyRepository_IdentityGroups(t *testing.T) {
-	t.Parallel()
-	repo, db := newTestRepo(t)
-	ada, grace := insertIdentity(t, db), insertIdentity(t, db)
-	maintainers, reviewers := insertGroup(t, db, ada), insertGroup(t, db, ada, grace)
-	// Another identity's group, which must not be listed.
-	insertGroup(t, db, grace)
-
-	got, err := repo.IdentityGroups(t.Context(), ada)
-	require.NoError(t, err)
-
-	assert.ElementsMatch(t, []uuid.UUID{maintainers, reviewers}, got)
-}
-
-func TestPostgresAPIKeyRepository_IdentityGroups_None(t *testing.T) {
-	t.Parallel()
-	repo, db := newTestRepo(t)
-	insertGroup(t, db)
-
-	got, err := repo.IdentityGroups(t.Context(), insertIdentity(t, db))
-	require.NoError(t, err)
-
-	assert.Empty(t, got)
-}
-
-func TestPostgresAPIKeyRepository_IdentityGroups_IdentityNotFound(t *testing.T) {
-	t.Parallel()
-	repo, _ := newTestRepo(t)
-
-	_, err := repo.IdentityGroups(t.Context(), uuid.NewV4())
-
-	assert.ErrorIs(t, err, ErrIdentityNotFound)
-}
-
 func TestPostgresAPIKeyRepository_DeletingIdentityDeletesItsKeys(t *testing.T) {
 	t.Parallel()
 	repo, db := newTestRepo(t)

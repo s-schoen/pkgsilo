@@ -165,6 +165,50 @@ func TestPostgresPasswordRepository_UpdateHash_Changed(t *testing.T) {
 	assert.Equal(t, "$argon2id$changed", got.Hash)
 }
 
+func TestPostgresPasswordRepository_Change(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+	identityID := insertIdentity(t, db, "ada")
+	setRecord(t, repo, identityID, "$argon2id$old")
+	want := PasswordRecord{IdentityID: identityID, Hash: "$argon2id$new", SetAt: baseTime.Add(time.Hour)}
+
+	stored, err := repo.Change(t.Context(), want, "$argon2id$old")
+	require.NoError(t, err)
+	assert.Equal(t, want, stored)
+
+	got, err := repo.Get(t.Context(), identityID)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}
+
+// TestPostgresPasswordRepository_Change_Changed checks that a change writes nothing once the hash it was
+// checked against is gone, so that it can't overwrite a reset or undo a delete.
+func TestPostgresPasswordRepository_Change_Changed(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+	changed := insertIdentity(t, db, "ada")
+	setRecord(t, repo, changed, "$argon2id$reset")
+
+	tests := []struct {
+		name       string
+		identityID uuid.UUID
+	}{
+		{name: "changed since", identityID: changed},
+		{name: "deleted since", identityID: insertIdentity(t, db, "grace")},
+		{name: "unknown identity", identityID: uuid.NewV4()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := repo.Change(t.Context(), newRecord(tt.identityID, "$argon2id$new"), "$argon2id$old")
+			assert.ErrorIs(t, err, ErrHashChanged)
+		})
+	}
+	got, err := repo.Get(t.Context(), changed)
+	require.NoError(t, err)
+	assert.Equal(t, "$argon2id$reset", got.Hash)
+}
+
 func TestPostgresPasswordRepository_Delete(t *testing.T) {
 	t.Parallel()
 	repo, db := newTestRepo(t)
@@ -237,63 +281,6 @@ func TestPostgresPasswordRepository_GetCredentials_IdentityNotFound(t *testing.T
 			assert.ErrorIs(t, err, ErrIdentityNotFound)
 		})
 	}
-}
-
-// insertGroup stores a group row with the identities as members and returns its ID. The tables belong to
-// the group feature, so the rows are written directly.
-func insertGroup(t *testing.T, db *sqlx.DB, members ...uuid.UUID) uuid.UUID {
-	t.Helper()
-
-	id := uuid.NewV4()
-	_, err := db.ExecContext(t.Context(), `
-		INSERT INTO groups (id, name, created_by, updated_by, created_at, updated_at)
-		VALUES ($1, $2, $1, $1, $3, $3)`,
-		id, "group-"+id.String(), baseTime,
-	)
-	require.NoError(t, err)
-	for _, member := range members {
-		_, err := db.ExecContext(t.Context(), `
-			INSERT INTO group_members (group_id, identity_id, created_by, created_at) VALUES ($1, $2, $2, $3)`,
-			id, member, baseTime,
-		)
-		require.NoError(t, err)
-	}
-
-	return id
-}
-
-func TestPostgresPasswordRepository_IdentityGroups(t *testing.T) {
-	t.Parallel()
-	repo, db := newTestRepo(t)
-	ada, grace := insertIdentity(t, db, "ada"), insertIdentity(t, db, "grace")
-	maintainers, reviewers := insertGroup(t, db, ada), insertGroup(t, db, ada, grace)
-	// Another identity's group, which must not be listed.
-	insertGroup(t, db, grace)
-
-	got, err := repo.IdentityGroups(t.Context(), ada)
-	require.NoError(t, err)
-
-	assert.ElementsMatch(t, []uuid.UUID{maintainers, reviewers}, got)
-}
-
-func TestPostgresPasswordRepository_IdentityGroups_None(t *testing.T) {
-	t.Parallel()
-	repo, db := newTestRepo(t)
-	insertGroup(t, db)
-
-	got, err := repo.IdentityGroups(t.Context(), insertIdentity(t, db, "ada"))
-	require.NoError(t, err)
-
-	assert.Empty(t, got)
-}
-
-func TestPostgresPasswordRepository_IdentityGroups_IdentityNotFound(t *testing.T) {
-	t.Parallel()
-	repo, _ := newTestRepo(t)
-
-	_, err := repo.IdentityGroups(t.Context(), uuid.NewV4())
-
-	assert.ErrorIs(t, err, ErrIdentityNotFound)
 }
 
 func TestPostgresPasswordRepository_DeletingIdentityDeletesItsPassword(t *testing.T) {

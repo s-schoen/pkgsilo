@@ -55,14 +55,10 @@ var (
 
 	// identityGroups are the groups that the identity of the API keys is a member of.
 	identityGroups = []uuid.UUID{uuid.MustParse("5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b")}
-	// identityResource is the identity of the API keys as a resource of decisions, with its groups.
-	identityResource = authz.Resource{Type: "Identity", ID: identityID, Groups: identityGroups}
 	// owner is the identity of the API keys as their owner, with its groups.
 	owner = &authz.Owner{ID: identityID, Groups: identityGroups}
 	// storedResource is stored as a resource of decisions.
 	storedResource = authz.Resource{Type: "APIKey", ID: stored.ID, Owner: owner}
-	// readIdentity is the action of reading an identity, as the identity feature declares it.
-	readIdentity = authz.NewAction("identity:read", "read")
 
 	errDB = errors.New("connection refused")
 )
@@ -74,13 +70,25 @@ func newTestService(t *testing.T) (*apiKeyService, *mocks.MockAPIKeyRepository) 
 	return newTestServiceWith(t, authz.AllowAll())
 }
 
-// newTestServiceWith returns a service that asks authorizer, on a mock repository.
+// newTestServiceWith returns a service that asks authorizer, on a mock repository, whose owner loader finds
+// the identity of the API keys readable.
 func newTestServiceWith(t *testing.T, authorizer authz.Authorizer) (*apiKeyService, *mocks.MockAPIKeyRepository) {
 	t.Helper()
 
 	repo := mocks.NewMockAPIKeyRepository(t)
+	owners := authzmocks.NewMockOwnerLoader(t)
+	owners.EXPECT().ReadableOwner(mock.Anything, mock.Anything, identityID).Return(owner, nil).Maybe()
 
-	return newAPIKeyService(repo, authorizer, pepper, func() time.Time { return now }), repo
+	return newAPIKeyService(repo, authorizer, owners, pepper, func() time.Time { return now }), repo
+}
+
+// failOwner makes the service's owner loader fail with err.
+func failOwner(t *testing.T, svc *apiKeyService, err error) {
+	t.Helper()
+
+	owners := authzmocks.NewMockOwnerLoader(t)
+	owners.EXPECT().ReadableOwner(mock.Anything, mock.Anything, identityID).Return(nil, err)
+	svc.owners = owners
 }
 
 // newDeciding returns an authorizer that answers actor's requests with a mock decider.
@@ -94,22 +102,9 @@ func newDeciding(t *testing.T) (*authzmocks.MockAuthorizer, *authzmocks.MockDeci
 	return authorizer, decider
 }
 
-// expectOwner makes the repository return the groups of the API keys' identity.
-func expectOwner(repo *mocks.MockAPIKeyRepository) {
-	repo.EXPECT().IdentityGroups(mock.Anything, identityID).Return(identityGroups, nil)
-}
-
-// expectOwnerReadable makes the repository return the groups of the API keys' identity, and the decider
-// allow reading it.
-func expectOwnerReadable(repo *mocks.MockAPIKeyRepository, decider *authzmocks.MockDecider) {
-	expectOwner(repo)
-	decider.EXPECT().Can(readIdentity, identityResource).Return(true, nil)
-}
-
 // expectReadable makes the repository return the API keys' identity and stored, and the decider allow
 // reading both.
 func expectReadable(repo *mocks.MockAPIKeyRepository, decider *authzmocks.MockDecider) {
-	expectOwnerReadable(repo, decider)
 	repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(stored, nil)
 	decider.EXPECT().Can(actions.Read(), storedResource).Return(true, nil)
 }
@@ -150,7 +145,6 @@ func idsOf(keys []APIKey) []byte {
 func TestAPIKeyService_Create(t *testing.T) {
 	t.Parallel()
 	svc, repo := newTestService(t)
-	expectOwner(repo)
 	var inserted repository.APIKeyRecord
 	repo.EXPECT().Insert(mock.Anything, servicetest.Capture(&inserted)).Return(stored, nil)
 
@@ -176,7 +170,6 @@ func TestAPIKeyService_Create(t *testing.T) {
 func TestAPIKeyService_Create_GeneratesUniqueKeysAndIDs(t *testing.T) {
 	t.Parallel()
 	svc, repo := newTestService(t)
-	expectOwner(repo)
 	ids, keys := map[uuid.UUID]bool{}, map[string]bool{}
 	repo.EXPECT().Insert(mock.Anything, mock.Anything).RunAndReturn(
 		func(_ context.Context, rec repository.APIKeyRecord) (repository.APIKeyRecord, error) {
@@ -250,7 +243,6 @@ func TestAPIKeyService_Create_ChecksFields(t *testing.T) {
 			t.Parallel()
 			authorizer, decider := newDeciding(t)
 			svc, repo := newTestServiceWith(t, authorizer)
-			expectOwnerReadable(repo, decider)
 			checked, resources := expectFieldChecks(decider, tt.allowed)
 			var inserted repository.APIKeyRecord
 			var readResources []authz.Resource
@@ -306,7 +298,6 @@ func TestAPIKeyService_Create_ReadableFields(t *testing.T) {
 			t.Parallel()
 			authorizer, decider := newDeciding(t)
 			svc, repo := newTestServiceWith(t, authorizer)
-			expectOwnerReadable(repo, decider)
 			// The service generates the ID, so the checks match any resource. That they're on the new API
 			// key is checked by TestAPIKeyService_Create_ChecksFields.
 			expectFieldChecks(decider, []string{"name"})
@@ -371,7 +362,6 @@ func TestAPIKeyService_Get_NeverExpires(t *testing.T) {
 	t.Parallel()
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
-	expectOwnerReadable(repo, decider)
 	rec := stored
 	rec.ExpiresAt = nil
 	repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(rec, nil)
@@ -406,7 +396,6 @@ func TestAPIKeyService_List_Pages(t *testing.T) {
 			t.Parallel()
 			authorizer, decider := newDeciding(t)
 			svc, repo := newTestServiceWith(t, authorizer)
-			expectOwnerReadable(repo, decider)
 			repo.EXPECT().ListAll(mock.Anything, identityID).Return(newRecords(1, 2, 3, 4, 5, 6, 7, 8, 9), nil)
 			decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 				func(_ authz.Action, resource authz.Resource) (bool, error) {
@@ -441,7 +430,6 @@ func TestAPIKeyService_List_Pages(t *testing.T) {
 func TestAPIKeyService_List_TranslatesRecords(t *testing.T) {
 	t.Parallel()
 	svc, repo := newTestService(t)
-	expectOwner(repo)
 	repo.EXPECT().ListAll(mock.Anything, identityID).Return([]repository.APIKeyRecord{stored}, nil)
 
 	got, err := svc.List(t.Context(), actor, identityID, 0, 10)
@@ -459,7 +447,6 @@ func TestAPIKeyService_List_Empty(t *testing.T) {
 			t.Parallel()
 			authorizer, decider := newDeciding(t)
 			svc, repo := newTestServiceWith(t, authorizer)
-			expectOwnerReadable(repo, decider)
 			repo.EXPECT().ListAll(mock.Anything, identityID).Return(recs, nil)
 			decider.EXPECT().Can(actions.Read(), mock.Anything).Return(false, nil).Maybe()
 
@@ -478,7 +465,6 @@ func TestAPIKeyService_List_ChecksContextBetweenRows(t *testing.T) {
 	svc, repo := newTestServiceWith(t, authorizer)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	expectOwnerReadable(repo, decider)
 	repo.EXPECT().ListAll(mock.Anything, identityID).Return(newRecords(1, 2, 3), nil)
 	decider.EXPECT().Can(actions.Read(), mock.Anything).RunAndReturn(
 		func(authz.Action, authz.Resource) (bool, error) {
@@ -500,7 +486,6 @@ func TestAPIKeyService_List_Errors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			svc, repo := newTestService(t)
-			expectOwner(repo)
 			repo.EXPECT().ListAll(mock.Anything, identityID).Return(nil, repoErr)
 
 			_, err := svc.List(t.Context(), actor, identityID, 0, 50)
@@ -545,44 +530,23 @@ func calls(t *testing.T) map[string]func(*apiKeyService) error {
 	}
 }
 
-// TestAPIKeyService_IdentityHidden checks that every method reports an identity that the actor may not read
-// like a missing one, before anything else is checked or loaded: anything else would reveal that the
-// identity exists.
-func TestAPIKeyService_IdentityHidden(t *testing.T) {
-	t.Parallel()
-	for name, call := range calls(t) {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			authorizer, decider := newDeciding(t)
-			// The mocks fail the test on any other decision or repository call.
-			svc, repo := newTestServiceWith(t, authorizer)
-			expectOwner(repo)
-			decider.EXPECT().Can(readIdentity, identityResource).Return(false, nil)
-
-			err := call(svc)
-
-			require.ErrorIs(t, err, ErrIdentityNotFound)
-			assert.NotErrorIs(t, err, authz.ErrDenied)
-		})
-	}
-}
-
-// TestAPIKeyService_IdentityNotFound checks that every method reports a missing identity in the same way as
-// a hidden one, without deciding anything.
+// TestAPIKeyService_IdentityNotFound checks that every method reports an identity that the owner loader
+// doesn't find, since it doesn't exist or the actor may not read it, with ErrIdentityNotFound, before anything
+// else is checked or loaded: anything else would reveal that the identity exists.
 func TestAPIKeyService_IdentityNotFound(t *testing.T) {
 	t.Parallel()
 	for name, call := range calls(t) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			authorizer, _ := newDeciding(t)
-			// The mocks fail the test on any decision or other repository call.
-			svc, repo := newTestServiceWith(t, authorizer)
-			repoErr := fmt.Errorf("list api key identity groups: %w", repository.ErrIdentityNotFound)
-			repo.EXPECT().IdentityGroups(mock.Anything, identityID).Return(nil, repoErr)
+			// The mocks fail the test on any decision or repository call.
+			svc, _ := newTestServiceWith(t, authorizer)
+			failOwner(t, svc, authz.ErrOwnerNotFound)
 
 			err := call(svc)
 
-			servicetest.AssertTranslated(t, err, ErrIdentityNotFound, repository.ErrIdentityNotFound)
+			servicetest.AssertTranslated(t, err, ErrIdentityNotFound, authz.ErrOwnerNotFound)
+			assert.NotErrorIs(t, err, authz.ErrDenied)
 		})
 	}
 }
@@ -598,7 +562,6 @@ func TestAPIKeyService_KeyHidden(t *testing.T) {
 			authorizer, decider := newDeciding(t)
 			// The mocks fail the test on any other decision or on a write.
 			svc, repo := newTestServiceWith(t, authorizer)
-			expectOwnerReadable(repo, decider)
 			repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(stored, nil)
 			decider.EXPECT().Can(actions.Read(), storedResource).Return(false, nil)
 
@@ -670,7 +633,6 @@ func TestAPIKeyService_TranslatesRepositoryErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			svc, repo := newTestService(t)
-			expectOwner(repo)
 
 			err := tt.call(svc, repo, fmt.Errorf("query: %w", tt.repoErr))
 
@@ -684,8 +646,8 @@ func TestAPIKeyService_IdentityLookupFails(t *testing.T) {
 	for name, call := range calls(t) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			svc, repo := newTestService(t)
-			repo.EXPECT().IdentityGroups(mock.Anything, identityID).Return(nil, errDB)
+			svc, _ := newTestService(t)
+			failOwner(t, svc, errDB)
 
 			err := call(svc)
 
@@ -720,11 +682,10 @@ func TestAPIKeyService_AuthorizationFails(t *testing.T) {
 		})
 		t.Run(name+" no identity decision", func(t *testing.T) {
 			t.Parallel()
-			authorizer, decider := newDeciding(t)
-			// The mock fails the test on any other repository call.
-			svc, repo := newTestServiceWith(t, authorizer)
-			expectOwner(repo)
-			decider.EXPECT().Can(readIdentity, identityResource).Return(false, errDecision)
+			authorizer, _ := newDeciding(t)
+			// The mocks fail the test on any decision or repository call.
+			svc, _ := newTestServiceWith(t, authorizer)
+			failOwner(t, svc, fmt.Errorf("check owner read: %w", errDecision))
 
 			assertFailed(t, call(svc))
 		})
@@ -733,7 +694,6 @@ func TestAPIKeyService_AuthorizationFails(t *testing.T) {
 			authorizer, decider := newDeciding(t)
 			// The mock fails the test if the repository writes anything.
 			svc, repo := newTestServiceWith(t, authorizer)
-			expectOwnerReadable(repo, decider)
 			repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(stored, nil).Maybe()
 			repo.EXPECT().ListAll(mock.Anything, identityID).Return([]repository.APIKeyRecord{stored}, nil).Maybe()
 			decider.EXPECT().Can(mock.Anything, mock.Anything).Return(false, errDecision)
@@ -751,7 +711,6 @@ func TestAPIKeyService_AuthorizationFails(t *testing.T) {
 			authorizer, decider := newDeciding(t)
 			// The mock fails the test if the repository writes anything.
 			svc, repo := newTestServiceWith(t, authorizer)
-			expectOwner(repo)
 			repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(stored, nil).Maybe()
 			repo.EXPECT().ListAll(mock.Anything, identityID).Return([]repository.APIKeyRecord{stored}, nil).Maybe()
 			decider.EXPECT().Can(mock.MatchedBy(isReadField), mock.Anything).Return(false, errDecision)
@@ -783,7 +742,7 @@ func TestAPIKeyService_Hash(t *testing.T) {
 		hex.EncodeToString(svc.hash("psk_TESTKEY")),
 	)
 
-	other := newAPIKeyService(mocks.NewMockAPIKeyRepository(t), authz.AllowAll(),
+	other := newAPIKeyService(mocks.NewMockAPIKeyRepository(t), authz.AllowAll(), authzmocks.NewMockOwnerLoader(t),
 		[]byte("another-pepper-of-at-least-32-chars"), time.Now)
 	assert.NotEqual(t, svc.hash("psk_TESTKEY"), other.hash("psk_TESTKEY"), "the hash must depend on the pepper")
 }

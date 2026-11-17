@@ -12,6 +12,9 @@ var (
 	ErrNotFound = errors.New("password record not found")
 	// ErrIdentityNotFound is returned when the identity doesn't exist.
 	ErrIdentityNotFound = errors.New("password identity not found")
+	// ErrHashChanged is returned when the identity's password no longer has the hash that a write expects,
+	// since it was changed or deleted after the hash was read.
+	ErrHashChanged = errors.New("password hash changed")
 )
 
 const (

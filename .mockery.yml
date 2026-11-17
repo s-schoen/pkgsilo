@@ -11,6 +11,7 @@ packages:
     interfaces:
       Authorizer: {}
       Decider: {}
+      OwnerLoader: {}
   pkgsilo/feature/identity/repository:
     interfaces:
       IdentityRepository: {}

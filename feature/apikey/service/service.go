@@ -16,7 +16,6 @@ import (
 	"pkgsilo/core/authz"
 	"pkgsilo/core/pagination"
 	"pkgsilo/feature/apikey/repository"
-	identityservice "pkgsilo/feature/identity/service"
 )
 
 const (
@@ -63,20 +62,25 @@ type APIKeyService interface {
 type apiKeyService struct {
 	repo       repository.APIKeyRepository
 	authorizer authz.Authorizer
+	owners     authz.OwnerLoader
 	pepper     []byte
 	now        func() time.Time
 }
 
 // NewAPIKeyService returns an APIKeyService that stores API keys in repo, with their keys hashed under
-// the secret pepper, and asks authorizer what an actor may do.
-func NewAPIKeyService(repo repository.APIKeyRepository, authorizer authz.Authorizer, pepper []byte) APIKeyService {
-	return newAPIKeyService(repo, authorizer, pepper, time.Now)
+// the secret pepper, asks authorizer what an actor may do, and loads the identities that own API keys with
+// owners.
+func NewAPIKeyService(
+	repo repository.APIKeyRepository, authorizer authz.Authorizer, owners authz.OwnerLoader, pepper []byte,
+) APIKeyService {
+	return newAPIKeyService(repo, authorizer, owners, pepper, time.Now)
 }
 
 func newAPIKeyService(
-	repo repository.APIKeyRepository, authorizer authz.Authorizer, pepper []byte, now func() time.Time,
+	repo repository.APIKeyRepository, authorizer authz.Authorizer, owners authz.OwnerLoader, pepper []byte,
+	now func() time.Time,
 ) *apiKeyService {
-	return &apiKeyService{repo: repo, authorizer: authorizer, pepper: pepper, now: now}
+	return &apiKeyService{repo: repo, authorizer: authorizer, owners: owners, pepper: pepper, now: now}
 }
 
 func (s *apiKeyService) Create(
@@ -87,9 +91,9 @@ func (s *apiKeyService) Create(
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
 	}
 
-	owner, err := s.readableOwner(ctx, decider, identityID)
+	owner, err := s.owners.ReadableOwner(ctx, decider, identityID)
 	if err != nil {
-		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
+		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", translateError(err))
 	}
 
 	id := uuid.NewV4()
@@ -128,9 +132,9 @@ func (s *apiKeyService) Get(ctx context.Context, actor, identityID, id uuid.UUID
 		return APIKey{}, fmt.Errorf("get api key: %w", err)
 	}
 
-	owner, err := s.readableOwner(ctx, decider, identityID)
+	owner, err := s.owners.ReadableOwner(ctx, decider, identityID)
 	if err != nil {
-		return APIKey{}, fmt.Errorf("get api key: %w", err)
+		return APIKey{}, fmt.Errorf("get api key: %w", translateError(err))
 	}
 
 	rec, err := s.getReadable(ctx, decider, owner, id)
@@ -154,9 +158,9 @@ func (s *apiKeyService) List(
 		return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
 	}
 
-	owner, err := s.readableOwner(ctx, decider, identityID)
+	owner, err := s.owners.ReadableOwner(ctx, decider, identityID)
 	if err != nil {
-		return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
+		return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", translateError(err))
 	}
 
 	recs, err := s.repo.ListAll(ctx, identityID)
@@ -191,9 +195,9 @@ func (s *apiKeyService) Delete(ctx context.Context, actor, identityID, id uuid.U
 		return fmt.Errorf("delete api key: %w", err)
 	}
 
-	owner, err := s.readableOwner(ctx, decider, identityID)
+	owner, err := s.owners.ReadableOwner(ctx, decider, identityID)
 	if err != nil {
-		return fmt.Errorf("delete api key: %w", err)
+		return fmt.Errorf("delete api key: %w", translateError(err))
 	}
 
 	if _, err := s.getReadable(ctx, decider, owner, id); err != nil {
@@ -240,29 +244,6 @@ func (s *apiKeyService) Authenticate(ctx context.Context, key string) (Authentic
 	}
 
 	return AuthenticatedKey{ID: rec.ID, IdentityID: rec.IdentityID}, nil
-}
-
-// readableOwner returns the identity with the given ID as the owner of its API keys, with its groups. It
-// reports an identity that the decider doesn't allow to read like a missing one, with ErrIdentityNotFound,
-// so that no endpoint of its API keys reveals whether it exists.
-func (s *apiKeyService) readableOwner(
-	ctx context.Context, decider authz.Decider, identityID uuid.UUID,
-) (*authz.Owner, error) {
-	groups, err := s.repo.IdentityGroups(ctx, identityID)
-	if err != nil {
-		return nil, translateError(err)
-	}
-
-	can, err := decider.Can(identityservice.Actions().Read(),
-		authz.Resource{Type: authz.IdentityType, ID: identityID, Groups: groups})
-	if err != nil {
-		return nil, fmt.Errorf("check identity read: %w", err)
-	}
-	if !can {
-		return nil, ErrIdentityNotFound
-	}
-
-	return &authz.Owner{ID: identityID, Groups: groups}, nil
 }
 
 // getReadable returns the record of the API key with the given ID of the owner. It reports an API key that

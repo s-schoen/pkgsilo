@@ -78,16 +78,18 @@ func NewHandler(
 	logger *slog.Logger, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
 ) http.Handler {
 	authorizer := authz.New(db, meterProvider, tracerProvider)
+	owners := authz.NewOwners(db, identityservice.Actions().Read())
 	health := healthservice.NewHealthService(healthrepo.NewPostgresHealthRepository(db))
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db), authorizer)
 	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db), authorizer)
-	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authorizer, apiKeyPepper)
+	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authorizer, owners,
+		apiKeyPepper)
 	passwordRepo := passwordrepo.NewPostgresPasswordRepository(db)
 	sessions := sessionservice.NewSessionService(sessionrepo.NewPostgresSessionRepository(db),
 		passwordservice.NewVerifier(passwordRepo), sessionLifetimes)
 	// The verifier, then the sessions, then the passwords, which end the sessions of an identity whose password
 	// changes.
-	passwords := passwordservice.NewPasswordService(passwordRepo, authorizer, sessions)
+	passwords := passwordservice.NewPasswordService(passwordRepo, authorizer, owners, sessions)
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema())
 
 	opts.UnmeasuredPaths = slices.Concat(opts.UnmeasuredPaths, []string{apiPath + healthPath})

@@ -85,7 +85,9 @@ cuts out the page with `pagination.FromAll`, so that only the last page can be s
   with one query per list. Without them, a `forbid` on the group silently allows.
 - A resource that belongs to an identity, such as an API key, sets `Owned` in its `authz.TypeSpec` and
   passes its owner, with the owner's groups, in `authz.Resource.Owner`, so that policies can use
-  `resource.owner`. The owner is the only attribute: secrets stay out of the schema.
+  `resource.owner`. The owner is the only attribute: secrets stay out of the schema. The service loads
+  the owner with `authz.OwnerLoader.ReadableOwner`, which reports an identity that the actor can't read
+  like a missing one, and translates `authz.ErrOwnerNotFound` to its own identity-not-found error.
 
 ## No filters on hidden data
 

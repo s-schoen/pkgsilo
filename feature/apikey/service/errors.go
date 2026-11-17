@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 
+	"pkgsilo/core/authz"
 	"pkgsilo/feature/apikey/repository"
 )
 
@@ -21,12 +22,12 @@ var (
 	ErrExpiredKey = errors.New("expired key")
 )
 
-// translateError replaces repository errors with their domain errors.
+// translateError replaces the errors of the repository and of the owner loader with their domain errors.
 func translateError(err error) error {
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
 		return ErrAPIKeyNotFound
-	case errors.Is(err, repository.ErrIdentityNotFound):
+	case errors.Is(err, repository.ErrIdentityNotFound), errors.Is(err, authz.ErrOwnerNotFound):
 		return ErrIdentityNotFound
 	default:
 		return err

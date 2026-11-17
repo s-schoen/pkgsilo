@@ -4,6 +4,7 @@ import (
 	"errors"
 	"uuid"
 
+	"pkgsilo/core/authz"
 	"pkgsilo/feature/password/repository"
 )
 
@@ -17,7 +18,7 @@ var (
 	// leaves out the current password.
 	ErrCurrentPasswordRequired = errors.New("current password required")
 	// ErrWrongCurrentPassword is returned when the current password that an actor gives to change a password
-	// doesn't match it.
+	// doesn't match it, which includes a password that's changed or deleted while the change is checked.
 	ErrWrongCurrentPassword = errors.New("wrong current password")
 	// ErrUnknownCredentials is the reason of a rejection when no identity has the username, or the identity
 	// has no password.
@@ -44,13 +45,16 @@ func (e *RejectedError) Unwrap() error {
 	return e.Reason
 }
 
-// translateError replaces repository errors with their domain errors.
+// translateError replaces the errors of the repository and of the owner loader with their domain errors.
 func translateError(err error) error {
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
 		return ErrPasswordNotFound
-	case errors.Is(err, repository.ErrIdentityNotFound):
+	case errors.Is(err, repository.ErrIdentityNotFound), errors.Is(err, authz.ErrOwnerNotFound):
 		return ErrIdentityNotFound
+	case errors.Is(err, repository.ErrHashChanged):
+		// The current password was checked against a hash that's gone: it's no longer the current one.
+		return ErrWrongCurrentPassword
 	default:
 		return err
 	}
