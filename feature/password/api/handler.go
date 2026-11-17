@@ -13,6 +13,7 @@ import (
 	"pkgsilo/core/request"
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/feature/password/service"
+	sessionapi "pkgsilo/feature/session/api"
 )
 
 // Handler serves the password endpoints.
@@ -69,6 +70,8 @@ func (h *Handler) set(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The identity's sessions have ended, the request's own included if it has one.
+	sessionapi.ExpireCookieOf(w, r, identity)
 	envelope.WriteResource(w, toPasswordResponse(password))
 }
 
@@ -83,6 +86,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sessionapi.ExpireCookieOf(w, r, identity)
 	w.WriteHeader(http.StatusNoContent)
 }
 

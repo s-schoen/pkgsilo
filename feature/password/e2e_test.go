@@ -42,7 +42,11 @@ func passwordPathOf(id uuid.UUID) string {
 }
 
 // currentSessionPath is the path of the session that a request is authenticated with.
-const currentSessionPath = "/api/v1/sessions/current"
+const (
+	currentSessionPath = "/api/v1/sessions/current"
+	// expiredCookie is the Set-Cookie header that deletes the session cookie.
+	expiredCookie = "__Host-session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict"
+)
 
 // assertSessionsEnded asserts that every client, each sending only a session cookie, is rejected.
 func assertSessionsEnded(sessions ...*apitest.Client) {
@@ -134,7 +138,7 @@ func TestPasswords_Lifecycle(t *testing.T) {
 // one that changed it included, so that a stolen session doesn't survive:
 //
 //  1. Create ada, reset her password as admin, and log in as her twice: two sessions.
-//  2. With the first session, change her password: 200.
+//  2. With the first session, change her password: 200, and the response deletes the session cookie.
 //  3. Use both sessions: 401 for both.
 //  4. With her API key, get ada: 200, since API keys are unaffected.
 //  5. Log in with the new password: 201.
@@ -149,8 +153,9 @@ func TestPasswords_ChangeEndsSessions(t *testing.T) {
 	_, second := apptest.LogIn(t, api, "ada", "correct horse")
 
 	// 2. Change.
-	first.Put(passwordPathOf(ada.ID), `{"newPassword":"battery staple","currentPassword":"correct horse"}`).
-		AssertStatus(http.StatusOK)
+	resp := first.Put(passwordPathOf(ada.ID), `{"newPassword":"battery staple","currentPassword":"correct horse"}`)
+	resp.AssertStatus(http.StatusOK)
+	assert.Equal(t, []string{expiredCookie}, resp.Header().Values("Set-Cookie"))
 
 	// 3. Use the sessions.
 	assertSessionsEnded(first, second)
@@ -166,10 +171,10 @@ func TestPasswords_ChangeEndsSessions(t *testing.T) {
 // session of its identity:
 //
 //  1. Create ada, reset her password as admin, and log in as her twice: two sessions.
-//  2. As admin, reset her password: 200.
+//  2. As admin, reset her password: 200, without deleting a cookie, since admin's API key isn't ada's session.
 //  3. Use both sessions: 401 for both. With her API key, get ada: 200.
 //  4. Log in as ada with the new password, twice: two new sessions.
-//  5. As admin, delete her password: 204.
+//  5. As admin, delete her password: 204, without deleting a cookie.
 //  6. Use both new sessions: 401 for both. With her API key, get ada: 200.
 func TestPasswords_ResetAndDeleteEndSessions(t *testing.T) {
 	t.Parallel()
@@ -183,7 +188,9 @@ func TestPasswords_ResetAndDeleteEndSessions(t *testing.T) {
 	_, second := apptest.LogIn(t, api, "ada", "correct horse")
 
 	// 2. Reset.
-	api.Put(path, `{"newPassword":"battery staple"}`).AssertStatus(http.StatusOK)
+	resp := api.Put(path, `{"newPassword":"battery staple"}`)
+	resp.AssertStatus(http.StatusOK)
+	assert.Empty(t, resp.Header().Values("Set-Cookie"))
 
 	// 3. Use the sessions and the API key.
 	assertSessionsEnded(first, second)
@@ -194,7 +201,9 @@ func TestPasswords_ResetAndDeleteEndSessions(t *testing.T) {
 	_, fourth := apptest.LogIn(t, api, "ada", "battery staple")
 
 	// 5. Delete.
-	api.Delete(path).AssertNoContent()
+	resp = api.Delete(path)
+	resp.AssertNoContent()
+	assert.Empty(t, resp.Header().Values("Set-Cookie"))
 
 	// 6. Use the sessions and the API key.
 	assertSessionsEnded(third, fourth)
