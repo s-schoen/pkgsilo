@@ -49,3 +49,9 @@ packages:
   pkgsilo/feature/health/service:
     interfaces:
       HealthService: {}
+  pkgsilo/feature/session/repository:
+    interfaces:
+      SessionRepository: {}
+  pkgsilo/feature/session/service:
+    interfaces:
+      SessionService: {}
