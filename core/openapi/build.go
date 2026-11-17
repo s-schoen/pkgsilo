@@ -18,6 +18,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"pkgsilo/core/envelope"
+	"pkgsilo/core/middleware"
 	"pkgsilo/core/request"
 	"pkgsilo/core/typeschema"
 )
@@ -42,6 +43,8 @@ var (
 		http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete, http.MethodPatch, http.MethodHead,
 		http.MethodOptions,
 	}
+	// unsafeMethods are the methods that middleware.CrossOriginProtection checks.
+	unsafeMethods = []string{http.MethodPut, http.MethodPost, http.MethodDelete, http.MethodPatch}
 
 	errInvalidSpec = errors.New("invalid OpenAPI spec")
 )
@@ -156,7 +159,7 @@ func (b *builder) addOperation(m mount, op Operation) error {
 		return errors.New("described twice")
 	}
 
-	obj, err := b.operationObject(m, op, fullPath)
+	obj, err := b.operationObject(m, op, method, fullPath)
 	if err != nil {
 		return err
 	}
@@ -186,9 +189,9 @@ func (b *builder) check(op Operation, method string) error {
 	return nil
 }
 
-// operationObject returns the object of op, mounted with m at fullPath, with the parameters and problems that
-// its body, its responses and m add.
-func (b *builder) operationObject(m mount, op Operation, fullPath string) (*operationObject, error) {
+// operationObject returns the object of op, mounted with m at fullPath under method, with the parameters and
+// problems that its body, its responses, m and the spec's cross-origin protection add.
+func (b *builder) operationObject(m mount, op Operation, method, fullPath string) (*operationObject, error) {
 	obj := &operationObject{
 		Tags: []string{m.section.Name}, Summary: op.Summary, Description: op.Description, OperationID: op.ID,
 		Responses: map[string]responseObject{},
@@ -216,10 +219,7 @@ func (b *builder) operationObject(m mount, op Operation, fullPath string) (*oper
 			problems = append(problems, request.InvalidQueryType)
 		}
 	}
-	if !m.public {
-		problems = append(problems, envelope.UnauthorizedProblem)
-	}
-	problems = append(problems, envelope.InternalServerErrorProblem)
+	problems = append(problems, b.middlewareProblems(m, method)...)
 	if err := addProblems(obj, problems); err != nil {
 		return nil, err
 	}
@@ -230,6 +230,21 @@ func (b *builder) operationObject(m mount, op Operation, fullPath string) (*oper
 	obj.Parameters = params
 
 	return obj, nil
+}
+
+// middlewareProblems returns the problems that the middleware in front of an operation mounted with m under
+// method answers with: the 401 of authn.Require unless m is public, the 403 of
+// middleware.CrossOriginProtection for an unsafe method if the spec is protected, and the 500.
+func (b *builder) middlewareProblems(m mount, method string) []envelope.ProblemType {
+	var problems []envelope.ProblemType
+	if !m.public {
+		problems = append(problems, envelope.UnauthorizedProblem)
+	}
+	if b.spec.CrossOriginProtected && slices.Contains(unsafeMethods, method) {
+		problems = append(problems, middleware.CrossOriginRequestType)
+	}
+
+	return append(problems, envelope.InternalServerErrorProblem)
 }
 
 // documentPath returns the path of the document for the route pattern of an operation mounted at mountPath,

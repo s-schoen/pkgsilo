@@ -15,6 +15,7 @@ import (
 	"pkgsilo/core/authn"
 	"pkgsilo/core/authz"
 	"pkgsilo/core/mcpserver"
+	"pkgsilo/core/middleware"
 	"pkgsilo/core/openapi"
 	"pkgsilo/core/router"
 	apikeyapi "pkgsilo/feature/apikey/api"
@@ -56,7 +57,8 @@ const (
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
 // on the router that opts configures, and the MCP endpoint at /mcp, which serves the tools of the
 // features to agents. The OpenAPI document of the API is at /api/v1/openapi.json. All routes but the health
-// check and the document need an authenticated request.
+// check and the document need an authenticated request. The routes under /api/v1 reject state-changing
+// requests that a browser sends from another origin, and no response is stored unless its handler says so.
 // API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger, and
 // metrics are recorded with meterProvider: every request but a health check is measured, and so are
 // authentications and authorization decisions. Every request but a health check gets a server span from
@@ -82,6 +84,8 @@ func NewHandler(
 		apikeytools.New(apiKeys),
 	))
 	r.Route(apiPath, func(r chi.Router) {
+		// Only the API: MCP clients aren't browsers, and the session cookie authenticates only the API.
+		r.Use(middleware.CrossOriginProtection)
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())
 		r.Get(specPath, Docs().ServeHTTP)
 		r.Group(func(r chi.Router) {
@@ -107,7 +111,8 @@ func Docs() *openapi.Document {
 				"problems are RFC 9457 Problem Details. Policies decide what the caller may do: an object that the " +
 				"caller may not read is answered like a missing one, and fields that it may not read are absent.",
 		},
-		Security: apikeyapi.SecurityScheme(),
+		Security:             apikeyapi.SecurityScheme(),
+		CrossOriginProtected: true,
 	}
 	spec.MountPublic(apiPath+healthPath, healthapi.Docs())
 	spec.Mount(apiPath+identitiesPath, identityapi.Docs())
