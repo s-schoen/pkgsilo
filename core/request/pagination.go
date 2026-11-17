@@ -60,13 +60,14 @@ func intParam(query url.Values, name string, dst *int, rules ...validation.Rule)
 	return validation.Validate(v, rules...)
 }
 
-var invalidQueryType = envelope.DefineProblemType("invalid-query", "Invalid query parameters", http.StatusBadRequest)
+// InvalidQueryType is the problem type of InvalidQueryProblem.
+var InvalidQueryType = envelope.DefineProblemType("invalid-query", "Invalid query parameters", http.StatusBadRequest)
 
 // InvalidQueryProblem returns the problem that ParsePagination answers invalid query parameters
 // with. It lists errs, each located by its parameter name, in the
 // envelope.ValidationErrorsExtension member.
 func InvalidQueryProblem(errs ...envelope.ValidationError) envelope.Problem {
-	return invalidQueryType.New(envelope.Occurrence{
+	return InvalidQueryType.New(envelope.Occurrence{
 		Detail:     "The request contains invalid query parameters.",
 		Extensions: map[string]any{envelope.ValidationErrorsExtension: errs},
 	})

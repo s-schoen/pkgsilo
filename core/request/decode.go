@@ -239,12 +239,13 @@ func jsonType(t reflect.Type) string {
 	}
 }
 
-var invalidBodyType = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
+// InvalidBodyType is the problem type of InvalidBodyProblem.
+var InvalidBodyType = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
 
 // InvalidBodyProblem returns the problem that DecodeJSON answers a body with invalid members with.
 // It lists errs, each located by a pointer, in the envelope.ValidationErrorsExtension member.
 func InvalidBodyProblem(errs ...envelope.ValidationError) envelope.Problem {
-	return invalidBodyType.New(envelope.Occurrence{
+	return InvalidBodyType.New(envelope.Occurrence{
 		Detail:     "The request body contains invalid members.",
 		Extensions: map[string]any{envelope.ValidationErrorsExtension: errs},
 	})
