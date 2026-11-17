@@ -2,6 +2,7 @@ package authn
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -123,4 +124,31 @@ func (a attempts) rejected(ctx context.Context, span trace.Span, method int, rea
 func (a attempts) failed(ctx context.Context, span trace.Span, method int) {
 	a.record(ctx, span, a.methods[method].failure)
 	span.SetStatus(codes.Error, "authentication failed")
+}
+
+// observe runs authenticate, an attempt of the method at index method in Require, and records it by the
+// outcome that its error tells (see Authenticator), or as failed if it panics, whose panic goes on. It returns
+// authenticate's error unchanged. An ErrNoCredentials isn't recorded, since the method recognized no
+// credential: Require tries the next method, and records the request as missing if none recognizes one.
+func (a attempts) observe(ctx context.Context, span trace.Span, method int, authenticate func() error) error {
+	recorded := false
+	defer func() {
+		if !recorded {
+			a.failed(ctx, span, method)
+		}
+	}()
+
+	err := authenticate()
+	switch {
+	case err == nil:
+		a.succeeded(ctx, span, method)
+	case errors.Is(err, ErrNoCredentials):
+	case errors.Is(err, ErrInvalidCredentials):
+		a.rejected(ctx, span, method, rejectionReason(err))
+	default:
+		a.failed(ctx, span, method)
+	}
+	recorded = true
+
+	return err
 }
