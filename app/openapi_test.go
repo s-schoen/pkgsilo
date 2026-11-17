@@ -18,6 +18,7 @@ import (
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"pkgsilo/core/router"
+	sessionservice "pkgsilo/feature/session/service"
 	"pkgsilo/test/loggertest"
 )
 
@@ -61,7 +62,8 @@ func TestDocs_Valid(t *testing.T) {
 // route can't be added, moved or removed without its description. Only the document itself isn't in it.
 func TestDocs_Routes(t *testing.T) {
 	t.Parallel()
-	handler := NewHandler(router.Options{}, nil, nil, loggertest.Discard(), noop.NewMeterProvider(),
+	handler := NewHandler(router.Options{}, nil, nil, sessionservice.Lifetimes{},
+		loggertest.Discard(), noop.NewMeterProvider(),
 		tracenoop.NewTracerProvider())
 	routes, ok := handler.(chi.Routes)
 	require.True(t, ok, "the handler is a chi router")

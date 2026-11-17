@@ -21,6 +21,7 @@ import (
 	"pkgsilo/core/router"
 	"pkgsilo/core/server"
 	"pkgsilo/core/telemetry"
+	sessionservice "pkgsilo/feature/session/service"
 )
 
 // telemetryShutdownTimeout bounds the shutdown of the telemetry once the servers have stopped.
@@ -95,8 +96,11 @@ func run() error {
 			"api_key", apiKey)
 	}
 
-	h := app.NewHandler(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, db, cfg.APIKeyPepper, log,
-		tel.MeterProvider(), tel.TracerProvider())
+	sessionLifetimes := sessionservice.Lifetimes{
+		IdleTimeout: time.Duration(cfg.SessionIdleTimeout), MaxAge: time.Duration(cfg.SessionMaxAge),
+	}
+	h := app.NewHandler(router.Options{TrustedProxies: cfg.TrustedProxies, Dev: cfg.IsDev()}, db, cfg.APIKeyPepper,
+		sessionLifetimes, log, tel.MeterProvider(), tel.TracerProvider())
 
 	return serve(ctx, cfg, log, h, tel)
 }
