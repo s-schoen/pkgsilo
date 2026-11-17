@@ -40,6 +40,9 @@ component_management:
     - component_id: apikey
       paths:
         - "feature/apikey/**"
+    - component_id: password
+      paths:
+        - "feature/password/**"
     - component_id: policy
       paths:
         - "feature/policy/**"
