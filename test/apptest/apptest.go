@@ -42,7 +42,8 @@ const (
 
 // New returns a client for the application, wired as cmd/main.go serves it with metrics disabled, on a
 // new database with all migrations applied and the first start done. The client authenticates as its
-// identity admin: use its Anonymous method for requests without a credential. The application logs to
+// identity admin: use its Anonymous method for requests without a credential. It checks every response
+// against the OpenAPI document, as apitest.Client.WithDocument does. The application logs to
 // the test's output, which is shown for failed tests and with -v. New skips the test in short mode.
 func New(t *testing.T) *apitest.Client {
 	t.Helper()
@@ -92,7 +93,8 @@ func NewInstance(t *testing.T, api *apitest.Client, db *sqlx.DB) *apitest.Client
 }
 
 // newApp returns a client for the application on a new database with all migrations applied and the
-// first start done, and that database. The client authenticates as admin. As in cmd/main.go, the
+// first start done, and that database. The client authenticates as admin and checks every response against
+// the OpenAPI document of the application. As in cmd/main.go, the
 // application and its database record their metrics with meterProvider and create their spans with
 // tracerProvider.
 func newApp(
@@ -105,7 +107,9 @@ func newApp(
 	key, err := app.Bootstrap(t.Context(), db, []byte(apiKeyPepper))
 	require.NoError(t, err)
 
-	return apitest.NewClient(t, newHandler(t, db, meterProvider, tracerProvider)).WithHeader(apiKeyHeader, key), db
+	client := apitest.NewClient(t, newHandler(t, db, meterProvider, tracerProvider)).WithDocument(app.Docs().JSON())
+
+	return client.WithHeader(apiKeyHeader, key), db
 }
 
 // newTelemetry returns the telemetry of an application instance with metrics on, which is shut down at the
