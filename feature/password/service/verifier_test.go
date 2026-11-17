@@ -40,7 +40,7 @@ func TestVerifier_Verify(t *testing.T) {
 	got, err := verifier.Verify(t.Context(), "ada", currentPassword)
 	require.NoError(t, err)
 
-	assert.Equal(t, identityID, got)
+	assert.Equal(t, Verified{IdentityID: identityID, PasswordHash: storedHash}, got)
 }
 
 // TestVerifier_Verify_Rejected checks that a rejection tells its reason and the identity, if one has the
@@ -90,7 +90,7 @@ func TestVerifier_Verify_Rejected(t *testing.T) {
 
 			got, err := verifier.Verify(t.Context(), "ada", tt.password)
 
-			assert.Equal(t, uuid.Nil(), got)
+			assert.Equal(t, Verified{}, got)
 			rejected, ok := errors.AsType[*RejectedError](err)
 			require.True(t, ok, "%v is no *RejectedError", err)
 			assert.Equal(t, tt.want, *rejected)
@@ -142,12 +142,14 @@ func TestVerifier_Verify_Rehash(t *testing.T) {
 	got, err := verifier.Verify(t.Context(), "ada", currentPassword)
 	require.NoError(t, err)
 
-	assert.Equal(t, identityID, got)
+	assert.Equal(t, Verified{IdentityID: identityID, PasswordHash: newHash}, got,
+		"the password has the new hash once it's verified")
 	assertHashOf(t, currentPassword, newHash)
 }
 
 // TestVerifier_Verify_ChangedMeanwhile checks that a password that changed between being read and rehashed
-// still verifies: the change wins, and the login used the password that was current when it was read.
+// still verifies with the hash it was read with: the change wins, and what the login creates must not outlast
+// it.
 func TestVerifier_Verify_ChangedMeanwhile(t *testing.T) {
 	t.Parallel()
 	verifier, repo := newTestVerifier(t)
@@ -158,7 +160,25 @@ func TestVerifier_Verify_ChangedMeanwhile(t *testing.T) {
 	got, err := verifier.Verify(t.Context(), "ada", currentPassword)
 	require.NoError(t, err)
 
-	assert.Equal(t, identityID, got)
+	assert.Equal(t, Verified{IdentityID: identityID, PasswordHash: outdated}, got)
+}
+
+// TestVerifier_Verify_RehashFails checks that a password verifies with its old hash when the rehash fails,
+// which Verify reports without failing.
+func TestVerifier_Verify_RehashFails(t *testing.T) {
+	t.Parallel()
+	outdated := hashWith(outdatedParams)
+	verifier, repo := newTestVerifier(t)
+	expectCredentials(repo, &outdated)
+	repo.EXPECT().UpdateHash(mock.Anything, identityID, outdated, mock.Anything).Return(false, errDB)
+
+	got, err := verifier.Verify(t.Context(), "ada", currentPassword)
+	require.NoError(t, err, "a correct password must verify without its rehash")
+
+	assert.Equal(t, identityID, got.IdentityID)
+	assert.Equal(t, outdated, got.PasswordHash)
+	require.ErrorIs(t, got.RehashErr, errDB)
+	assert.NotContains(t, got.RehashErr.Error(), "horse")
 }
 
 // TestVerifier_Verify_WrongPasswordIsNotRehashed checks that only a verified password is rehashed.
@@ -176,7 +196,6 @@ func TestVerifier_Verify_WrongPasswordIsNotRehashed(t *testing.T) {
 
 func TestVerifier_Verify_Errors(t *testing.T) {
 	t.Parallel()
-	outdated := hashWith(outdatedParams)
 	tests := []struct {
 		name   string
 		expect func(repo *mocks.MockPasswordRepository)
@@ -194,14 +213,6 @@ func TestVerifier_Verify_Errors(t *testing.T) {
 			expect: func(repo *mocks.MockPasswordRepository) { expectCredentials(repo, new("$2a$10$bcrypt")) },
 			want:   errMalformedHash,
 		},
-		{
-			name: "rehash fails",
-			expect: func(repo *mocks.MockPasswordRepository) {
-				expectCredentials(repo, &outdated)
-				repo.EXPECT().UpdateHash(mock.Anything, identityID, outdated, mock.Anything).Return(false, errDB)
-			},
-			want: errDB,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -211,7 +222,7 @@ func TestVerifier_Verify_Errors(t *testing.T) {
 
 			got, err := verifier.Verify(t.Context(), "ada", currentPassword)
 
-			assert.Equal(t, uuid.Nil(), got)
+			assert.Equal(t, Verified{}, got)
 			require.ErrorIs(t, err, tt.want)
 			require.NotErrorIs(t, err, ErrUnknownCredentials)
 			assert.NotErrorIs(t, err, ErrInvalidPassword)

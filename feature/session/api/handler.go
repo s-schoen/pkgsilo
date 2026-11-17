@@ -85,6 +85,10 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		slog.String("identity_id", created.IdentityID.String()),
 		slog.String("session_id", created.ID.String()),
 	)
+	if created.RehashErr != nil {
+		// A warning: the login succeeded, and the next one tries again.
+		h.logger.WarnContext(r.Context(), "password rehash failed", "error", created.RehashErr)
+	}
 	setSessionCookie(w, created.Token)
 	envelope.WriteCreated(w, path.Join(r.URL.Path, currentPattern), toSessionResponse(created.Session))
 }

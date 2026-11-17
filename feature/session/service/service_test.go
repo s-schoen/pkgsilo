@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
@@ -30,7 +31,14 @@ var (
 	errDB      = errors.New("connection refused")
 )
 
-const presentedToken = "pss_PRESENTEDTOKEN"
+const (
+	presentedToken = "pss_PRESENTEDTOKEN"
+	// passwordHash is the hash of ada's password once it's verified.
+	passwordHash = "$argon2id$ada"
+)
+
+// verified is what the verifier returns for ada's password.
+var verified = passwordservice.Verified{IdentityID: identityID, PasswordHash: passwordHash}
 
 // newTestService returns a service on a mock repository and verifier, whose clock stands at now.
 func newTestService(t *testing.T) (*sessionService, *mocks.MockSessionRepository, *passwordmocks.MockVerifier) {
@@ -64,14 +72,15 @@ func storedRecord(createdAt, lastSeenAt time.Time) repository.SessionRecord {
 
 // expectLogin makes the verifier accept ada and the repository delete the expired sessions.
 func expectLogin(repo *mocks.MockSessionRepository, verifier *passwordmocks.MockVerifier) {
-	verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").Return(identityID, nil)
+	verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").Return(verified, nil)
 	repo.EXPECT().DeleteExpired(mock.Anything, now, now.Add(-time.Hour)).Return(nil)
 }
 
-// expectInsert makes the repository store any record, capturing it into rec, and return it as stored.
+// expectInsert makes the repository store any record while ada's password has the verified hash, capturing
+// the record into rec, and return it as stored.
 func expectInsert(repo *mocks.MockSessionRepository, rec *repository.SessionRecord) {
-	repo.EXPECT().Insert(mock.Anything, servicetest.Capture(rec)).
-		RunAndReturn(func(_ context.Context, r repository.SessionRecord) (repository.SessionRecord, error) {
+	repo.EXPECT().Insert(mock.Anything, servicetest.Capture(rec), passwordHash).
+		RunAndReturn(func(_ context.Context, r repository.SessionRecord, _ string) (repository.SessionRecord, error) {
 			return r, nil
 		})
 }
@@ -116,7 +125,7 @@ func TestSessionService_Login(t *testing.T) {
 func TestSessionService_Login_TokensDiffer(t *testing.T) {
 	t.Parallel()
 	svc, repo, verifier := newTestService(t)
-	verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").Return(identityID, nil).Times(2)
+	verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").Return(verified, nil).Times(2)
 	repo.EXPECT().DeleteExpired(mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(2)
 	var rec repository.SessionRecord
 	expectInsert(repo, &rec)
@@ -191,7 +200,7 @@ func TestSessionService_Login_Rejected(t *testing.T) {
 			// The repository mock fails the test on any call.
 			svc, _, verifier := newTestService(t)
 			verifier.EXPECT().Verify(mock.Anything, "ada", "wrong").
-				Return(uuid.Nil(), fmt.Errorf("verify: %w", tt.cause))
+				Return(passwordservice.Verified{}, fmt.Errorf("verify: %w", tt.cause))
 
 			_, err := svc.Login(t.Context(), LoginInput{Username: "ada", Password: "wrong", PresentedToken: presentedToken})
 
@@ -203,21 +212,73 @@ func TestSessionService_Login_Rejected(t *testing.T) {
 	}
 }
 
-// TestSessionService_Login_IdentityDeleted checks that a login whose identity is deleted after its password
-// was verified is rejected like an unknown identity.
-func TestSessionService_Login_IdentityDeleted(t *testing.T) {
+// TestSessionService_Login_PasswordChanged checks that a login whose password is changed or deleted after it
+// was verified is rejected like a wrong password, so that no session outlasts the change.
+func TestSessionService_Login_PasswordChanged(t *testing.T) {
 	t.Parallel()
 	svc, repo, verifier := newTestService(t)
 	expectLogin(repo, verifier)
-	repo.EXPECT().Insert(mock.Anything, mock.Anything).
-		Return(repository.SessionRecord{}, fmt.Errorf("insert: %w", repository.ErrIdentityNotFound))
+	repo.EXPECT().Insert(mock.Anything, mock.Anything, passwordHash).
+		Return(repository.SessionRecord{}, fmt.Errorf("insert: %w", repository.ErrPasswordChanged))
 
 	_, err := svc.Login(t.Context(), LoginInput{Username: "ada", Password: "correct horse"})
 
 	rejected, ok := errors.AsType[*RejectedError](err)
 	require.True(t, ok, "a *RejectedError: %v", err)
-	assert.Equal(t, RejectedError{IdentityID: identityID, Reason: ErrUnknownCredentials}, *rejected)
-	servicetest.AssertTranslated(t, err, ErrUnknownCredentials, repository.ErrIdentityNotFound)
+	assert.Equal(t, RejectedError{IdentityID: identityID, Reason: ErrInvalidPassword}, *rejected)
+	servicetest.AssertTranslated(t, err, ErrInvalidPassword, repository.ErrPasswordChanged)
+}
+
+// TestSessionService_Login_RehashFailed checks that a login succeeds when its password couldn't be rehashed,
+// and passes the failure on.
+func TestSessionService_Login_RehashFailed(t *testing.T) {
+	t.Parallel()
+	svc, repo, verifier := newTestService(t)
+	verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").Return(passwordservice.Verified{
+		IdentityID: identityID, PasswordHash: passwordHash, RehashErr: errDB,
+	}, nil)
+	repo.EXPECT().DeleteExpired(mock.Anything, now, now.Add(-time.Hour)).Return(nil)
+	var rec repository.SessionRecord
+	expectInsert(repo, &rec)
+
+	got, err := svc.Login(t.Context(), LoginInput{Username: "ada", Password: "correct horse"})
+
+	require.NoError(t, err)
+	assert.Equal(t, rec.ID, got.ID)
+	assert.ErrorIs(t, got.RehashErr, errDB)
+}
+
+// TestSessionService_Login_UserAgent checks that a session stores its User-Agent as valid UTF-8 without control
+// characters, and no more than 512 bytes of it, which PostgreSQL could otherwise reject or store at any size.
+func TestSessionService_Login_UserAgent(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, userAgent, want string
+	}{
+		{name: "plain", userAgent: "Mozilla/5.0 (X11; Linux x86_64)", want: "Mozilla/5.0 (X11; Linux x86_64)"},
+		{name: "empty", userAgent: "", want: ""},
+		{name: "invalid UTF-8", userAgent: "curl/\xff\xfe8.0", want: "curl/\uFFFD8.0"},
+		{name: "control characters", userAgent: "curl/8.0\x00\x1b[31m\x7f", want: "curl/8.0[31m"},
+		{name: "valid UTF-8", userAgent: "Bücherwurm/1.0 😀", want: "Bücherwurm/1.0 😀"},
+		{name: "long", userAgent: strings.Repeat("a", 600), want: strings.Repeat("a", 512)},
+		// A 4-byte character that would straddle the limit is left out whole.
+		{name: "cut at a character", userAgent: strings.Repeat("a", 510) + "😀", want: strings.Repeat("a", 510)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			svc, repo, verifier := newTestService(t)
+			expectLogin(repo, verifier)
+			var rec repository.SessionRecord
+			expectInsert(repo, &rec)
+
+			_, err := svc.Login(t.Context(), LoginInput{Username: "ada", Password: "correct horse", UserAgent: tt.userAgent})
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, rec.UserAgent)
+			assert.True(t, utf8.ValidString(rec.UserAgent))
+		})
+	}
 }
 
 func TestSessionService_Login_Errors(t *testing.T) {
@@ -229,13 +290,13 @@ func TestSessionService_Login_Errors(t *testing.T) {
 		{
 			name: "verify",
 			expect: func(_ *mocks.MockSessionRepository, verifier *passwordmocks.MockVerifier) {
-				verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").Return(uuid.Nil(), errDB)
+				verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").Return(passwordservice.Verified{}, errDB)
 			},
 		},
 		{
 			name: "delete expired",
 			expect: func(repo *mocks.MockSessionRepository, verifier *passwordmocks.MockVerifier) {
-				verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").Return(identityID, nil)
+				verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").Return(verified, nil)
 				repo.EXPECT().DeleteExpired(mock.Anything, mock.Anything, mock.Anything).Return(errDB)
 			},
 		},
@@ -251,7 +312,7 @@ func TestSessionService_Login_Errors(t *testing.T) {
 			expect: func(repo *mocks.MockSessionRepository, verifier *passwordmocks.MockVerifier) {
 				expectLogin(repo, verifier)
 				repo.EXPECT().DeleteByHash(mock.Anything, mock.Anything).Return(nil)
-				repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(repository.SessionRecord{}, errDB)
+				repo.EXPECT().Insert(mock.Anything, mock.Anything, passwordHash).Return(repository.SessionRecord{}, errDB)
 			},
 		},
 	}
@@ -379,7 +440,7 @@ func TestSessionService_ErrorsHoldNoSecrets(t *testing.T) {
 	t.Parallel()
 	svc, repo, verifier := newTestService(t)
 	verifier.EXPECT().Verify(mock.Anything, "ada", "correct horse").
-		Return(uuid.Nil(), &passwordservice.RejectedError{Reason: passwordservice.ErrUnknownCredentials})
+		Return(passwordservice.Verified{}, &passwordservice.RejectedError{Reason: passwordservice.ErrUnknownCredentials})
 	repo.EXPECT().GetByHash(mock.Anything, mock.Anything).Return(storedRecord(now.Add(-48*time.Hour), now), nil)
 
 	_, loginErr := svc.Login(t.Context(), LoginInput{Username: "ada", Password: "correct horse"})

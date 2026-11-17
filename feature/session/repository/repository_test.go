@@ -1,10 +1,12 @@
 package repository
 
 import (
+	"errors"
 	"testing"
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,6 +15,13 @@ import (
 )
 
 var baseTime = time.Date(2026, time.November, 17, 12, 0, 0, 123456000, time.UTC)
+
+const (
+	// passwordHash is the hash of the password of every identity that insertIdentity stores.
+	passwordHash = "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$a2V5"
+	// lockNotAvailable is the PostgreSQL error code of a lock timeout.
+	lockNotAvailable = "55P03"
+)
 
 // newTestRepo returns a repository on a new, empty database, and the database for setting up the
 // identities that records refer to.
@@ -24,8 +33,9 @@ func newTestRepo(t *testing.T) (*PostgresSessionRepository, *sqlx.DB) {
 	return NewPostgresSessionRepository(db), db
 }
 
-// insertIdentity stores an identity row for records to refer to and returns its ID. The identities
-// table belongs to the identity feature, so the row is written directly.
+// insertIdentity stores an identity row with a password of passwordHash, for records to refer to, and returns
+// its ID. The identities and passwords tables belong to the identity and password features, so the rows are
+// written directly.
 func insertIdentity(t *testing.T, db *sqlx.DB) uuid.UUID {
 	t.Helper()
 
@@ -35,6 +45,9 @@ func insertIdentity(t *testing.T, db *sqlx.DB) uuid.UUID {
 		VALUES ($1, $2, 'Owner', $1, $1, $3, $3)`,
 		id, "owner-"+id.String(), baseTime,
 	)
+	require.NoError(t, err)
+	_, err = db.ExecContext(t.Context(),
+		`INSERT INTO passwords (identity_id, hash, set_at) VALUES ($1, $2, $3)`, id, passwordHash, baseTime)
 	require.NoError(t, err)
 
 	return id
@@ -62,7 +75,7 @@ func newRecord(identityID uuid.UUID) SessionRecord {
 func insertRecord(t *testing.T, repo *PostgresSessionRepository, rec SessionRecord) SessionRecord {
 	t.Helper()
 
-	stored, err := repo.Insert(t.Context(), rec)
+	stored, err := repo.Insert(t.Context(), rec, passwordHash)
 	require.NoError(t, err)
 
 	return stored
@@ -103,7 +116,7 @@ func TestPostgresSessionRepository_InsertAndGet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			stored, err := repo.Insert(t.Context(), tt.rec)
+			stored, err := repo.Insert(t.Context(), tt.rec, passwordHash)
 			require.NoError(t, err)
 			assert.Equal(t, tt.rec, stored)
 
@@ -114,13 +127,60 @@ func TestPostgresSessionRepository_InsertAndGet(t *testing.T) {
 	}
 }
 
-func TestPostgresSessionRepository_Insert_IdentityNotFound(t *testing.T) {
+// TestPostgresSessionRepository_Insert_PasswordChanged checks that no session is stored once the password that
+// its login verified is gone, so that a login can't outlast a change of the password.
+func TestPostgresSessionRepository_Insert_PasswordChanged(t *testing.T) {
 	t.Parallel()
-	repo, _ := newTestRepo(t)
+	repo, db := newTestRepo(t)
+	changed, deleted := insertIdentity(t, db), insertIdentity(t, db)
+	_, err := db.ExecContext(t.Context(), `UPDATE passwords SET hash = 'changed' WHERE identity_id = $1`, changed)
+	require.NoError(t, err)
+	_, err = db.ExecContext(t.Context(), `DELETE FROM passwords WHERE identity_id = $1`, deleted)
+	require.NoError(t, err)
 
-	_, err := repo.Insert(t.Context(), newRecord(uuid.NewV4()))
+	tests := []struct {
+		name       string
+		identityID uuid.UUID
+	}{
+		{name: "changed since", identityID: changed},
+		{name: "deleted since", identityID: deleted},
+		{name: "unknown identity", identityID: uuid.NewV4()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rec := newRecord(tt.identityID)
 
-	assert.ErrorIs(t, err, ErrIdentityNotFound)
+			_, err := repo.Insert(t.Context(), rec, passwordHash)
+
+			require.ErrorIs(t, err, ErrPasswordChanged)
+			assertGone(t, repo, rec)
+		})
+	}
+}
+
+// TestPostgresSessionRepository_Insert_LocksPassword checks that a change of the password waits for an insert
+// that holds it, so that the change comes after the session and ends it with the others.
+func TestPostgresSessionRepository_Insert_LocksPassword(t *testing.T) {
+	t.Parallel()
+	_, db := newTestRepo(t)
+	identityID := insertIdentity(t, db)
+	login, err := db.BeginTxx(t.Context(), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = login.Rollback() })
+	_, err = NewPostgresSessionRepository(login).Insert(t.Context(), newRecord(identityID), passwordHash)
+	require.NoError(t, err)
+
+	change, err := db.BeginTxx(t.Context(), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = change.Rollback() })
+	_, err = change.ExecContext(t.Context(), `SET LOCAL lock_timeout = '100ms'`)
+	require.NoError(t, err)
+	_, err = change.ExecContext(t.Context(), `UPDATE passwords SET hash = 'changed' WHERE identity_id = $1`, identityID)
+
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	require.True(t, ok, "want a lock timeout, got %v", err)
+	assert.Equal(t, lockNotAvailable, pgErr.Code)
 }
 
 func TestPostgresSessionRepository_Insert_DuplicateHashFails(t *testing.T) {
@@ -131,7 +191,7 @@ func TestPostgresSessionRepository_Insert_DuplicateHashFails(t *testing.T) {
 	duplicate := newRecord(identityID)
 	duplicate.TokenHash = rec.TokenHash
 
-	_, err := repo.Insert(t.Context(), duplicate)
+	_, err := repo.Insert(t.Context(), duplicate, passwordHash)
 
 	assert.Error(t, err)
 }
