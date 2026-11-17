@@ -30,7 +30,8 @@ func TestDocs(t *testing.T) {
 	got := Docs().JSON()
 
 	if *update {
-		require.NoError(t, os.WriteFile(golden, got, 0o600))
+		// The trailing newline keeps the golden file stable under the end-of-file-fixer hook.
+		require.NoError(t, os.WriteFile(golden, append(slices.Clone(got), '\n'), 0o600))
 	}
 	want, err := os.ReadFile(golden)
 	require.NoError(t, err)
