@@ -1,0 +1,5213 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "pkgsilo API",
+    "version": "v1",
+    "description": "The HTTP API of pkgsilo. Responses are JSON, in a resource or collection envelope, and problems are RFC 9457 Problem Details. Policies decide what the caller may do: an object that the caller may not read is answered like a missing one, and fields that it may not read are absent."
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "The health of pkgsilo, for load balancers and monitoring. It needs no authentication."
+    },
+    {
+      "name": "Identities",
+      "description": "An identity is a user of pkgsilo, a person or an agent, with a unique username and a display name. It authenticates with API keys, and the policies decide what it may do. Fields that the policies don't allow the caller to read are absent from a response."
+    },
+    {
+      "name": "API keys",
+      "description": "An API key authenticates requests as the identity that it belongs to, in the X-API-Key header. Its key is returned only once, when it's created. Fields that the policies don't allow the caller to read are absent from a response."
+    },
+    {
+      "name": "Groups",
+      "description": "A group is a named set of identities, its members, which policies can apply to all at once. Fields that the policies don't allow the caller to read are absent from a response."
+    },
+    {
+      "name": "Policies",
+      "description": "A policy holds Cedar statements that permit or forbid identities and groups actions on the resources of pkgsilo. Whatever no policy permits is denied. Fields that the policies don't allow the caller to read are absent from a response."
+    }
+  ],
+  "paths": {
+    "/api/v1/groups": {
+      "get": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "List groups",
+        "description": "Lists the groups that the caller may read, oldest first. The others are left out, as if they didn't exist.",
+        "operationId": "listGroups",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "The zero-based position of the first resource of the page.",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of resources in the page.",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of groups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GroupResponse"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Invalid query parameters: `https://pkgsilo/problems/invalid-query`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-query"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Create a group",
+        "description": "Creates a group without members.",
+        "operationId": "createGroup",
+        "requestBody": {
+          "description": "The new group.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new group.",
+            "headers": {
+              "Location": {
+                "description": "The path of the new resource.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GroupResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A problem of one of these types:\n\n- Group name taken: `https://pkgsilo/problems/group-name-taken`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 409
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-name-taken"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{id}": {
+      "delete": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Delete a group",
+        "description": "Deletes a group with its memberships. Its members are kept.",
+        "operationId": "deleteGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the group.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The group is deleted."
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Group not found: `https://pkgsilo/problems/group-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Get a group",
+        "description": "Returns a group. One that the caller may not read is answered like a missing one.",
+        "operationId": "getGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the group.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GroupResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Group not found: `https://pkgsilo/problems/group-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Change a group",
+        "description": "Changes the fields of a group that the JSON Merge Patch sets, and keeps the others.",
+        "operationId": "patchGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the group.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The fields to change.",
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchGroupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The changed group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GroupResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Group not found: `https://pkgsilo/problems/group-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A problem of one of these types:\n\n- Group name taken: `https://pkgsilo/problems/group-name-taken`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 409
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-name-taken"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Replace a group",
+        "description": "Sets every settable field of a group.",
+        "operationId": "replaceGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the group.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The fields of the group.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceGroupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The changed group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GroupResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Group not found: `https://pkgsilo/problems/group-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A problem of one of these types:\n\n- Group name taken: `https://pkgsilo/problems/group-name-taken`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 409
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-name-taken"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{id}/members": {
+      "get": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "List group members",
+        "description": "Lists the members of a group, in the order they were added.",
+        "operationId": "listGroupMembers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the group.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "The zero-based position of the first resource of the page.",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of resources in the page.",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of members.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MemberResponse"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Invalid query parameters: `https://pkgsilo/problems/invalid-query`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-query"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Group not found: `https://pkgsilo/problems/group-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{id}/members/{identityID}": {
+      "delete": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Remove a group member",
+        "description": "Removes an identity from a group.",
+        "operationId": "removeGroupMember",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the group.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "identityID",
+            "in": "path",
+            "description": "The ID of the identity, the member.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The identity is no member of the group."
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Group not found: `https://pkgsilo/problems/group-not-found`\n- Member not found: `https://pkgsilo/problems/member-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-not-found",
+                        "https://pkgsilo/problems/member-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Add a group member",
+        "description": "Adds an identity to a group. The request has no body.",
+        "operationId": "addGroupMember",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the group.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "identityID",
+            "in": "path",
+            "description": "The ID of the identity, the member.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The identity is a member of the group."
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Group not found: `https://pkgsilo/problems/group-not-found`\n- Identity not found: `https://pkgsilo/problems/identity-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/group-not-found",
+                        "https://pkgsilo/problems/identity-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Check the health",
+        "description": "Reports whether pkgsilo can do its work: healthy, degraded or unhealthy.",
+        "operationId": "checkHealth",
+        "responses": {
+          "200": {
+            "description": "pkgsilo is healthy or degraded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "pkgsilo is unhealthy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/identities": {
+      "get": {
+        "tags": [
+          "Identities"
+        ],
+        "summary": "List identities",
+        "description": "Lists the identities that the caller may read, oldest first. The others are left out, as if they didn't exist.",
+        "operationId": "listIdentities",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "The zero-based position of the first resource of the page.",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of resources in the page.",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of identities.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IdentityResponse"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Invalid query parameters: `https://pkgsilo/problems/invalid-query`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-query"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Identities"
+        ],
+        "summary": "Create an identity",
+        "description": "Creates an identity without API keys or groups.",
+        "operationId": "createIdentity",
+        "requestBody": {
+          "description": "The new identity.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new identity.",
+            "headers": {
+              "Location": {
+                "description": "The path of the new resource.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/IdentityResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A problem of one of these types:\n\n- Username taken: `https://pkgsilo/problems/username-taken`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 409
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/username-taken"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identities/{identityID}/api-keys": {
+      "get": {
+        "tags": [
+          "API keys"
+        ],
+        "summary": "List API keys",
+        "description": "Lists the API keys of an identity that the caller may read, oldest first. The others are left out, as if they didn't exist.",
+        "operationId": "listAPIKeys",
+        "parameters": [
+          {
+            "name": "identityID",
+            "in": "path",
+            "description": "The ID of the identity that the API keys belong to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "The zero-based position of the first resource of the page.",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of resources in the page.",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of API keys.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/KeyResponse"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Invalid query parameters: `https://pkgsilo/problems/invalid-query`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-query"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Identity not found: `https://pkgsilo/problems/identity-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/identity-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "API keys"
+        ],
+        "summary": "Create an API key",
+        "description": "Creates an API key for an identity. The response holds its key, which no other response does, and isn't cached.",
+        "operationId": "createAPIKey",
+        "parameters": [
+          {
+            "name": "identityID",
+            "in": "path",
+            "description": "The ID of the identity that the API keys belong to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The new API key.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new API key with its key.",
+            "headers": {
+              "Location": {
+                "description": "The path of the new resource.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CreatedKeyResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Identity not found: `https://pkgsilo/problems/identity-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/identity-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identities/{identityID}/api-keys/{id}": {
+      "delete": {
+        "tags": [
+          "API keys"
+        ],
+        "summary": "Delete an API key",
+        "description": "Deletes an API key, which no longer authenticates requests from then on.",
+        "operationId": "deleteAPIKey",
+        "parameters": [
+          {
+            "name": "identityID",
+            "in": "path",
+            "description": "The ID of the identity that the API keys belong to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the API key.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The API key is deleted."
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- API key not found: `https://pkgsilo/problems/api-key-not-found`\n- Identity not found: `https://pkgsilo/problems/identity-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/api-key-not-found",
+                        "https://pkgsilo/problems/identity-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "API keys"
+        ],
+        "summary": "Get an API key",
+        "description": "Returns an API key, without its key. One that the caller may not read is answered like a missing one.",
+        "operationId": "getAPIKey",
+        "parameters": [
+          {
+            "name": "identityID",
+            "in": "path",
+            "description": "The ID of the identity that the API keys belong to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the API key.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/KeyResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- API key not found: `https://pkgsilo/problems/api-key-not-found`\n- Identity not found: `https://pkgsilo/problems/identity-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/api-key-not-found",
+                        "https://pkgsilo/problems/identity-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identities/{id}": {
+      "delete": {
+        "tags": [
+          "Identities"
+        ],
+        "summary": "Delete an identity",
+        "description": "Deletes an identity, with its API keys and group memberships.",
+        "operationId": "deleteIdentity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the identity.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The identity is deleted."
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Identity not found: `https://pkgsilo/problems/identity-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/identity-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Identities"
+        ],
+        "summary": "Get an identity",
+        "description": "Returns an identity. One that the caller may not read is answered like a missing one.",
+        "operationId": "getIdentity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the identity.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/IdentityResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Identity not found: `https://pkgsilo/problems/identity-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/identity-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Identities"
+        ],
+        "summary": "Change an identity",
+        "description": "Changes the fields of an identity that the JSON Merge Patch sets, and keeps the others.",
+        "operationId": "patchIdentity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the identity.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The fields to change.",
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchIdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The changed identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/IdentityResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Identity not found: `https://pkgsilo/problems/identity-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/identity-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A problem of one of these types:\n\n- Username taken: `https://pkgsilo/problems/username-taken`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 409
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/username-taken"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Identities"
+        ],
+        "summary": "Replace an identity",
+        "description": "Sets every settable field of an identity.",
+        "operationId": "replaceIdentity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the identity.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The fields of the identity.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceIdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The changed identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/IdentityResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Identity not found: `https://pkgsilo/problems/identity-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/identity-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A problem of one of these types:\n\n- Username taken: `https://pkgsilo/problems/username-taken`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 409
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/username-taken"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/policies": {
+      "get": {
+        "tags": [
+          "Policies"
+        ],
+        "summary": "List policies",
+        "description": "Lists the policies that the caller may read, oldest first. The others are left out, as if they didn't exist.",
+        "operationId": "listPolicies",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "The zero-based position of the first resource of the page.",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of resources in the page.",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of policies.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PolicyResponse"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Invalid query parameters: `https://pkgsilo/problems/invalid-query`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-query"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Policies"
+        ],
+        "summary": "Create a policy",
+        "description": "Creates a policy, which applies from then on. Its source must be valid Cedar that matches the schema of pkgsilo.",
+        "operationId": "createPolicy",
+        "requestBody": {
+          "description": "The new policy.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new policy.",
+            "headers": {
+              "Location": {
+                "description": "The path of the new resource.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PolicyResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A problem of one of these types:\n\n- Policy name taken: `https://pkgsilo/problems/policy-name-taken`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 409
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/policy-name-taken"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`\n- Invalid policy: `https://pkgsilo/problems/invalid-policy`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body",
+                        "https://pkgsilo/problems/invalid-policy"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/policies/{id}": {
+      "delete": {
+        "tags": [
+          "Policies"
+        ],
+        "summary": "Delete a policy",
+        "description": "Deletes a policy, which no longer applies from then on.",
+        "operationId": "deletePolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the policy.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The policy is deleted."
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Policy not found: `https://pkgsilo/problems/policy-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/policy-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Policies"
+        ],
+        "summary": "Get a policy",
+        "description": "Returns a policy. One that the caller may not read is answered like a missing one.",
+        "operationId": "getPolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the policy.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PolicyResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Policy not found: `https://pkgsilo/problems/policy-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/policy-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Policies"
+        ],
+        "summary": "Change a policy",
+        "description": "Changes the fields of a policy that the JSON Merge Patch sets, and keeps the others.",
+        "operationId": "patchPolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the policy.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The fields to change.",
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchPolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The changed policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PolicyResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Policy not found: `https://pkgsilo/problems/policy-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/policy-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A problem of one of these types:\n\n- Policy name taken: `https://pkgsilo/problems/policy-name-taken`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 409
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/policy-name-taken"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`\n- Invalid policy: `https://pkgsilo/problems/invalid-policy`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body",
+                        "https://pkgsilo/problems/invalid-policy"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Policies"
+        ],
+        "summary": "Replace a policy",
+        "description": "Sets every settable field of a policy.",
+        "operationId": "replacePolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the policy.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The fields of the policy.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplacePolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The changed policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PolicyResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A problem of one of these types:\n\n- Bad Request: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 400
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A problem of one of these types:\n\n- Unauthorized: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 401
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A problem of one of these types:\n\n- Forbidden: `about:blank`\n- Fields denied: `https://pkgsilo/problems/fields-denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 403
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank",
+                        "https://pkgsilo/problems/fields-denied"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A problem of one of these types:\n\n- Policy not found: `https://pkgsilo/problems/policy-not-found`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 404
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/policy-not-found"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A problem of one of these types:\n\n- Policy name taken: `https://pkgsilo/problems/policy-name-taken`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 409
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/policy-name-taken"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "A problem of one of these types:\n\n- Request Entity Too Large: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 413
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "A problem of one of these types:\n\n- Unsupported Media Type: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 415
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A problem of one of these types:\n\n- Invalid request body: `https://pkgsilo/problems/invalid-body`\n- Invalid policy: `https://pkgsilo/problems/invalid-policy`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 422
+                    },
+                    "type": {
+                      "enum": [
+                        "https://pkgsilo/problems/invalid-body",
+                        "https://pkgsilo/problems/invalid-policy"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A problem of one of these types:\n\n- Internal Server Error: `about:blank`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "const": 500
+                    },
+                    "type": {
+                      "enum": [
+                        "about:blank"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateGroupRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "CreateIdentityRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "The unique name of the identity: 3 to 64 lowercase letters and digits, optionally separated by single '.', '_' or '-', such as ada.lovelace."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The human-readable name of the identity, such as Ada Lovelace: 1 to 128 characters, without line breaks."
+          }
+        },
+        "required": [
+          "username",
+          "displayName"
+        ],
+        "additionalProperties": false
+      },
+      "CreateKeyRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "CreatePolicyRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "CreatedKeyResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "identityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "keySuffix": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "GroupResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "updatedBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "components": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "IdentityResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The identity's ID.",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string",
+            "description": "The unique name it is known by."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Its human-readable name."
+          },
+          "createdBy": {
+            "type": "string",
+            "description": "The identity that created it, the nil UUID if pkgsilo did.",
+            "format": "uuid"
+          },
+          "updatedBy": {
+            "type": "string",
+            "description": "The identity that last changed it, the nil UUID if pkgsilo did.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When it was created.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "When it was last changed.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "KeyResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "identityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "keySuffix": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "MemberResponse": {
+        "type": "object",
+        "properties": {
+          "identityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "offset": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "nextOffset": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "total": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "offset",
+          "limit",
+          "nextOffset"
+        ],
+        "additionalProperties": false
+      },
+      "PatchGroupRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PatchIdentityRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "The new username, with the rules of the username of a new identity."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The new display name, with the rules of the display name of a new identity."
+          }
+        },
+        "additionalProperties": false
+      },
+      "PatchPolicyRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PolicyResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "updatedBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "Problem": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "Explains this occurrence of the problem."
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "description": "The invalid values of the request, for the problems about them."
+          },
+          "instance": {
+            "type": "string",
+            "description": "Identifies this occurrence.",
+            "format": "uri-reference"
+          },
+          "status": {
+            "type": "integer",
+            "description": "The HTTP status of the response."
+          },
+          "title": {
+            "type": "string",
+            "description": "A summary of the problem type."
+          },
+          "type": {
+            "type": "string",
+            "description": "Identifies the problem type, about:blank for a problem that means nothing beyond its status.",
+            "format": "uri-reference"
+          }
+        },
+        "description": "An RFC 9457 Problem Details object. Its type tells problems apart, and other members than those below may extend it.",
+        "required": [
+          "type",
+          "title",
+          "status"
+        ]
+      },
+      "ReplaceGroupRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "ReplaceIdentityRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "The unique name of the identity: 3 to 64 lowercase letters and digits, optionally separated by single '.', '_' or '-', such as ada.lovelace."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The human-readable name of the identity, such as Ada Lovelace: 1 to 128 characters, without line breaks."
+          }
+        },
+        "required": [
+          "username",
+          "displayName"
+        ],
+        "additionalProperties": false
+      },
+      "ReplacePolicyRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "pointer": {
+            "type": "string"
+          },
+          "parameter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "description": "An API key of an identity, which the request acts as.",
+        "name": "X-API-Key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "apiKey": []
+    }
+  ]
+}

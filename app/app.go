@@ -2,6 +2,7 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"pkgsilo/core/authn"
 	"pkgsilo/core/authz"
 	"pkgsilo/core/mcpserver"
+	"pkgsilo/core/openapi"
 	"pkgsilo/core/router"
 	apikeyapi "pkgsilo/feature/apikey/api"
 	apikeyrepo "pkgsilo/feature/apikey/repository"
@@ -39,15 +41,22 @@ import (
 const (
 	// apiPath is the path under which the API is mounted.
 	apiPath = "/api/v1"
-	// healthPath is the path of the health check, under apiPath.
-	healthPath = "/health"
+	// healthPath is the path of the health check, under apiPath, like the paths of the other features below.
+	healthPath     = "/health"
+	identitiesPath = "/identities"
+	apiKeysPath    = "/identities/{identityID}/api-keys"
+	groupsPath     = "/groups"
+	policiesPath   = "/policies"
+	// specPath is the path of the OpenAPI document, under apiPath.
+	specPath = "/openapi.json"
 	// mcpPath is the path of the MCP endpoint, at the root, outside apiPath.
 	mcpPath = "/mcp"
 )
 
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
 // on the router that opts configures, and the MCP endpoint at /mcp, which serves the tools of the
-// features to agents. All routes but the health check need an authenticated request.
+// features to agents. The OpenAPI document of the API is at /api/v1/openapi.json. All routes but the health
+// check and the document need an authenticated request.
 // API keys are hashed under the secret apiKeyPepper. Requests and errors are logged to logger, and
 // metrics are recorded with meterProvider: every request but a health check is measured, and so are
 // authentications and authorization decisions. Every request but a health check gets a server span from
@@ -74,16 +83,44 @@ func NewHandler(
 	))
 	r.Route(apiPath, func(r chi.Router) {
 		r.Mount(healthPath, healthapi.NewHandler(health, logger).Routes())
+		r.Get(specPath, Docs().ServeHTTP)
 		r.Group(func(r chi.Router) {
 			r.Use(authenticate)
-			r.Mount("/identities", identityapi.NewHandler(identities, logger).Routes())
-			r.Mount("/identities/{identityID}/api-keys", apikeyapi.NewHandler(apiKeys, logger).Routes())
-			r.Mount("/groups", groupapi.NewHandler(groups, logger).Routes())
-			r.Mount("/policies", policyapi.NewHandler(policies, logger).Routes())
+			r.Mount(identitiesPath, identityapi.NewHandler(identities, logger).Routes())
+			r.Mount(apiKeysPath, apikeyapi.NewHandler(apiKeys, logger).Routes())
+			r.Mount(groupsPath, groupapi.NewHandler(groups, logger).Routes())
+			r.Mount(policiesPath, policyapi.NewHandler(policies, logger).Routes())
 		})
 	})
 
 	return r
+}
+
+// Docs returns the OpenAPI document of the routes of NewHandler under /api/v1, but for the document and its
+// UI. It panics if a feature describes its routes wrongly, a bug found when the API is built.
+func Docs() *openapi.Document {
+	spec := openapi.Spec{
+		Info: openapi.Info{
+			Title:   "pkgsilo API",
+			Version: "v1",
+			Description: "The HTTP API of pkgsilo. Responses are JSON, in a resource or collection envelope, and " +
+				"problems are RFC 9457 Problem Details. Policies decide what the caller may do: an object that the " +
+				"caller may not read is answered like a missing one, and fields that it may not read are absent.",
+		},
+		Security: apikeyapi.SecurityScheme(),
+	}
+	spec.MountPublic(apiPath+healthPath, healthapi.Docs())
+	spec.Mount(apiPath+identitiesPath, identityapi.Docs())
+	spec.Mount(apiPath+apiKeysPath, apikeyapi.Docs())
+	spec.Mount(apiPath+groupsPath, groupapi.Docs())
+	spec.Mount(apiPath+policiesPath, policyapi.Docs())
+
+	doc, err := spec.Build()
+	if err != nil {
+		panic(fmt.Sprintf("app: %v", err))
+	}
+
+	return doc
 }
 
 // schema returns the Cedar schema that saved policies are validated against: the resource types and
