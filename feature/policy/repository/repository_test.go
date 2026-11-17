@@ -16,7 +16,7 @@ import (
 )
 
 // seededPolicies is the number of policies that the migrations create.
-const seededPolicies = 2
+const seededPolicies = 3
 
 // newTestRepo returns a repository on a new database, which holds the seeded policies alone.
 func newTestRepo(t *testing.T) (*PostgresPolicyRepository, *sqlx.DB) {
@@ -130,8 +130,8 @@ func TestPostgresPolicyRepository_ListAll(t *testing.T) {
 	got, err := repo.ListAll(t.Context())
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"read-own-identity", "manage-own-api-keys"},
-		[]string{got[0].Name, got[1].Name}, "the seeded policies come first")
+	assert.Equal(t, []string{"read-own-identity", "manage-own-api-keys", "manage-own-password"},
+		[]string{got[0].Name, got[1].Name, got[2].Name}, "the seeded policies come first")
 	assert.Equal(t, []PolicyRecord{first, second, third}, userPolicies(t, got))
 }
 

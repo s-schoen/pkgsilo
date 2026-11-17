@@ -132,8 +132,8 @@ func assertFieldsDenied(t *testing.T, resp *apitest.Response, pointers ...string
 //  1. Create a policy: 201 with the new policy, its Location under /api/v1/policies, and its audit
 //     fields set by the server.
 //  2. Get it through the Location: the created policy.
-//  3. List the policies: read-own-identity and manage-own-api-keys, which the migrations seed, administrators,
-//     which the first start created, then the new one.
+//  3. List the policies: read-own-identity, manage-own-api-keys and manage-own-password, which the migrations
+//     seed, administrators, which the first start created, then the new one.
 //  4. Replace its name and source: 200 with the new values, the ID and creation time kept and the
 //     update time advanced.
 //  5. Get it again: the replaced policy, so the change was stored.
@@ -160,11 +160,12 @@ func TestPolicies_Lifecycle(t *testing.T) {
 
 	// 3. List.
 	listed := listPolicies(api)
-	require.Len(t, listed, 4)
+	require.Len(t, listed, 5)
 	assert.Equal(t, envelope.Visible("read-own-identity"), listed[0].Name)
 	assert.Equal(t, envelope.Visible("manage-own-api-keys"), listed[1].Name)
-	assert.Equal(t, envelope.Visible("administrators"), listed[2].Name)
-	assert.Equal(t, readIdentities, listed[3])
+	assert.Equal(t, envelope.Visible("manage-own-password"), listed[2].Name)
+	assert.Equal(t, envelope.Visible("administrators"), listed[3].Name)
+	assert.Equal(t, readIdentities, listed[4])
 
 	// 4. Replace.
 	const replacedSource = `permit (principal, action in Action::"read", resource);`
@@ -334,12 +335,12 @@ func statements(n int) string {
 
 // TestPolicies_StatementLimit checks that all policies together hold no more than 1,000 statements:
 //
-//  1. Create two policies of 360 statements each, and one of 277: 201 for each, since the policies of a
-//     new database hold three, which makes 1,000.
+//  1. Create two policies of 360 statements each, and one of 276: 201 for each, since the policies of a
+//     new database hold four, which makes 1,000.
 //  2. Create a policy of one statement: 422 invalid-policy.
-//  3. Replace the policy of 277 statements with 278: 422 invalid-policy. Replace it with itself: 200, since
+//  3. Replace the policy of 276 statements with 277: 422 invalid-policy. Replace it with itself: 200, since
 //     its own statements are counted once.
-//  4. Replace the policy of 277 statements with 276, and create the policy of one statement again: 200 and
+//  4. Replace the policy of 276 statements with 275, and create the policy of one statement again: 200 and
 //     201.
 func TestPolicies_StatementLimit(t *testing.T) {
 	t.Parallel()
@@ -349,25 +350,25 @@ func TestPolicies_StatementLimit(t *testing.T) {
 	// 1. Create.
 	addPolicy(t, api, "first", statements(360))
 	addPolicy(t, api, "second", statements(360))
-	third := addPolicy(t, api, "third", statements(277))
+	third := addPolicy(t, api, "third", statements(276))
 	thirdPath := policiesPath + "/" + third.ID.String()
 
 	// 2. Create one more statement.
 	assertInvalidPolicy(t, api.Post(policiesPath, policyBody(t, "one", statements(1))), reason)
 
 	// 3. Replace.
-	assertInvalidPolicy(t, api.Put(thirdPath, policyBody(t, "third", statements(278))), reason)
-	api.Put(thirdPath, policyBody(t, "third", statements(277))).AssertStatus(http.StatusOK)
+	assertInvalidPolicy(t, api.Put(thirdPath, policyBody(t, "third", statements(277))), reason)
+	api.Put(thirdPath, policyBody(t, "third", statements(276))).AssertStatus(http.StatusOK)
 
 	// 4. Make room.
-	api.Put(thirdPath, policyBody(t, "third", statements(276))).AssertStatus(http.StatusOK)
+	api.Put(thirdPath, policyBody(t, "third", statements(275))).AssertStatus(http.StatusOK)
 	addPolicy(t, api, "one", statements(1))
 }
 
 // TestPolicies_SeededPassChecks checks that the policies of a new database pass the checks of a saved policy:
 //
-//  1. List the policies: read-own-identity and manage-own-api-keys, which the migrations seed, and
-//     administrators, which the first start created.
+//  1. List the policies: read-own-identity, manage-own-api-keys and manage-own-password, which the migrations
+//     seed, and administrators, which the first start created.
 //  2. Replace each with itself: 200.
 func TestPolicies_SeededPassChecks(t *testing.T) {
 	t.Parallel()
@@ -375,7 +376,7 @@ func TestPolicies_SeededPassChecks(t *testing.T) {
 
 	// 1. List.
 	seeded := listPolicies(api)
-	require.Len(t, seeded, 3)
+	require.Len(t, seeded, 4)
 
 	// 2. Replace.
 	for _, p := range seeded {
@@ -422,7 +423,7 @@ func TestPolicies_ProtectedByPolicies(t *testing.T) {
 		asAda.Post(policiesPath,
 			policyBody(t, "ada", `permit (principal == Identity::"`+ada.ID.String()+`", action, resource);`)),
 		"#/name", "#/source")
-	assert.Len(t, listPolicies(api), 3)
+	assert.Len(t, listPolicies(api), 4)
 }
 
 // TestPolicies_SecondInstance checks that a policy change applies on the next request of every instance on

@@ -33,6 +33,10 @@ import (
 	identityrepo "pkgsilo/feature/identity/repository"
 	identityservice "pkgsilo/feature/identity/service"
 	identitytools "pkgsilo/feature/identity/tools"
+	passwordapi "pkgsilo/feature/password/api"
+	passwordrepo "pkgsilo/feature/password/repository"
+	passwordservice "pkgsilo/feature/password/service"
+	passwordtools "pkgsilo/feature/password/tools"
 	policyapi "pkgsilo/feature/policy/api"
 	policyrepo "pkgsilo/feature/policy/repository"
 	policyservice "pkgsilo/feature/policy/service"
@@ -46,6 +50,7 @@ const (
 	healthPath     = "/health"
 	identitiesPath = "/identities"
 	apiKeysPath    = "/identities/{identityID}/api-keys"
+	passwordPath   = "/identities/{identityID}/password"
 	groupsPath     = "/groups"
 	policiesPath   = "/policies"
 	// specPath is the path of the OpenAPI document, under apiPath.
@@ -72,6 +77,7 @@ func NewHandler(
 	identities := identityservice.NewIdentityService(identityrepo.NewPostgresIdentityRepository(db), authorizer)
 	groups := groupservice.NewGroupService(grouprepo.NewPostgresGroupRepository(db), authorizer)
 	apiKeys := apikeyservice.NewAPIKeyService(apikeyrepo.NewPostgresAPIKeyRepository(db), authorizer, apiKeyPepper)
+	passwords := passwordservice.NewPasswordService(passwordrepo.NewPostgresPasswordRepository(db), authorizer)
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema())
 
 	opts.UnmeasuredPaths = slices.Concat(opts.UnmeasuredPaths, []string{apiPath + healthPath})
@@ -82,6 +88,7 @@ func NewHandler(
 		grouptools.New(groups),
 		policytools.New(policies),
 		apikeytools.New(apiKeys),
+		passwordtools.New(passwords),
 	))
 	r.Route(apiPath, func(r chi.Router) {
 		// Only the API: MCP clients aren't browsers, and the session cookie authenticates only the API.
@@ -92,6 +99,7 @@ func NewHandler(
 			r.Use(authenticate)
 			r.Mount(identitiesPath, identityapi.NewHandler(identities, logger).Routes())
 			r.Mount(apiKeysPath, apikeyapi.NewHandler(apiKeys, logger).Routes())
+			r.Mount(passwordPath, passwordapi.NewHandler(passwords, logger).Routes())
 			r.Mount(groupsPath, groupapi.NewHandler(groups, logger).Routes())
 			r.Mount(policiesPath, policyapi.NewHandler(policies, logger).Routes())
 		})
@@ -117,6 +125,7 @@ func Docs() *openapi.Document {
 	spec.MountPublic(apiPath+healthPath, healthapi.Docs())
 	spec.Mount(apiPath+identitiesPath, identityapi.Docs())
 	spec.Mount(apiPath+apiKeysPath, apikeyapi.Docs())
+	spec.Mount(apiPath+passwordPath, passwordapi.Docs())
 	spec.Mount(apiPath+groupsPath, groupapi.Docs())
 	spec.Mount(apiPath+policiesPath, policyapi.Docs())
 
@@ -135,6 +144,7 @@ func schema() string {
 		identityservice.Actions().Declaration(),
 		groupservice.Actions().Declaration(),
 		apikeyservice.Actions().Declaration(),
+		passwordservice.Actions().Declaration(),
 		policyservice.Actions().Declaration(),
 	)
 }
