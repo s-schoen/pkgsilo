@@ -46,5 +46,4 @@ the same features with the same authorization.
 - NEVER create git commits or branches on your own unless you're explicitly told so
 - Every commit passes the prek hooks (`prek.toml`): when one fails, fix what it reports or stage the
   files it rewrote, then commit again.
-- Write commit messages as Conventional Commits (`type(scope): subject`, as in `git log`); the
-  commit-msg hook rejects anything else.
+- NEVER add a trailer like Co-Authored-By to commit messages
