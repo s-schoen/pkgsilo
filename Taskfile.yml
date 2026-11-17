@@ -60,6 +60,12 @@ tasks:
     cmds:
       - mockery
 
+  "openapi:generate":
+    desc: Write the OpenAPI document to build/openapi.json without starting the server
+    cmds:
+      - mkdir -p build
+      - go run ./cmd/openapi > build/openapi.json
+
   "hooks:install":
     cmds:
       - prek install
