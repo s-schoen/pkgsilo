@@ -13,10 +13,10 @@ var errHiddenFieldEncoded = errors.New("envelope: hidden field encoded outside a
 
 // Field is a member of a resource representation that the caller may not be allowed to see. A hidden
 // field is absent from the response, while a visible one is its value, even if that's null. Resource and
-// Collection leave hidden fields out, so a member needs no omitzero option. Every member of their
-// representations but the id is a Field, even one that's never hidden: they leave out every zero member,
-// and a Field is zero only while it's hidden. Encoding a hidden field any other way fails, instead of
-// answering with null.
+// Collection leave hidden fields out. A member is tagged omitzero all the same, which makes it optional in
+// the schemas of core/typeschema. Every member of their representations but the id is a Field, even one
+// that's never hidden: they leave out every zero member, and a Field is zero only while it's hidden.
+// Encoding a hidden field any other way fails, instead of answering with null.
 //
 // The zero Field is hidden. Its members have no JSON names of their own, since MarshalJSONTo encodes the
 // value alone.
