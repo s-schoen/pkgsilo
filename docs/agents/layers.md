@@ -59,6 +59,8 @@ reaches the API's log intact and is answered with a 500 without details.
 
 - A chi handler with `Routes()`, mounted under `/api/v1` in `app/app.go`, in the group behind
   `authn.Require` unless the route is public. Handlers pass `authn.Actor(r)` to the service.
+- **Docs**: `docs.go` describes every route of `Routes()` in the OpenAPI document (see
+  [openapi.md](openapi.md)).
 - **Input** is validated with ozzo-validation and the service's field rules, through `core/request`
   (`DecodeJSON`, `DecodeMergePatch`, `ParsePagination`).
 - **PATCH** takes a JSON Merge Patch with the same members as the `PUT` body, each a `request.Optional`
@@ -67,7 +69,7 @@ reaches the API's log intact and is answered with a 500 without details.
   `WriteCollection`, `WriteProblem`, and `WriteJSON` only for bodies with a format of their own that no
   envelope wraps, such as health checks. A service page becomes a collection with
   `NewPagedCollection`.
-- **Response bodies** hold every member but `id` as an `envelope.Field`, filled with
+- **Response bodies** hold every member but `id` as an `envelope.Field` tagged `omitzero`, filled with
   `envelope.NewField(field.Get())`, or `envelope.Visible` for a member that's never hidden. `Resource`
   and `Collection` leave a hidden field out and keep a visible `null` as `null`. They fail for a member
   that isn't an `envelope.Field`, which they would otherwise leave out when zero.
@@ -75,9 +77,9 @@ reaches the API's log intact and is answered with a 500 without details.
   `envelope.DefineProblemType` in `errors.go`. The generic `about:blank` problems
   (`envelope.NotFoundProblem`, …) are for problems that mean nothing beyond their status.
 - Tests mock the service, mount the handler with `apitest.Mount`, which authenticates every request as
-  `apitest.Actor`, and send requests through an `apitest.Client`, whose `Assert*` methods check
-  responses against the problem values in `errors.go`. `apitest.AssertReadableMembers` checks the
-  response body.
+  `apitest.Actor`, and send requests through an `apitest.Client` that checks every response against the
+  feature's `Docs()` (`.WithDocs`), whose `Assert*` methods check responses against the problem values in
+  `errors.go`. `apitest.AssertReadableMembers` checks the response body.
 
 ## Logging
 

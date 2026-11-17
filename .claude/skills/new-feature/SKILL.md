@@ -44,11 +44,15 @@ every repository error and a denial test for every action the service checks.
 
 ## 4. API
 
-Write `api/{types,errors,handler}.go` and `handler_test.go`. Register the service interface in
-`.mockery.yml` and run `task generate`.
+Read `docs/agents/openapi.md`. Write `api/{types,errors,handler,docs}.go` and `handler_test.go`, whose
+client checks every response against `Docs()`. Register the service interface in `.mockery.yml` and run
+`task generate`.
 
 Done when `go test ./feature/<name>/api/...` passes, with `apitest.AssertReadableMembers` on every
-response type and a field action for every settable request member.
+response type and a field action for every settable request member, and `Docs()` has an operation for every
+route of `Routes()` whose `Problems` hold every problem type its handler answers with: the types of
+`errors.go`, the not-found type of each `request.UUIDParam`, and `envelope.ForbiddenProblem` and
+`request.FieldsDeniedType` where `writeError` answers with them.
 
 ## 5. MCP tools
 
@@ -63,6 +67,9 @@ Tick every item:
 - [ ] `app/app.go`: the service built in `NewHandler`, its handler mounted under `/api/v1` (behind
   `authenticate` unless public), its toolset passed to `mcpserver.NewHandler`.
 - [ ] `app/app.go`: `<name>service.Actions().Declaration()` added in `schema()`.
+- [ ] `app/app.go`: `<name>api.Docs()` mounted in `Docs()` at the same path as its routes.
+- [ ] `go test ./app -run TestDocs -update`, and the diff of `app/testdata/openapi.json` shows exactly the
+  new operations and schemas.
 - [ ] `go test ./app -run TestSchema -update`, and the diff of `app/testdata/schema.cedarschema` shows
   exactly the new type and its actions.
 - [ ] `app/e2e_test.go`: the new tool names in `TestMCP`, in sorted order.
