@@ -5,13 +5,13 @@ go 1.27.0
 toolchain go1.27.4
 
 require (
-	github.com/caarlos0/env/v11 v11.4.1
-	github.com/cedar-policy/cedar-go v1.9.0
+	github.com/caarlos0/env/v11 v11.4.2
+	github.com/cedar-policy/cedar-go v1.9.2
 	github.com/exaring/otelpgx v0.13.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-ozzo/ozzo-validation/v4 v4.5.0
 	github.com/google/jsonschema-go v0.4.3
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lmittmann/tint v1.2.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
@@ -51,7 +51,7 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
-	github.com/go-json-experiment/json v0.0.0-20260820222146-c27c302e5fc3 // indirect
+	github.com/go-json-experiment/json v1.27.2 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
