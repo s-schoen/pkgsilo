@@ -177,7 +177,10 @@ type Spec struct {
 	Info Info
 	// Security is the authentication of every section that isn't public.
 	Security SecurityScheme
-	mounts   []mount
+	// CrossOriginProtected tells that middleware.CrossOriginProtection guards every route, so that every POST,
+	// PUT, PATCH and DELETE may answer with its problem.
+	CrossOriginProtected bool
+	mounts               []mount
 }
 
 // mount is a section at the path where its routes are mounted.

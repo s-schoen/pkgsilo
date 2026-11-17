@@ -17,7 +17,8 @@ do. `feature/identity/api/docs.go` is the reference.
 - `Problems` lists every problem type that the handler answers with: the types of `errors.go`,
   `envelope.ForbiddenProblem`, `request.FieldsDeniedType`, and the not-found type of each `UUIDParam`.
   Build adds the rest itself: the body's 400/413/415/422, the pagination's 400 for a `Collection`, the 401
-  of `authn.Require` and the 500.
+  of `authn.Require`, the 403 of `middleware.CrossOriginProtection` for a POST, PUT, PATCH or DELETE, and the
+  500.
 
 Schemas come from `core/typeschema`, as for the MCP tools: a `jsonschema` tag is a member's description, and
 a member is required unless it's tagged `omitzero` or `omitempty`. Every `envelope.Field` and

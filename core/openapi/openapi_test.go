@@ -227,6 +227,40 @@ func TestBuild_Problems(t *testing.T) {
 			"application/problem+json", "schema", "properties", "type", "enum")))
 }
 
+// TestBuild_CrossOriginProtected checks that a spec with cross-origin protection adds its problem to the
+// operations of every method but the safe ones, and that one without adds it nowhere.
+func TestBuild_CrossOriginProtected(t *testing.T) {
+	t.Parallel()
+	crossOrigin := "https://pkgsilo/problems/cross-origin-request"
+	enum := func(t *testing.T, doc map[string]any, path, method string) any {
+		t.Helper()
+		responses, ok := lookup(t, doc, "paths", path, method, "responses").(map[string]any)
+		require.True(t, ok)
+		if _, ok := responses["403"]; !ok {
+			return nil
+		}
+
+		return lookup(t, responses, "403", "content", "application/problem+json", "schema", "properties", "type",
+			"enum")
+	}
+
+	spec := newSpec()
+	spec.CrossOriginProtected = true
+	spec.Mount("/things", things())
+	doc := build(t, spec)
+
+	assert.Nil(t, enum(t, doc, "/things", "get"), "a GET is never rejected")
+	assert.Equal(t, []any{crossOrigin}, enum(t, doc, "/things", "post"))
+	assert.Equal(t, []any{"about:blank", crossOrigin}, enum(t, doc, "/things/{id}", "patch"))
+	assert.Equal(t, []any{crossOrigin}, enum(t, doc, "/things/{id}", "delete"))
+
+	unprotected := newSpec()
+	unprotected.Mount("/things", things())
+	doc = build(t, unprotected)
+
+	assert.Nil(t, enum(t, doc, "/things", "post"))
+}
+
 // TestBuild_Created checks that a created resource has a Location header.
 func TestBuild_Created(t *testing.T) {
 	t.Parallel()

@@ -16,6 +16,7 @@ import (
 
 	"pkgsilo/core/envelope"
 	"pkgsilo/core/telemetry"
+	groupapi "pkgsilo/feature/group/api"
 	identityapi "pkgsilo/feature/identity/api"
 	"pkgsilo/test/apptest"
 )
@@ -300,4 +301,59 @@ func descendsFrom(span, ancestor sdktrace.ReadOnlySpan, byID map[trace.SpanID]sd
 	}
 
 	return false
+}
+
+// TestBrowserProtections checks what the app does to protect browser users, while other clients notice no
+// difference:
+//
+//  1. Create a group from a cross-site browser request: 403 with a cross-origin-request problem, and no group.
+//  2. Create a group from a browser request without Fetch Metadata whose Origin isn't the API's: 403 again.
+//  3. Create a group from a same-origin browser request: 201, stored by no cache.
+//  4. Create a group without Sec-Fetch-Site and Origin, as curl does: 201.
+//  5. List the groups from a cross-site browser request: 200, since a GET is never rejected.
+//  6. Get the OpenAPI document: it keeps its own no-cache.
+//  7. Call identity_whoami over MCP from a cross-site request: /mcp isn't guarded, so it answers.
+func TestBrowserProtections(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	const groupsPath = "/api/v1/groups"
+	crossOrigin := envelope.DefineProblemType("cross-origin-request", "Cross-origin request", http.StatusForbidden).
+		New(envelope.Occurrence{
+			Detail: "The API accepts state-changing requests from browsers only from its own origin.",
+		})
+
+	// 1. Cross-site.
+	crossSite := api.WithHeader("Sec-Fetch-Site", "cross-site")
+	crossSite.Post(groupsPath, `{"name":"cross-site"}`).AssertProblem(crossOrigin)
+
+	// 2. Mismatched Origin.
+	api.WithHeader("Origin", "https://attacker.example").Post(groupsPath, `{"name":"other-origin"}`).
+		AssertProblem(crossOrigin)
+
+	// 3. Same origin.
+	sameOrigin := api.WithHeader("Sec-Fetch-Site", "same-origin").WithHeader("Origin", "http://example.com").
+		Post(groupsPath, `{"name":"same-origin"}`)
+	sameOrigin.AssertStatus(http.StatusCreated)
+	assert.Equal(t, "no-store", sameOrigin.Header().Get("Cache-Control"))
+
+	// 4. Neither header.
+	api.Post(groupsPath, `{"name":"no-browser"}`).AssertStatus(http.StatusCreated)
+
+	// 5. List cross-site.
+	list := crossSite.Get(groupsPath)
+	var names []string
+	for _, group := range list.DecodeCollection[groupapi.GroupResponse](http.StatusOK).Data {
+		names = append(names, group.Name.Value)
+	}
+	assert.ElementsMatch(t, []string{"administrators", "same-origin", "no-browser"}, names)
+	assert.Equal(t, "no-store", list.Header().Get("Cache-Control"))
+
+	// 6. OpenAPI document.
+	spec := api.Anonymous().Get("/api/v1/openapi.json")
+	spec.AssertStatus(http.StatusOK)
+	assert.Equal(t, "no-cache", spec.Header().Get("Cache-Control"))
+
+	// 7. MCP.
+	mcp := apptest.MCP(t, crossSite.WithHeader("Origin", "https://attacker.example"))
+	assert.Equal(t, "admin", mcp.Call("identity_whoami", "").Decode[identityapi.IdentityResponse]().Username.Value)
 }
