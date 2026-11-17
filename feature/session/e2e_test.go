@@ -17,7 +17,6 @@ import (
 	"pkgsilo/core/envelope"
 	identityapi "pkgsilo/feature/identity/api"
 	sessionapi "pkgsilo/feature/session/api"
-	sessionservice "pkgsilo/feature/session/service"
 	"pkgsilo/test/apitest"
 	"pkgsilo/test/apptest"
 )
@@ -195,30 +194,38 @@ func TestSessions_CrossSiteRequests(t *testing.T) {
 	assert.Empty(t, resp.Header().Values("Set-Cookie"))
 }
 
-// TestSessions_Expiry waits for sessions to exceed their short lifetimes:
+// TestSessions_Expiry ages sessions in the database past the default lifetimes, so that no step depends on how
+// long the steps before it took:
 //
-//  1. Idle timeout: log in, and use the session at once: 200. Wait past the idle timeout and use it: 401.
-//  2. Maximum age: log in, and use the session at once: 200. Wait past the maximum age and use it: 401.
+//  1. Idle timeout: log in, and use the session at once: 200. Set its last use back by the idle timeout and use
+//     it: 401.
+//  2. Maximum age: log in, and use the session at once: 200. Set its expiry to now and use it: 401.
 func TestSessions_Expiry(t *testing.T) {
 	t.Parallel()
-	const short, wait = time.Second, 1500 * time.Millisecond
 	tests := []struct {
-		name      string
-		lifetimes sessionservice.Lifetimes
+		name string
+		// age is the statement that sets a time of the session with the ID $1 to $2.
+		age string
+		to  time.Time
 	}{
-		{name: "idle timeout", lifetimes: sessionservice.Lifetimes{IdleTimeout: short, MaxAge: time.Hour}},
-		{name: "maximum age", lifetimes: sessionservice.Lifetimes{IdleTimeout: time.Hour, MaxAge: short}},
+		{
+			name: "idle timeout",
+			age:  `UPDATE sessions SET last_seen_at = $2 WHERE id = $1`,
+			to:   time.Now().Add(-apptest.DefaultSessionLifetimes.IdleTimeout),
+		},
+		{name: "maximum age", age: `UPDATE sessions SET expires_at = $2 WHERE id = $1`, to: time.Now()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			api := apptest.NewWithSessionLifetimes(t, tt.lifetimes)
+			api, db := apptest.NewWithDB(t)
 			newAda(api)
 
-			// 1., 2. Log in, use, wait and use again.
-			_, asAda := apptest.LogIn(t, api, "ada", adaPassword)
+			// 1., 2. Log in, use, age and use again.
+			created, asAda := apptest.LogIn(t, api, "ada", adaPassword)
 			asAda.Get(currentPath).AssertStatus(http.StatusOK)
-			time.Sleep(wait)
+			_, err := db.ExecContext(t.Context(), tt.age, created.ID, tt.to)
+			require.NoError(t, err)
 			assertUnauthorized(t, asAda.Get(currentPath))
 		})
 	}
