@@ -2,7 +2,6 @@ package authn
 
 import (
 	"context"
-	"errors"
 
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -29,29 +28,12 @@ func NewLoginRecorder(
 // Record runs login in the span pkgsilo.authn.authenticate and counts it in pkgsilo.authn.attempts, with the
 // attributes of Require's attempts. login returns nil if it accepts the credentials, an error wrapping
 // ErrInvalidCredentials with the reason if it rejects them (see ErrInvalidCredentials), and any other error
-// if it can't tell. Record returns that error unchanged, and logs nothing: the caller decides what a
-// rejection logs. The span's status is Error only when login fails or panics. A login that panics counts as
-// failed, and its panic goes on.
-func (l *LoginRecorder) Record(ctx context.Context, login func(ctx context.Context) error) (err error) {
+// but ErrNoCredentials, which a login that holds credentials never returns, if it can't tell. Record returns
+// that error unchanged, and logs nothing: the caller decides what a rejection logs. The span's status is
+// Error only when login fails or panics. A login that panics counts as failed, and its panic goes on.
+func (l *LoginRecorder) Record(ctx context.Context, login func(ctx context.Context) error) error {
 	ctx, span := l.tracer.Start(ctx, authenticateSpanName)
-	recorded := false
-	defer func() {
-		if !recorded {
-			l.attempts.failed(ctx, span, 0)
-		}
-		span.End()
-	}()
+	defer span.End()
 
-	err = login(ctx)
-	switch {
-	case err == nil:
-		l.attempts.succeeded(ctx, span, 0)
-	case errors.Is(err, ErrInvalidCredentials):
-		l.attempts.rejected(ctx, span, 0, rejectionReason(err))
-	default:
-		l.attempts.failed(ctx, span, 0)
-	}
-	recorded = true
-
-	return err
+	return l.attempts.observe(ctx, span, 0, func() error { return login(ctx) })
 }

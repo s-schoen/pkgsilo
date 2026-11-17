@@ -215,37 +215,27 @@ func (h requireHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // a method panics, which counts as the method's failure, before the panic goes on to the Recoverer.
 func (h requireHandler) authenticate(r *http.Request) (principal Principal, method int, err error) {
 	ctx, span := h.tracer.Start(r.Context(), authenticateSpanName)
+	defer span.End()
 	r = r.WithContext(ctx)
-	recorded := false
-	defer func() {
-		if !recorded {
-			h.attempts.failed(ctx, span, method)
-		}
-		span.End()
-	}()
 
 	for method = range h.authenticators {
-		principal, err = h.authenticators[method].Authenticate(r)
+		err = h.attempts.observe(ctx, span, method, func() error {
+			var err error
+			principal, err = h.authenticators[method].Authenticate(r)
+
+			return err //nolint:wrapcheck // Unchanged, for ServeHTTP to tell the outcomes apart.
+		})
 		if errors.Is(err, ErrNoCredentials) {
 			continue
 		}
-
-		switch {
-		case err == nil:
+		if err == nil {
 			principal.Method = h.methods[method]
-			h.attempts.succeeded(ctx, span, method)
-		case errors.Is(err, ErrInvalidCredentials):
-			h.attempts.rejected(ctx, span, method, rejectionReason(err))
-		default:
-			h.attempts.failed(ctx, span, method)
 		}
-		recorded = true
 
-		return principal, method, err //nolint:wrapcheck // Unchanged, for ServeHTTP to tell the outcomes apart.
+		return principal, method, err
 	}
 
 	h.attempts.missing(ctx, span)
-	recorded = true
 
 	return Principal{}, 0, ErrNoCredentials
 }
