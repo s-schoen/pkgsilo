@@ -31,6 +31,7 @@ the same features with the same authorization.
 - **Authorization** (`actions.go`, `authz` tags, read/write checks, lists, references):
   `docs/agents/authorization.md`.
 - **MCP tools** (`feature/*/tools`): `docs/agents/mcp-tools.md`.
+- **API routes, request or response types** (`feature/*/api`, its `docs.go`): `docs/agents/openapi.md`.
 - **End-to-end tests** (`e2e_test.go`): `docs/agents/e2e-tests.md`.
 - **Telemetry** (metrics, spans, or logging errors): `docs/agents/telemetry.md`.
 
