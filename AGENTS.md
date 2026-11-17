@@ -1,83 +1,49 @@
 # AGENTS.md
 
-## Feature structure
+pkgsilo is a Go service with a REST API under `/api/v1` and an MCP endpoint at `/mcp`, both served by
+the same features with the same authorization.
 
-Every feature is a vertical slice in `feature/<feature>/`, shaped like `feature/identity/`, the reference slice: read it before building a new feature, and register the new feature as a component in `.github/codecov.yml`. Only features go in `feature/`; shared infrastructure stays in `core/`.
+## Layout
 
-A feature is a directory with three layer packages: `feature/<feature>/api` → `feature/<feature>/service` → `feature/<feature>/repository`, plus `feature/<feature>/tools` (see "MCP tools") next to `api`, which calls the service too. Each layer calls only the layer below and owns its types and errors. The layer above always translates, even when the types are identical today: record → domain model → API response, repository error → domain error → HTTP problem. The service translates a record into its domain model with an `authz.Mapper` (see "Authorization") when the model's members match the record's by name and type, and by hand with `ReadableFields.Reveal` otherwise.
+- `feature/<feature>/`: one vertical slice per feature, with the layer packages `api` → `service` →
+  `repository`, and `tools` (MCP) next to `api`. `feature/identity/` is the reference slice. Only
+  features go here.
+- `core/`: shared infrastructure; each package's doc comment describes it.
+- `test/<name>test`: shared test helpers, one package each.
+- `app/`: assembles the features (`app/app.go`); `migrations/`: the SQL migrations.
 
-Each layer package has the same files:
+## Rules for every change
 
-- `types.go`: the layer's data types. The repository has `<Name>Record` with `db` tags, the service has the domain model, and the API has explicit request and response bodies.
-- `errors.go`: the layer's errors, plus `translateError` for the errors of the layer below. In the API, this file holds the problem values and `writeError` instead.
-- `actions.go` (service only): the feature's `authz.DeclareType` call, which derives its authorization actions from the `authz` tags of its types, the further actions it declares with `authz.NewAction`, and `Actions()`, which exports them (see "Authorization").
-- `repository.go` / `service.go`: the interface and its single implementation. `handler.go` (API) has no interface. A feature that is an authentication method also has `authenticator.go` in its API, implementing `authn.Authenticator`, and `app/app.go` passes it to `authn.Require`. When it rejects a credential, it wraps the `authn` reason error that fits (`ErrMalformedCredentials`, `ErrUnknownCredentials`, `ErrExpiredCredentials`), which the metrics and logs name, or else `ErrInvalidCredentials`.
+- Each layer calls only the layer below, owns its types and errors, and translates those of the layer
+  below, even when they're identical today.
+- All logic lives in the service. The actor is a parameter of every service method, passed in by the
+  handler or tool.
+- Authorization denies everything that no policy permits. An object the actor can't read answers like
+  a missing one.
+- Repository tests run on a real PostgreSQL database from `databasetest.New(t)`.
+- Mocks come from mockery: register each new interface in `.mockery.yml`, then run `task generate`.
 
-### Layer rules
+## Read before you work on
 
-- **Repository**: one interface, implemented for PostgreSQL with sqlx. A repository that also runs in a transaction, as in `app.Bootstrap`, takes a `database.Querier`. Each test gets its own fresh database with `migrations/` applied from `databasetest.New(t)` (`test/databasetest`) and calls `t.Parallel()`. Never mock the database.
-- **Service**: all logic lives here: IDs, timestamps, audit fields, domain rules, authorization (see "Authorization"). The field rules are domain rules: the service exports them as ozzo rule sets in `types.go`, such as `UsernameRules`, for the API and the tools to validate their input with. They take the rules for free text from `core/rules`, which depends on no transport, and export the limits that a description names as constants, such as `MaxUsernameLength`. List methods of objects without per-row rules query the repository for `limit+1` rows and return a `pagination.Page` built with `pagination.FromLookahead` (`core/pagination`). Tests mock the repository, check error translation with `servicetest.AssertTranslated`, capture a mock argument whole with `servicetest.Capture` and answer field reads with `servicetest.ExpectReadableFields` (`test/servicetest`).
-- **API**: a chi handler with `Routes()`, mounted under `/api/v1` in `app/app.go`, in the group behind `authn.Require` unless the route is public. Handlers pass `authn.Actor(r)` to the service as the actor, a parameter that the service never reads from the context. Validate all input with ozzo-validation, with the service's field rules, through the shared `core/request` package (`DecodeJSON`, `DecodeMergePatch`, `ParsePagination`). A `PATCH` body is a JSON Merge Patch with the same members as the `PUT` body, each a `request.Optional` validated with `request.IfSet`, and reaches the service as pointers, nil for a member left out; the repository's `Patch` writes only the columns it sets, so that concurrent patches of other fields survive. Respond through the `core/envelope` writers (`WriteResource`, `WriteCreated`, `WriteCollection`, `WriteProblem`, and `WriteJSON` only for bodies with a format of their own that is not wrapped in an envelope, such as health checks); a service page becomes a collection with `NewPagedCollection`. A response body holds every member but `id` as an `envelope.Field`, filled with `envelope.NewField(field.Get())`, or `envelope.Visible` for a member that's never hidden; `Resource` and `Collection` leave a hidden field out, while a visible `null` stays `null`, and fail for a member that's no `envelope.Field`, which they would leave out when zero; a handler test checks the body with `apitest.AssertReadableMembers`. Every domain error a client must tell apart gets its own problem type, defined with `envelope.DefineProblemType` in `errors.go`. The generic `about:blank` problems (`envelope.NotFoundProblem`, …) are for problems that mean nothing beyond their status. Tests mock the service, mount the handler with `apitest.Mount`, which authenticates every request as `apitest.Actor`, and send requests through an `apitest.Client` (`test/apitest`), whose `Assert*` methods check responses against the problem values in `errors.go`.
+- **A new feature**: run the `new-feature` skill.
+- **Layer code** (types, errors, repositories, services, handlers and their tests):
+  `docs/agents/layers.md`.
+- **Authorization** (`actions.go`, `authz` tags, read/write checks, lists, references):
+  `docs/agents/authorization.md`.
+- **MCP tools** (`feature/*/tools`): `docs/agents/mcp-tools.md`.
+- **End-to-end tests** (`e2e_test.go`): `docs/agents/e2e-tests.md`.
+- **Telemetry** (metrics, spans, or logging errors): `docs/agents/telemetry.md`.
 
-Shared `core` packages log nothing, except `authn.Require`, which logs rejected and failed authentications, and `core/mcpserver`, which logs the unexpected errors of tools and MCP methods. Bugs such as an unencodable response or a misconfigured validation rule panic, and the router's recoverer logs them with the request ID. Everything else is logged by the handler through its injected logger.
+## Commands
 
-Translate only errors that have a meaning in the layer above. Wrap every other error with `%w`, so it reaches the API's log intact and is answered with a 500 without details.
-
-### Authorization
-
-A service enforces authorization with the `authz.Authorizer` it's given (`core/authz`): `For(ctx, actor)` once per request, then `Can(action, resource)` for each object. `authz.DeclareType` in `actions.go` declares the feature's resource type and its actions, named `<type>:<verb>` after the type in lower case: `<type>:read` in `authz.ActionGroupRead`, `<type>:delete`, the field actions below, and the feature's further actions, which it declares with `authz.NewAction`, those that read in `authz.ActionGroupRead`. `Actions().Declaration()` returns them all as an `authz.Declaration`, which `app/app.go` adds to `authz.Schema`: saving a policy that uses an undeclared action fails validation. The field actions are named after the `authz` tags of the feature's types, so renaming a tag renames an action that stored policies may name: `app/testdata/schema.cedarschema` pins the schema, and a deliberate change rewrites it with `go test ./app -run TestSchema -update`. Everything that no policy permits is denied. `app.Bootstrap` passes `authz.AllowAll()`, and no actor value bypasses the checks.
-
-- **One object:** one the actor can't read gets the same domain error as a missing one, so that it answers with the same 404. An error from `For` or `Can` is wrapped with `%w`, never treated as a denial: it's a logged 500.
-- **Writes:** `authz.DeclareType` declares `<type>:create:<field>` and `<type>:update:<field>`, grouped under `<type>:create` and `<type>:update`, for every member of the service's input types, `TypeSpec.Create` and `TypeSpec.Update`, each tagged `authz:"<field>"` with the name of its request member; `TypeSpec.Patch` holds the same members as pointers. A handler test checks that each settable request member has an action. `POST` checks the field of every member it sends, `PUT` every settable field even if it doesn't change, `PATCH` only the fields it sets, with `FieldActions.Only(authz.SetFields(patch)...)`, all before writing anything, and an existing object's read check comes first. A `PATCH` that sets no field writes nothing and returns the object. `DELETE` checks `<type>:delete`. The API answers an `*authz.FieldsDeniedError` with `request.FieldsDeniedProblem` and `authz.ErrDenied` with a 403.
-- **Reads:** `authz.DeclareType` declares `<type>:read:<field>` for every field of the domain model, `TypeSpec.Model`, but the ID, grouped under `read` and `<type>:readFields`, and `Actions().ReadFields().Fields()` returns their names for the handler test. The domain model holds every field but `ID` as an `authz.Field` tagged `authz:"<field>"` with the name of its response member, and the service builds it from its record with `authz.NewMapper[<Name>Record, <Model>](actions)`, a package variable named `to<Model>`, on what `Readable` returned: it reveals each field by its tag, and fails the package's initialization if a member of the model has no member of the record with the same name and type, so that no field can be forgotten. It checks the fields of one object after its read check, of a list only for the rows on the page, and of a write before writing. A write's response is masked like a read. A `POST` gets its fields from `ReadableIf`, which checks the object's read action first, so that an object the actor can't read returns only its ID.
-- **Child objects and references:** an endpoint on a child of an object, such as a group's members, checks `read` on the parent first and answers a denial with the parent's 404, then checks an action on the parent such as `group:addMember`. A request that refers to another feature's object checks that feature's read action on it, exported by its service (`identityservice.Actions().Read()`), and answers a denial like a missing object, so that it can't reveal whether a hidden object exists.
-- **Lists with per-row rules:** these replace `limit+1`, because a filtered page would be short and reveal hidden rows. The repository has `ListAll` instead of `List`. The service loads the rows, checks every one with `authz.Filter` and cuts out the page with `pagination.FromAll`, so that only the last page can be short.
-- **Group members:** a resource that can be a group member passes its groups in `authz.Resource.Groups`, loaded in bulk with one query per list. Without them, a `forbid` on the group silently allows.
-- **Owned resources:** a resource that belongs to an identity, such as an API key, sets `Owned` in its `authz.TypeSpec` and passes its owner, with the owner's groups, in `authz.Resource.Owner`, so that policies can use `resource.owner`. The owner is the only attribute: secrets never go in the schema.
-- **Optional fields:** an optional field of an input is a pointer, and a `POST` that leaves it out checks only the fields it sends, with `FieldActions.Only(authz.SetFields(in)...)`.
-- **No filters on hidden data:** never add a filter or search parameter on a field the caller can't read. The package doc of `core/authz` lists the accepted risks.
-
-### MCP tools
-
-The MCP endpoint at `/mcp` serves the tools that the features offer to agents, as another transport for the same actor and policies. `feature/identity/tools` is the reference: read it before adding tools. Only `core/mcpserver` imports the MCP SDK, and a tools package is never named `mcp`.
-
-- **Choosing**: a feature offers a tool because an agent working with pkgsilo needs it, decided as part of the feature's design, and leaves a rare, irreversible operation to REST. No tool returns a secret, such as a new API key, since it would pass through a model's context. A tool is named `<type>_<verb>` in snake case, with the type as in the authz actions: `identity_get`, `group_add_member`.
-- **Files**: `types.go` holds the inputs and outputs, `errors.go` the tool errors and `translateError`, and `tools.go` the `Tools` type, a `mcpserver.Toolset` made by `New(service)`, which `app/app.go` passes to `mcpserver.NewHandler`. `Register` adds each tool with `reg.Add(mcpserver.Tool{Name, Description, Kind}, handler)`, whose `Kind` (`Read`, `Write`, `Delete`) sets the annotations by which clients approve reads and confirm what takes something away. A `Write` is destructive unless it sets `Additive`, which only a tool that overwrites nothing and can't take away access sets, such as `identity_create`: a policy, or a member of a group, can take away access through a forbid. A `Write` that changes nothing more when it's called again sets `Idempotent`. The handler gets the actor as a parameter and passes it to the service method whose authorization checks the tool keeps.
-- **Descriptions**: an agent picks a tool and fills in its arguments from the descriptions alone. A tool's description says what the tool does, when to use it, the domain terms it relies on (what an identity or a policy is), what each of its errors means, and how to page, with `mcpserver.PagingDescription` and `mcpserver.WriteErrorsDescription` for what `mcpserver` does. Every input member has a `jsonschema:"…"` tag with its description, and so does every output member. A limit that a description names comes from the service's constant, such as `strconv.Itoa(service.MaxSourceBytes)`; a tag can't refer to one, so a test pins it with `mcptest.AssertDescriptionContains`.
-- **Input**: members are named like the REST request members and the `authz` tags (`displayName`), so that a field action, a REST member and a tool member are the same word. Members are required unless tagged `omitempty`, and never null: `Add` answers a null, a missing or unknown member and a value that doesn't decode, such as a malformed UUID, with `invalid_arguments` before `Validate` runs. `Validate()` applies the service's field rules; a tool without arguments takes an empty struct whose `Validate` returns nil. An `<type>_update` tool calls the service's `Patch`, with every settable member a `*T` tagged `omitempty` and validated with `validation.When(member != nil, rules...)`, so that a member left out stays unchanged. There's no `<type>_replace` tool.
-- **Lists**: a list tool takes `mcpserver.ListInput` and returns the `mcpserver.ListOutput` of `mcpserver.NewListOutput`, whose `nextOffset` an agent copies into its next call. Each item is the output of the matching get tool.
-- **Output**: every member but `id` is an `envelope.Field` tagged `json:",omitzero"`, filled with `envelope.NewField(field.Get())`, so that a hidden field is absent and a visible `null` stays `null`.
-- **Errors**: every domain error that an agent must tell apart gets a tool error, defined with `mcpserver.DefineError(code, message)` in `errors.go` with a snake_case code such as `username_taken`, and a message that says what happened and what to do; `translateError` maps the service's errors to them. `Add` answers denials (`fields_denied`, `forbidden`) and invalid arguments (`invalid_arguments`) itself, and logs any other error and answers it with `internal_error` and the request ID.
-- **Tests**: `tools_test.go` mocks the service and calls the tools through `mcptest.New` (`test/mcptest`), which serves them over HTTP with the production handler, authenticates as `apitest.Actor` and fails a tool, input member or output member without a description. It checks the annotations with `Hints`, results with `AssertOutput`, `AssertToolError` against the values in `errors.go` and `AssertInternalError`, every tool error and validation error, pagination with and without `nextOffset`, the output with `mcptest.AssertReadableMembers`, and the inputs of create and update tools with `mcptest.AssertSettableMembers`. The feature's `e2e_test.go` adds one MCP flow across tool calls through `apptest.MCP(t, api)`, with each expected tool error written out as a literal `mcpserver.DefineError(…)`, and `TestMCP` in `app/e2e_test.go` lists the names of all tools. The compatibility suite with the TypeScript SDK (`app/mcp_compat_test.go`) covers core behaviour only, and features leave it as it is.
-
-### End-to-end tests
-
-Every feature has `feature/<feature>/e2e_test.go` (package `<feature>_test`), which drives the assembled app through `/api/v1` and `/mcp` on a real database from `apptest.New(t)` (`test/apptest`), whose client authenticates as the `admin` identity of the first start; `api.Anonymous()` sends no credential, `apptest.NewIdentity` creates an identity outside the `administrators` group with a client that authenticates as it, and `apptest.AdministratorsGroup` finds that group, which the first start creates with a random ID. It covers what only the whole app shows: flows across requests, database constraints, Location headers. Each test's doc comment lists its steps in order, each with the result it expects, and numbered comments (`// 1. Create.`) mark where each step starts in the code. Write each expected problem type out as a literal `envelope.DefineProblemType(…)`, so the test pins the public contract (slug, title, status) independently of `errors.go`.
-
-### Test helpers
-
-Shared test helpers live in `test/<name>test`, one package each, so the internal tests of any layer can import them without an import cycle; only `test/apptest` imports `app`. A client reports to the test it was made for: inside a subtest, use `api.For(t)`.
-
-### Mocks
-
-Mocks are generated by mockery into `<pkg>/mocks` and committed. Register each new interface in `.mockery.yml`, then run `task generate`.
-
-## Telemetry
-
-`core/telemetry` sets up the OpenTelemetry `MeterProvider`, which serves its metrics to Prometheus on the `METRICS_ADDR` listener, and the `TracerProvider`, which exports its spans over OTLP/HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is set. A component that records metrics takes a `metric.MeterProvider` as a parameter, like its logger, and one that creates spans takes a `trace.TracerProvider`; each creates its instruments and tracers from them. The global providers that `cmd/main.go` sets are for third-party code only. The one exception is `database.InTx`, which takes no provider: it starts its transaction span with the provider of the span in its context, `trace.SpanFromContext(ctx).TracerProvider()`, so that a transaction outside a traced request, as in `app.Bootstrap`, has none. The queries in a transaction use the context that `InTx` passes to `fn`, which holds that span.
-
-Spans come from `core` only: the server span of a request, authentication, authorization, transactions and queries. Features create none. Name each instrument, span and attribute after the OpenTelemetry semantic conventions wherever one exists, and `pkgsilo.<area>.*` otherwise, such as the metric `pkgsilo.authn.attempts` or a span `pkgsilo.<area>.<operation>`. A span reuses the attribute keys of its component's metrics, as `pkgsilo.authn.authenticate` does those of `pkgsilo.authn.attempts`. Give metric attributes bounded values only: route patterns, methods, status codes, enum-like reasons, never IDs, usernames, raw paths, SQL or error messages. That holds for the attributes a library adds too: `telemetry.Views` drops those it can't bound, such as otelhttp's `server.address`, which comes from the client's Host header. Span attributes may hold IDs, but never credentials, hashes, peppers, query parameters, or request or response bodies. A span of `core` whose operation fails sets its status with `span.SetStatus(codes.Error, …)` itself, since shared `core` packages log nothing.
-
-Errors reach spans through the logger: a record at error level whose context holds a recording span adds an `exception` event to it and sets its status to `Error`, and every record with such a span names it with `trace_id` and `span_id`. So log an error at error level with the request's context, `r.Context()`, under the key `error`, and never call `span.RecordError` by hand, which would record it twice.
-
-A test passes the providers of `telemetrytest.New(t)` (`test/telemetrytest`) and asserts the exact values they collect: metrics through an SDK `ManualReader` behind the views of `telemetry.New`, spans through `Spans()`, which holds every span once it ends. An end-to-end test scrapes the app through `apptest.NewWithMetrics` and takes its spans from `apptest.NewWithTracing`.
-
-## CI and dependency updates
-
-- Run changed workflows locally with `task ci:push` and `task ci:pr` (act) before pushing them.
+`task generate` (mocks), `task lint`, `task test` (needs Docker for PostgreSQL), `task test:short`
+(without), `task db:migrate:new -- <name>`. Run changed workflows locally with `task ci:push` and
+`task ci:pr` (act) before pushing them.
 
 ## Git
 
 - NEVER create git commits or branches on your own unless you're explicitly told so
-- Every commit passes the prek hooks (`prek.toml`): when one fails, fix what it reports or stage the files it rewrote, then commit again.
-- Write commit messages as Conventional Commits (`type(scope): subject`, as in `git log`); the commit-msg hook rejects anything else.
+- Every commit passes the prek hooks (`prek.toml`): when one fails, fix what it reports or stage the
+  files it rewrote, then commit again.
+- Write commit messages as Conventional Commits (`type(scope): subject`, as in `git log`); the
+  commit-msg hook rejects anything else.
