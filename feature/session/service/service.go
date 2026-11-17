@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 	"uuid"
 
 	passwordservice "pkgsilo/feature/password/service"
@@ -23,6 +25,9 @@ const (
 	// lastSeenInterval is the least time between two writes of a session's last use, so that a busy session
 	// doesn't cause a write per request. The idle timeout is accurate to about that much.
 	lastSeenInterval = time.Minute
+	// maxUserAgentBytes is the most of a User-Agent header that a session stores, so that a huge header isn't
+	// stored with every session. Real ones are far shorter.
+	maxUserAgentBytes = 512
 )
 
 // SessionService logs identities in with their passwords and authenticates the tokens of their sessions.
@@ -34,8 +39,9 @@ type SessionService interface {
 	// Login checks the input's username and password and returns a new session of their identity, with its
 	// token. It first ends every expired session, and the session of the input's presented token. It returns
 	// a *RejectedError whose reason is ErrUnknownCredentials or ErrInvalidPassword if the username and
-	// password aren't accepted. It isn't authorized, since a request has no actor before it logs in. Its
-	// errors never hold the username, the password or a token.
+	// password aren't accepted, which includes a password that's changed while it's checked, so that no
+	// session outlasts a change of its password. It isn't authorized, since a request has no actor before it
+	// logs in. Its errors never hold the username, the password or a token.
 	Login(ctx context.Context, in LoginInput) (CreatedSession, error)
 	// Authenticate returns the session that the presented token belongs to and records its use. It returns
 	// an error wrapping ErrMalformedToken, ErrUnknownToken or ErrExpiredSession if the token isn't accepted.
@@ -77,7 +83,7 @@ func newSessionService(
 }
 
 func (s *sessionService) Login(ctx context.Context, in LoginInput) (CreatedSession, error) {
-	identityID, err := s.verifier.Verify(ctx, in.Username, in.Password)
+	verified, err := s.verifier.Verify(ctx, in.Username, in.Password)
 	if err != nil {
 		return CreatedSession{}, fmt.Errorf("log in: %w", translateVerifyError(err))
 	}
@@ -96,27 +102,51 @@ func (s *sessionService) Login(ctx context.Context, in LoginInput) (CreatedSessi
 	token := generateToken()
 	rec := repository.SessionRecord{
 		ID:         uuid.NewV4(),
-		IdentityID: identityID,
+		IdentityID: verified.IdentityID,
 		TokenHash:  hash(token),
 		CreatedAt:  now,
 		LastSeenAt: now,
 		ExpiresAt:  now.Add(s.lifetimes.MaxAge),
-		UserAgent:  in.UserAgent,
+		UserAgent:  cleanUserAgent(in.UserAgent),
 	}
 	if in.ClientIP.IsValid() {
 		rec.ClientIP = new(in.ClientIP.String())
 	}
-	stored, err := s.repo.Insert(ctx, rec)
-	if errors.Is(err, repository.ErrIdentityNotFound) {
-		// The identity was deleted since its password was verified.
+	stored, err := s.repo.Insert(ctx, rec, verified.PasswordHash)
+	if errors.Is(err, repository.ErrPasswordChanged) {
+		// The password was changed or deleted since it was verified, or its identity deleted: the password
+		// given is no longer the identity's.
 		return CreatedSession{}, fmt.Errorf("log in: %w",
-			&RejectedError{IdentityID: identityID, Reason: ErrUnknownCredentials})
+			&RejectedError{IdentityID: verified.IdentityID, Reason: ErrInvalidPassword})
 	}
 	if err != nil {
 		return CreatedSession{}, fmt.Errorf("log in: %w", err)
 	}
 
-	return CreatedSession{Session: toSession(stored), Token: token}, nil
+	return CreatedSession{Session: toSession(stored), Token: token, RehashErr: verified.RehashErr}, nil
+}
+
+// cleanUserAgent returns the User-Agent header ua as valid UTF-8 without control characters, which PostgreSQL
+// text can't always hold, and cut to at most maxUserAgentBytes bytes at a character boundary. Each run of bytes
+// that isn't valid UTF-8 becomes one U+FFFD.
+func cleanUserAgent(ua string) string {
+	ua = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+
+		return r
+	}, strings.ToValidUTF8(ua, string(utf8.RuneError)))
+	if len(ua) <= maxUserAgentBytes {
+		return ua
+	}
+
+	end := maxUserAgentBytes
+	for end > 0 && !utf8.RuneStart(ua[end]) {
+		end--
+	}
+
+	return ua[:end]
 }
 
 func (s *sessionService) Authenticate(ctx context.Context, token string) (AuthenticatedSession, error) {

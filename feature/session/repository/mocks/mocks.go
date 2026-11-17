@@ -428,8 +428,8 @@ func (_c *MockSessionRepository_GetByHash_Call) RunAndReturn(run func(ctx contex
 }
 
 // Insert provides a mock function for the type MockSessionRepository
-func (_mock *MockSessionRepository) Insert(ctx context.Context, rec repository.SessionRecord) (repository.SessionRecord, error) {
-	ret := _mock.Called(ctx, rec)
+func (_mock *MockSessionRepository) Insert(ctx context.Context, rec repository.SessionRecord, passwordHash string) (repository.SessionRecord, error) {
+	ret := _mock.Called(ctx, rec, passwordHash)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Insert")
@@ -437,16 +437,16 @@ func (_mock *MockSessionRepository) Insert(ctx context.Context, rec repository.S
 
 	var r0 repository.SessionRecord
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.SessionRecord) (repository.SessionRecord, error)); ok {
-		return returnFunc(ctx, rec)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.SessionRecord, string) (repository.SessionRecord, error)); ok {
+		return returnFunc(ctx, rec, passwordHash)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.SessionRecord) repository.SessionRecord); ok {
-		r0 = returnFunc(ctx, rec)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.SessionRecord, string) repository.SessionRecord); ok {
+		r0 = returnFunc(ctx, rec, passwordHash)
 	} else {
 		r0 = ret.Get(0).(repository.SessionRecord)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.SessionRecord) error); ok {
-		r1 = returnFunc(ctx, rec)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.SessionRecord, string) error); ok {
+		r1 = returnFunc(ctx, rec, passwordHash)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -461,11 +461,12 @@ type MockSessionRepository_Insert_Call struct {
 // Insert is a helper method to define mock.On call
 //   - ctx context.Context
 //   - rec repository.SessionRecord
-func (_e *MockSessionRepository_Expecter) Insert(ctx any, rec any) *MockSessionRepository_Insert_Call {
-	return &MockSessionRepository_Insert_Call{Call: _e.mock.On("Insert", ctx, rec)}
+//   - passwordHash string
+func (_e *MockSessionRepository_Expecter) Insert(ctx any, rec any, passwordHash any) *MockSessionRepository_Insert_Call {
+	return &MockSessionRepository_Insert_Call{Call: _e.mock.On("Insert", ctx, rec, passwordHash)}
 }
 
-func (_c *MockSessionRepository_Insert_Call) Run(run func(ctx context.Context, rec repository.SessionRecord)) *MockSessionRepository_Insert_Call {
+func (_c *MockSessionRepository_Insert_Call) Run(run func(ctx context.Context, rec repository.SessionRecord, passwordHash string)) *MockSessionRepository_Insert_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -475,9 +476,14 @@ func (_c *MockSessionRepository_Insert_Call) Run(run func(ctx context.Context, r
 		if args[1] != nil {
 			arg1 = args[1].(repository.SessionRecord)
 		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -488,7 +494,7 @@ func (_c *MockSessionRepository_Insert_Call) Return(sessionRecord repository.Ses
 	return _c
 }
 
-func (_c *MockSessionRepository_Insert_Call) RunAndReturn(run func(ctx context.Context, rec repository.SessionRecord) (repository.SessionRecord, error)) *MockSessionRepository_Insert_Call {
+func (_c *MockSessionRepository_Insert_Call) RunAndReturn(run func(ctx context.Context, rec repository.SessionRecord, passwordHash string) (repository.SessionRecord, error)) *MockSessionRepository_Insert_Call {
 	_c.Call.Return(run)
 	return _c
 }

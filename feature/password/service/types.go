@@ -2,6 +2,7 @@ package service
 
 import (
 	"time"
+	"uuid"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
@@ -14,6 +15,20 @@ import (
 type Password struct {
 	// SetAt is when the password was last set.
 	SetAt authz.Field[time.Time] `authz:"setAt"`
+}
+
+// Verified is a username and password that a Verifier accepted.
+type Verified struct {
+	// IdentityID is the identity with the username, whose password it is.
+	IdentityID uuid.UUID
+	// PasswordHash is the hash that the identity's password has once it's verified: the stored one, or the
+	// rehash that replaced it. What the verification grants, such as a session, must be stored only while the
+	// password still has this hash, so that it can't outlast a change of the password that happened during
+	// the verification. It must never be logged or returned to a client.
+	PasswordHash string
+	// RehashErr is why an outdated hash couldn't be replaced with a rehash, or nil. The password is verified
+	// all the same, and the next verification tries the rehash again.
+	RehashErr error
 }
 
 // PasswordInput holds what a caller sends to set a password.

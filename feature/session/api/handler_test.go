@@ -133,6 +133,31 @@ func TestHandler_Login(t *testing.T) {
 	})
 }
 
+// TestHandler_Login_RehashFailed checks that a login whose password couldn't be rehashed succeeds, and that
+// the failure is logged as a warning.
+func TestHandler_Login_RehashFailed(t *testing.T) {
+	t.Parallel()
+	logger, buf := loggertest.NewJSON()
+	h := newTestHandler(t, logger, "session")
+	h.svc.EXPECT().Login(mock.Anything, loginInput).Return(service.CreatedSession{
+		Session: adaSession, Token: newToken, RehashErr: errors.New("rehash password: connection refused"),
+	}, nil)
+
+	resp := postLogin(h.api, loginBody)
+
+	resp.AssertCreated(currentPath, adaJSON)
+	assert.Equal(t, []string{sessionCookieHeader}, resp.Header().Values("Set-Cookie"))
+	assertLogins(t, h.telemetry, map[string]string{
+		"pkgsilo.authn.outcome": "success", "pkgsilo.authn.method": "password",
+	})
+	entries := loggertest.Entries(t, buf)
+	require.Len(t, entries, 2, "the warning and the request")
+	assert.Equal(t, "WARN", entries[0]["level"])
+	assert.Equal(t, "password rehash failed", entries[0]["msg"])
+	assert.Equal(t, "rehash password: connection refused", entries[0]["error"])
+	assert.NotContains(t, buf.String(), "horse")
+}
+
 // TestHandler_Login_Client checks that the login passes on the session cookie that the request carries and
 // what it tells about its client.
 func TestHandler_Login_Client(t *testing.T) {

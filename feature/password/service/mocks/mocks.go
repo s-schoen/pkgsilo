@@ -298,24 +298,22 @@ func (_m *MockVerifier) EXPECT() *MockVerifier_Expecter {
 }
 
 // Verify provides a mock function for the type MockVerifier
-func (_mock *MockVerifier) Verify(ctx context.Context, username string, password string) (uuid.UUID, error) {
+func (_mock *MockVerifier) Verify(ctx context.Context, username string, password string) (service.Verified, error) {
 	ret := _mock.Called(ctx, username, password)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Verify")
 	}
 
-	var r0 uuid.UUID
+	var r0 service.Verified
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (uuid.UUID, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (service.Verified, error)); ok {
 		return returnFunc(ctx, username, password)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) uuid.UUID); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) service.Verified); ok {
 		r0 = returnFunc(ctx, username, password)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(uuid.UUID)
-		}
+		r0 = ret.Get(0).(service.Verified)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
 		r1 = returnFunc(ctx, username, password)
@@ -361,12 +359,12 @@ func (_c *MockVerifier_Verify_Call) Run(run func(ctx context.Context, username s
 	return _c
 }
 
-func (_c *MockVerifier_Verify_Call) Return(uUID uuid.UUID, err error) *MockVerifier_Verify_Call {
-	_c.Call.Return(uUID, err)
+func (_c *MockVerifier_Verify_Call) Return(verified service.Verified, err error) *MockVerifier_Verify_Call {
+	_c.Call.Return(verified, err)
 	return _c
 }
 
-func (_c *MockVerifier_Verify_Call) RunAndReturn(run func(ctx context.Context, username string, password string) (uuid.UUID, error)) *MockVerifier_Verify_Call {
+func (_c *MockVerifier_Verify_Call) RunAndReturn(run func(ctx context.Context, username string, password string) (service.Verified, error)) *MockVerifier_Verify_Call {
 	_c.Call.Return(run)
 	return _c
 }

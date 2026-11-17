@@ -3,6 +3,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 	"uuid"
@@ -12,8 +14,11 @@ import (
 
 // SessionRepository stores session records.
 type SessionRepository interface {
-	// Insert stores a new record and returns it as stored.
-	Insert(ctx context.Context, rec SessionRecord) (SessionRecord, error)
+	// Insert stores a new record and returns it as stored, but only while the password of its identity still
+	// has the hash passwordHash, which its login verified, so that a session can't outlast a change of that
+	// password. It returns ErrPasswordChanged if the password was changed or deleted since, or the identity
+	// was deleted.
+	Insert(ctx context.Context, rec SessionRecord, passwordHash string) (SessionRecord, error)
 	// Get returns the record with the given ID of the given identity.
 	Get(ctx context.Context, identityID, id uuid.UUID) (SessionRecord, error)
 	// GetByHash returns the record with the given token hash, whatever its identity.
@@ -53,18 +58,28 @@ func NewPostgresSessionRepository(db database.Querier) *PostgresSessionRepositor
 	return &PostgresSessionRepository{db: db}
 }
 
-// Insert stores a new record and returns it as stored.
-func (r *PostgresSessionRepository) Insert(ctx context.Context, rec SessionRecord) (SessionRecord, error) {
+// Insert stores a new record and returns it as stored, but only while the password of its identity still has
+// the hash passwordHash, in one statement. It reads the passwords table of the password feature, and locks the
+// password's row until it's done: a change of the password that comes first leaves another hash, and one that
+// comes later waits for the session and then ends it with the identity's other sessions.
+func (r *PostgresSessionRepository) Insert(
+	ctx context.Context, rec SessionRecord, passwordHash string,
+) (SessionRecord, error) {
 	var stored SessionRecord
 	err := r.db.GetContext(ctx, &stored, `
 		INSERT INTO sessions (`+sessionColumns+`)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8 FROM passwords
+		WHERE identity_id = $2 AND hash = $9
+		FOR SHARE
 		RETURNING `+selectColumns,
 		rec.ID, rec.IdentityID, rec.TokenHash, rec.CreatedAt, rec.LastSeenAt, rec.ExpiresAt, rec.ClientIP,
-		rec.UserAgent,
+		rec.UserAgent, passwordHash,
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return SessionRecord{}, fmt.Errorf("insert session: %w", ErrPasswordChanged)
+	}
 	if err != nil {
-		return SessionRecord{}, fmt.Errorf("insert session: %w", translateError(err))
+		return SessionRecord{}, fmt.Errorf("insert session: %w", err)
 	}
 
 	return stored, nil

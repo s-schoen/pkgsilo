@@ -26,6 +26,9 @@ type CreatedSession struct {
 	Session
 
 	Token string
+	// RehashErr is why the outdated hash of the password that logged in couldn't be replaced with a rehash,
+	// or nil. The login succeeds all the same, and the next one tries the rehash again.
+	RehashErr error
 }
 
 // AuthenticatedSession is the session that a presented token belongs to, as far as a request needs it once
@@ -44,7 +47,9 @@ type LoginInput struct {
 	// ends, so that a token that someone planted in the browser before the login can't become logged in.
 	PresentedToken string
 	// ClientIP is the client's IP address, or the zero Addr if it's unknown.
-	ClientIP  netip.Addr
+	ClientIP netip.Addr
+	// UserAgent is the request's User-Agent header as received. The session stores it as valid UTF-8 without
+	// control characters, and only its first 512 bytes.
 	UserAgent string
 }
 
