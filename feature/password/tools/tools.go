@@ -49,7 +49,9 @@ func (t *Tools) Register(reg *mcpserver.Registry) {
 	reg.Add(mcpserver.Tool{
 		Name: "password_delete",
 		Description: "Deletes the password of an identity, which can't log in with it from then on and can only " +
-			"use its API keys. It can't be undone; a new password can only be set through the REST API. " +
+			"use its API keys. Every session of the identity ends with it, so that it's logged out of every " +
+			"browser; its API keys keep working. It can't be undone; a new password can only be set through the " +
+			"REST API. " +
 			passwordTerm + "The output is empty. " + identityNotFound + notFound +
 			"Fails with forbidden if the policies allow you to read the password, but not to delete it; nothing " +
 			"is changed then.",
