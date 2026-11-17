@@ -47,7 +47,13 @@ type SessionService interface {
 	// Delete ends the actor's session with the given ID, whose token stops working at once. It returns
 	// ErrSessionNotFound if the actor has none.
 	Delete(ctx context.Context, actor, id uuid.UUID) error
+	// EndSessions ends every session of the identity, whose tokens stop working at once. An identity without
+	// sessions is not an error. It isn't authorized: the password service calls it after it authorized the
+	// change of the identity's password, as the session terminator that it owns.
+	EndSessions(ctx context.Context, identityID uuid.UUID) error
 }
+
+var _ passwordservice.SessionTerminator = SessionService(nil)
 
 type sessionService struct {
 	repo      repository.SessionRepository
@@ -152,6 +158,14 @@ func (s *sessionService) Get(ctx context.Context, actor, id uuid.UUID) (Session,
 func (s *sessionService) Delete(ctx context.Context, actor, id uuid.UUID) error {
 	if err := s.repo.Delete(ctx, actor, id); err != nil {
 		return fmt.Errorf("delete session: %w", translateError(err))
+	}
+
+	return nil
+}
+
+func (s *sessionService) EndSessions(ctx context.Context, identityID uuid.UUID) error {
+	if err := s.repo.DeleteByIdentity(ctx, identityID); err != nil {
+		return fmt.Errorf("end sessions: %w", err)
 	}
 
 	return nil

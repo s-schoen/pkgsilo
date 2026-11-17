@@ -26,6 +26,7 @@ var (
 	identityNotFound = envelope.DefineProblemType("identity-not-found", "Identity not found", http.StatusNotFound)
 	invalidBody      = envelope.DefineProblemType("invalid-body", "Invalid request body", http.StatusUnprocessableEntity)
 	forbidden        = envelope.ProblemType{Type: "about:blank", Title: "Forbidden", Status: http.StatusForbidden}
+	unauthorized     = envelope.UnauthorizedProblem.New(envelope.Occurrence{})
 )
 
 // The tool errors of the password tools, written out independently of the code: agents tell errors apart by
@@ -38,6 +39,26 @@ type password = passwordapi.PasswordResponse
 // passwordPathOf returns the path of the password of the identity with the given ID.
 func passwordPathOf(id uuid.UUID) string {
 	return "/api/v1/identities/" + id.String() + "/password"
+}
+
+// currentSessionPath is the path of the session that a request is authenticated with.
+const currentSessionPath = "/api/v1/sessions/current"
+
+// assertSessionsEnded asserts that every client, each sending only a session cookie, is rejected.
+func assertSessionsEnded(sessions ...*apitest.Client) {
+	for _, session := range sessions {
+		session.Get(currentSessionPath).AssertProblem(unauthorized)
+	}
+}
+
+// assertAPIKeyWorks asserts that the client, which authenticates as the identity with the given ID with an
+// API key, still gets the identity.
+func assertAPIKeyWorks(t *testing.T, client *apitest.Client, identityID uuid.UUID) {
+	t.Helper()
+
+	got := client.Get("/api/v1/identities/" + identityID.String()).
+		DecodeResource[identityapi.IdentityResponse](http.StatusOK)
+	assert.Equal(t, identityID, got.ID)
 }
 
 // assertCurrentPasswordProblem asserts an invalid-body problem on currentPassword with the given detail.
@@ -107,6 +128,77 @@ func TestPasswords_Lifecycle(t *testing.T) {
 	// 8. Change again.
 	asAda.Put(path, `{"newPassword":"correct horse","currentPassword":"battery staple"}`).
 		AssertProblemType(passwordNotFound)
+}
+
+// TestPasswords_ChangeEndsSessions checks that changing a password ends every session of its identity, the
+// one that changed it included, so that a stolen session doesn't survive:
+//
+//  1. Create ada, reset her password as admin, and log in as her twice: two sessions.
+//  2. With the first session, change her password: 200.
+//  3. Use both sessions: 401 for both.
+//  4. With her API key, get ada: 200, since API keys are unaffected.
+//  5. Log in with the new password: 201.
+func TestPasswords_ChangeEndsSessions(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create and log in twice.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	apptest.SetPassword(api, ada.ID, "correct horse")
+	_, first := apptest.LogIn(t, api, "ada", "correct horse")
+	_, second := apptest.LogIn(t, api, "ada", "correct horse")
+
+	// 2. Change.
+	first.Put(passwordPathOf(ada.ID), `{"newPassword":"battery staple","currentPassword":"correct horse"}`).
+		AssertStatus(http.StatusOK)
+
+	// 3. Use the sessions.
+	assertSessionsEnded(first, second)
+
+	// 4. Use the API key.
+	assertAPIKeyWorks(t, asAda, ada.ID)
+
+	// 5. Log in again.
+	apptest.LogIn(t, api, "ada", "battery staple")
+}
+
+// TestPasswords_ResetAndDeleteEndSessions checks that an admin who resets or deletes a password ends every
+// session of its identity:
+//
+//  1. Create ada, reset her password as admin, and log in as her twice: two sessions.
+//  2. As admin, reset her password: 200.
+//  3. Use both sessions: 401 for both. With her API key, get ada: 200.
+//  4. Log in as ada with the new password, twice: two new sessions.
+//  5. As admin, delete her password: 204.
+//  6. Use both new sessions: 401 for both. With her API key, get ada: 200.
+func TestPasswords_ResetAndDeleteEndSessions(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+
+	// 1. Create and log in twice.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	path := passwordPathOf(ada.ID)
+	apptest.SetPassword(api, ada.ID, "correct horse")
+	_, first := apptest.LogIn(t, api, "ada", "correct horse")
+	_, second := apptest.LogIn(t, api, "ada", "correct horse")
+
+	// 2. Reset.
+	api.Put(path, `{"newPassword":"battery staple"}`).AssertStatus(http.StatusOK)
+
+	// 3. Use the sessions and the API key.
+	assertSessionsEnded(first, second)
+	assertAPIKeyWorks(t, asAda, ada.ID)
+
+	// 4. Log in twice again.
+	_, third := apptest.LogIn(t, api, "ada", "battery staple")
+	_, fourth := apptest.LogIn(t, api, "ada", "battery staple")
+
+	// 5. Delete.
+	api.Delete(path).AssertNoContent()
+
+	// 6. Use the sessions and the API key.
+	assertSessionsEnded(third, fourth)
+	assertAPIKeyWorks(t, asAda, ada.ID)
 }
 
 // TestPasswords_NoFirstPasswordForYourself checks that an identity can't give itself a first password, so that
@@ -183,10 +275,10 @@ func assertLikeMissing(t *testing.T, send func(target string) *apitest.Response,
 
 // TestPasswords_MCP checks the password tools, which never take a password:
 //
-//  1. Create ada, and reset her password through the REST API: 200.
+//  1. Create ada, reset her password through the REST API: 200, and log in as her.
 //  2. Get it with password_get: when it was set, as the REST API returns it.
 //  3. Delete it with password_delete: empty output.
-//  4. Get it again with password_get: password_not_found, and the REST API agrees.
+//  4. Get it again with password_get: password_not_found, and the REST API agrees. Her session: 401.
 func TestPasswords_MCP(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
@@ -196,6 +288,7 @@ func TestPasswords_MCP(t *testing.T) {
 	ada, _ := apptest.NewIdentity(api, "ada")
 	path := passwordPathOf(ada.ID)
 	set := api.Put(path, `{"newPassword":"correct horse"}`).DecodeResource[password](http.StatusOK)
+	_, session := apptest.LogIn(t, api, "ada", "correct horse")
 	args := `{"identityId":"` + ada.ID.String() + `"}`
 
 	// 2. Get.
@@ -207,4 +300,5 @@ func TestPasswords_MCP(t *testing.T) {
 	// 4. Get again.
 	mcp.Call("password_get", args).AssertToolError(errPasswordNotFound)
 	api.Get(path).AssertProblemType(passwordNotFound)
+	assertSessionsEnded(session)
 }

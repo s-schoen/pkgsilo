@@ -256,6 +256,22 @@ func TestPostgresSessionRepository_DeleteByHash(t *testing.T) {
 	assertStored(t, repo, other)
 }
 
+func TestPostgresSessionRepository_DeleteByIdentity(t *testing.T) {
+	t.Parallel()
+	repo, db := newTestRepo(t)
+	identityID := insertIdentity(t, db)
+	first := insertRecord(t, repo, newRecord(identityID))
+	second := insertRecord(t, repo, newRecord(identityID))
+	other := insertRecord(t, repo, newRecord(insertIdentity(t, db)))
+
+	require.NoError(t, repo.DeleteByIdentity(t.Context(), identityID))
+	require.NoError(t, repo.DeleteByIdentity(t.Context(), identityID), "an identity without sessions is no error")
+
+	assertGone(t, repo, first)
+	assertGone(t, repo, second)
+	assertStored(t, repo, other)
+}
+
 func TestPostgresSessionRepository_DeleteExpired(t *testing.T) {
 	t.Parallel()
 	repo, db := newTestRepo(t)

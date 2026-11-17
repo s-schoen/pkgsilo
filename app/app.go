@@ -85,7 +85,9 @@ func NewHandler(
 	passwordRepo := passwordrepo.NewPostgresPasswordRepository(db)
 	sessions := sessionservice.NewSessionService(sessionrepo.NewPostgresSessionRepository(db),
 		passwordservice.NewVerifier(passwordRepo), sessionLifetimes)
-	passwords := passwordservice.NewPasswordService(passwordRepo, authorizer)
+	// The verifier, then the sessions, then the passwords, which end the sessions of an identity whose password
+	// changes.
+	passwords := passwordservice.NewPasswordService(passwordRepo, authorizer, sessions)
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema())
 
 	opts.UnmeasuredPaths = slices.Concat(opts.UnmeasuredPaths, []string{apiPath + healthPath})

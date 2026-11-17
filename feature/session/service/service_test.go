@@ -435,3 +435,19 @@ func TestSessionService_Delete_NotFound(t *testing.T) {
 
 	servicetest.AssertTranslated(t, err, ErrSessionNotFound, repository.ErrNotFound)
 }
+
+func TestSessionService_EndSessions(t *testing.T) {
+	t.Parallel()
+	svc, repo, _ := newTestService(t)
+	repo.EXPECT().DeleteByIdentity(mock.Anything, identityID).Return(nil)
+
+	require.NoError(t, svc.EndSessions(t.Context(), identityID))
+}
+
+func TestSessionService_EndSessions_Fails(t *testing.T) {
+	t.Parallel()
+	svc, repo, _ := newTestService(t)
+	repo.EXPECT().DeleteByIdentity(mock.Anything, identityID).Return(errDB)
+
+	assert.ErrorIs(t, svc.EndSessions(t.Context(), identityID), errDB)
+}
