@@ -67,17 +67,7 @@ func New(t *testing.T) *apitest.Client {
 func NewWithDB(t *testing.T) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
-	return newApp(t, noop.NewMeterProvider(), tracenoop.NewTracerProvider(), DefaultSessionLifetimes)
-}
-
-// NewWithSessionLifetimes is like New, but its sessions expire after lifetimes, such as short ones that a test
-// can wait for.
-func NewWithSessionLifetimes(t *testing.T, lifetimes sessionservice.Lifetimes) *apitest.Client {
-	t.Helper()
-
-	api, _ := newApp(t, noop.NewMeterProvider(), tracenoop.NewTracerProvider(), lifetimes)
-
-	return api
+	return newApp(t, noop.NewMeterProvider(), tracenoop.NewTracerProvider())
 }
 
 // NewWithMetrics is like New, but with metrics enabled, and also returns a client for the application's
@@ -86,7 +76,7 @@ func NewWithMetrics(t *testing.T) (api, metrics *apitest.Client) {
 	t.Helper()
 
 	tel := newTelemetry(t)
-	api, _ = newApp(t, tel.MeterProvider(), tracenoop.NewTracerProvider(), DefaultSessionLifetimes)
+	api, _ = newApp(t, tel.MeterProvider(), tracenoop.NewTracerProvider())
 
 	return api, apitest.NewClient(t, tel.Handler())
 }
@@ -97,7 +87,7 @@ func NewWithTracing(t *testing.T) (api *apitest.Client, spans *telemetrytest.Rec
 	t.Helper()
 
 	spans = telemetrytest.New(t)
-	api, _ = newApp(t, noop.NewMeterProvider(), spans.TracerProvider(), DefaultSessionLifetimes)
+	api, _ = newApp(t, noop.NewMeterProvider(), spans.TracerProvider())
 
 	return api, spans
 }
@@ -109,18 +99,16 @@ func NewWithTracing(t *testing.T) (api *apitest.Client, spans *telemetrytest.Rec
 func NewInstance(t *testing.T, api *apitest.Client, db *sqlx.DB) *apitest.Client {
 	t.Helper()
 
-	return api.WithHandler(newHandler(t, db, noop.NewMeterProvider(), tracenoop.NewTracerProvider(),
-		DefaultSessionLifetimes))
+	return api.WithHandler(newHandler(t, db, noop.NewMeterProvider(), tracenoop.NewTracerProvider()))
 }
 
 // newApp returns a client for the application on a new database with all migrations applied and the
 // first start done, and that database. The client authenticates as admin and checks every response against
 // the OpenAPI document of the application. As in cmd/main.go, the
 // application and its database record their metrics with meterProvider and create their spans with
-// tracerProvider. Its sessions expire after lifetimes.
+// tracerProvider.
 func newApp(
 	t *testing.T, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
-	lifetimes sessionservice.Lifetimes,
 ) (*apitest.Client, *sqlx.DB) {
 	t.Helper()
 
@@ -129,7 +117,7 @@ func newApp(
 	key, err := app.Bootstrap(t.Context(), db, []byte(apiKeyPepper))
 	require.NoError(t, err)
 
-	client := apitest.NewClient(t, newHandler(t, db, meterProvider, tracerProvider, lifetimes)).
+	client := apitest.NewClient(t, newHandler(t, db, meterProvider, tracerProvider)).
 		WithDocument(app.Docs().JSON())
 
 	return client.WithHeader(apiKeyHeader, key), db
@@ -151,15 +139,14 @@ func newTelemetry(t *testing.T) *telemetry.Telemetry {
 }
 
 // newHandler returns the application, wired as cmd/main.go serves it, on db, recording its metrics with
-// meterProvider and creating its spans with tracerProvider, with sessions that expire after lifetimes. It logs
-// to the test's output.
+// meterProvider and creating its spans with tracerProvider, with the default session lifetimes. It logs to the
+// test's output.
 func newHandler(
 	t *testing.T, db *sqlx.DB, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
-	lifetimes sessionservice.Lifetimes,
 ) http.Handler {
 	t.Helper()
 
-	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper), lifetimes,
+	return app.NewHandler(router.Options{}, db, []byte(apiKeyPepper), DefaultSessionLifetimes,
 		logger.New(t.Output(), logger.Options{Level: slog.LevelInfo}), meterProvider, tracerProvider)
 }
 
