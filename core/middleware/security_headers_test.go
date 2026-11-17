@@ -24,8 +24,22 @@ func TestSecurityHeaders(t *testing.T) {
 			"base-uri 'none'; form-action 'none'",
 		"Referrer-Policy":                   "no-referrer",
 		"X-Permitted-Cross-Domain-Policies": "none",
+		"Cache-Control":                     "no-store",
 	}
 	for header, value := range want {
 		assert.Equal(t, []string{value}, rec.Header().Values(header), header)
 	}
+	assert.Empty(t, rec.Header().Values("Strict-Transport-Security"), "HSTS is the proxy's job")
+}
+
+func TestSecurityHeaders_HandlerSetsCacheControl(t *testing.T) {
+	t.Parallel()
+	h := middleware.SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+	}))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	assert.Equal(t, []string{"no-cache"}, rec.Header().Values("Cache-Control"))
 }
