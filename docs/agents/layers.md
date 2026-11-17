@@ -28,7 +28,8 @@ reaches the API's log intact and is answered with a 500 without details.
 - `authenticator.go` (API, only for an authentication method): implements `authn.Authenticator`, and
   `app/app.go` passes it to `authn.Require`. A rejected credential wraps the `authn` reason error that
   fits (`ErrMalformedCredentials`, `ErrUnknownCredentials`, `ErrExpiredCredentials`), which the metrics
-  and logs name, or else `ErrInvalidCredentials`.
+  and logs name, or else `ErrInvalidCredentials`. A login, which authenticates outside `authn.Require`,
+  runs in `authn.LoginRecorder.Record` instead, so that it's counted and traced like the other methods.
 
 ## Repository
 

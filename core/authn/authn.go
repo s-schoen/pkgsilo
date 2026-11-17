@@ -74,6 +74,9 @@ type Principal struct {
 	IdentityID uuid.UUID
 	// Method is the name of the authentication method that accepted the request.
 	Method string
+	// CredentialID is the ID of the credential that the request presented, such as its session's, for the
+	// feature of the method to tell which one it was. It's the nil UUID if the method doesn't set it.
+	CredentialID uuid.UUID
 }
 
 // Authenticator checks the credentials of one authentication method on a request.
@@ -90,8 +93,9 @@ type Authenticator interface {
 	// reason if it rejects the credential, and any other error if it can't tell. Errors are logged,
 	// so they must not contain the credential.
 	Authenticate(r *http.Request) (Principal, error)
-	// Challenge returns the method's challenge for the WWW-Authenticate header of a 401 response.
-	// Require reads it once, when it's built.
+	// Challenge returns the method's challenge for the WWW-Authenticate header of a 401 response, or
+	// empty for a method without a scheme of its own, such as a cookie. Require reads it once, when it's
+	// built.
 	Challenge() string
 }
 
@@ -122,7 +126,7 @@ func Actor(r *http.Request) uuid.UUID {
 //
 // The methods are tried in the given order, and the first that recognizes the credential decides.
 // Requests with a missing or rejected credential get the same 401, which never says why and
-// challenges for every method. Rejections are logged at info level with their reason (see
+// challenges for every method that has a challenge. Rejections are logged at info level with their reason (see
 // ErrInvalidCredentials) and error. Any other error of a method is logged at error level and answered
 // with a 500. Every request is counted with meterProvider in pkgsilo.authn.attempts, by outcome, method
 // and reason.
@@ -140,10 +144,12 @@ func Require(
 		panic("authn: Require needs at least one authenticator")
 	}
 	methods := make([]string, len(authenticators))
-	challenges := make([]string, len(authenticators))
+	var challenges []string
 	for i, authenticator := range authenticators {
 		methods[i] = authenticator.Method()
-		challenges[i] = authenticator.Challenge()
+		if challenge := authenticator.Challenge(); challenge != "" {
+			challenges = append(challenges, challenge)
+		}
 	}
 	base := requireHandler{
 		logger:         logger,
@@ -166,8 +172,9 @@ func Require(
 type requireHandler struct {
 	logger         *slog.Logger
 	authenticators []Authenticator
-	// methods and challenges hold what each authenticator returned, at its index.
-	methods    []string
+	// methods holds the method of each authenticator, at its index.
+	methods []string
+	// challenges holds the challenges of the authenticators that have one.
 	challenges []string
 	attempts   attempts
 	tracer     trace.Tracer
