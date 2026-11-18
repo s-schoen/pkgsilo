@@ -151,6 +151,17 @@
       "groupName": "Vitest (major)"
     },
     {
+      // oxlint declares the oxlint-tsgolint versions it runs with as a peer range.
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "oxlint",
+        "oxlint-tsgolint"
+      ],
+      "groupName": "oxlint"
+    },
+    {
       // One pull request per tool, since a new mockery or golangci-lint may need regenerated
       // mocks or lint fixes before it can be merged.
       "matchManagers": [
