@@ -63,6 +63,29 @@ tasks:
     cmds:
       - pnpm run test --reporter=default --reporter=junit --outputFile.junit=build/junit.xml {{.CLI_ARGS}}
 
+  "ui:lint":
+    desc: Lint the web UI with oxlint, type-aware and with the TypeScript type check
+    dir: ui
+    deps:
+      - ui:install
+    cmds:
+      - pnpm run lint {{.CLI_ARGS}}
+
+  "ui:lint:fix":
+    dir: ui
+    deps:
+      - ui:install
+    cmds:
+      - pnpm run lint:fix {{.CLI_ARGS}}
+
+  "ui:fmt":
+    desc: Format the web UI with oxfmt
+    dir: ui
+    deps:
+      - ui:install
+    cmds:
+      - pnpm run fmt {{.CLI_ARGS}}
+
   run:
     interactive: true
     dotenv:

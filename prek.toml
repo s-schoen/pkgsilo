@@ -74,6 +74,25 @@ entry = "go test -short ./..."
 files = '(^go\.(mod|sum)|\.go)$'
 pass_filenames = false
 
+# The web UI's hooks check all of ui/, since import sorting and type-aware rules span files. Like
+# golangci-lint fmt, oxfmt rewrites the files, so the commit fails until they're staged.
+[[repos.hooks]]
+id = "oxfmt"
+name = "oxfmt (ui)"
+language = "system"
+entry = "task ui:fmt"
+files = '^ui/'
+pass_filenames = false
+
+[[repos.hooks]]
+id = "oxlint"
+name = "oxlint (ui)"
+language = "system"
+entry = "task ui:lint"
+files = '^ui/'
+pass_filenames = false
+require_serial = true
+
 [[repos.hooks]]
 id = "cog-verify"
 name = "conventional commit message"
