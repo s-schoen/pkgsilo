@@ -1,0 +1,27 @@
+[global]
+flavor = "gfm"
+
+# Useful stricter checks that are opt-in.
+extend-enable = [
+  "MD080", # Detect heading-anchor collisions
+  "MD083", # Detect mojibake / encoding corruption
+  "MD087", # Detect unused rumdl-disable comments
+]
+
+# Consistent ATX headings: # Heading
+[MD003]
+style = "atx"
+
+# Consistent unordered lists: - item
+[MD004]
+style = "dash"
+
+# One sentence per line
+[MD013]
+line-length = 0
+reflow = true
+reflow-mode = "sentence-per-line"
+
+# Consistent fenced code blocks.
+[MD048]
+style = "backtick"

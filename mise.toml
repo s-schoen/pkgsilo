@@ -19,3 +19,5 @@ act = "0.2.97"
 # Build the UI in ui/ (`task ui:build`), which `task build:prod` embeds.
 node = "26.13.1"
 pnpm = "12.21.0"
+# Lints and formats the Markdown files (.rumdl.toml), run by prek.
+rumdl = "0.3.4"

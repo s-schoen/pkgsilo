@@ -31,8 +31,8 @@ jobs:
           go-version-file: go.mod
       - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
-          # node, pnpm and task for the web UI's hooks, oxfmt and oxlint.
-          install_args: golangci-lint mockery prek node pnpm task
+          # node, pnpm and task for the web UI's hooks, oxfmt and oxlint; rumdl for the Markdown hook.
+          install_args: golangci-lint mockery prek node pnpm task rumdl
       # Verifies the config, then lints with mise's golangci-lint and writes the findings for code scanning.
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
