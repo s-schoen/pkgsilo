@@ -1,7 +1,7 @@
 # AGENTS.md
 
 pkgsilo is a Go service with a REST API under `/api/v1` and an MCP endpoint at `/mcp`, both served by
-the same features with the same authorization.
+the same features with the same authorization, and a web UI at `/`.
 
 ## Layout
 
@@ -11,6 +11,7 @@ the same features with the same authorization.
 - `core/`: shared infrastructure; each package's doc comment describes it.
 - `test/<name>test`: shared test helpers, one package each.
 - `app/`: assembles the features (`app/app.go`); `migrations/`: the SQL migrations.
+- `ui/`: the web UI, a Vite + React + TypeScript app (pnpm) that the binary embeds; `core/spa` serves it.
 
 ## Rules for every change
 
@@ -34,11 +35,13 @@ the same features with the same authorization.
 - **API routes, request or response types** (`feature/*/api`, its `docs.go`): `docs/agents/openapi.md`.
 - **End-to-end tests** (`e2e_test.go`): `docs/agents/e2e-tests.md`.
 - **Telemetry** (metrics, spans, or logging errors): `docs/agents/telemetry.md`.
+- **The web UI** (`ui/`, `core/spa`): `docs/agents/ui.md`.
 
 ## Commands
 
 `task generate` (mocks), `task lint`, `task test` (needs Docker for PostgreSQL), `task test:short`
-(without), `task db:migrate:new -- <name>`. Run changed workflows locally with `task ci:push` and
+(without), `task db:migrate:new -- <name>`, `task ui:dev` and `task ui:build` (the web UI),
+`task build:prod` (the binary with the web UI). Run changed workflows locally with `task ci:push` and
 `task ci:pr` (act) before pushing them.
 
 ## Git
