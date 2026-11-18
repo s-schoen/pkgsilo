@@ -45,8 +45,9 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      // The entry point only mounts App; src/test/ holds the test helpers; src/paraglide/ is generated.
-      exclude: ["src/main.tsx", "src/test/**", "src/paraglide/**"],
+      // The entry point only mounts App; src/test/ holds the test helpers; src/api/gen/ and
+      // src/paraglide/ are generated.
+      exclude: ["src/main.tsx", "src/test/**", "src/api/gen/**", "src/paraglide/**"],
       reporter: ["text", "html", "lcov"],
       reportsDirectory: "build/coverage",
     },

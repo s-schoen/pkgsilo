@@ -11,7 +11,7 @@
   "env": {
     "es2023": true
   },
-  "ignorePatterns": ["build", "dist", "node_modules", "src/paraglide"],
+  "ignorePatterns": ["build", "dist", "node_modules", "src/api/gen", "src/paraglide"],
   "options": {
     "maxWarnings": 0,
     "reportUnusedDisableDirectives": "error",
@@ -89,7 +89,7 @@
   },
   "overrides": [
     {
-      "files": ["vite.config.ts"],
+      "files": ["orval.config.ts", "vite.config.ts"],
       "env": {
         "node": true
       }
