@@ -1,6 +1,8 @@
 {
   "json.schemaDownload.trustedDomains": {
-    "https://docs.renovatebot.com/": true
+    "https://docs.renovatebot.com/": true,
+    // ui/project.inlang/settings.json and ui/messages/*.json.
+    "https://inlang.com/schema/": true
   },
   // The Oxc extension looks for oxlint and oxfmt only in the root's node_modules; they're installed in
   // ui/. Relative paths resolve against the workspace folder. Each tool finds the config in ui/.

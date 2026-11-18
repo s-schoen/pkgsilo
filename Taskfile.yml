@@ -29,6 +29,20 @@ tasks:
     cmds:
       - pnpm install --frozen-lockfile
 
+  # Compiles the messages into ui/src/paraglide, which git ignores, for the type check of the build and
+  # of the lint. The Vite plugin compiles them by itself for the dev server, the build and the tests.
+  "ui:i18n":
+    dir: ui
+    deps:
+      - ui:install
+    sources:
+      - messages/**/*
+      - project.inlang/**/*
+    generates:
+      - src/paraglide/**/*
+    cmds:
+      - pnpm run i18n
+
   "ui:dev":
     desc: Run the Vite dev server of the web UI, which proxies /api and /mcp to the server of `task run`
     interactive: true
@@ -42,9 +56,11 @@ tasks:
     desc: Build the web UI into ui/dist, which `task build:prod` embeds
     dir: ui
     deps:
-      - ui:install
+      - ui:i18n
     sources:
       - src/**/*
+      - messages/**/*
+      - project.inlang/**/*
       - index.html
       - package.json
       - pnpm-lock.yaml
@@ -67,14 +83,14 @@ tasks:
     desc: Lint the web UI with oxlint, type-aware and with the TypeScript type check
     dir: ui
     deps:
-      - ui:install
+      - ui:i18n
     cmds:
       - pnpm run lint {{.CLI_ARGS}}
 
   "ui:lint:fix":
     dir: ui
     deps:
-      - ui:install
+      - ui:i18n
     cmds:
       - pnpm run lint:fix {{.CLI_ARGS}}
 
