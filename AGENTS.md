@@ -11,6 +11,7 @@ pkgsilo is a Go service with a REST API under `/api/v1` and an MCP endpoint at `
 - `test/<name>test`: shared test helpers, one package each.
 - `app/`: assembles the features (`app/app.go`); `migrations/`: the SQL migrations.
 - `ui/`: the web UI, a Vite + React + TypeScript app (pnpm) that the binary embeds; `core/spa` serves it.
+  Cut by feature as well: `ui/src/features/<feature>/` holds the slices, `ui/src/app/` the router and its routes.
 
 ## Rules for every change
 
