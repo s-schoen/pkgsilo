@@ -1,14 +1,17 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "import", "jsx-a11y", "oxc", "react", "typescript", "unicorn", "vitest"],
-  "jsPlugins": ["eslint-plugin-testing-library"],
+  "jsPlugins": [
+    "eslint-plugin-testing-library",
+    { "name": "paraglide", "specifier": "@inlang/paraglide-js/eslint" }
+  ],
   "categories": {
     "correctness": "error"
   },
   "env": {
     "es2023": true
   },
-  "ignorePatterns": ["build", "dist", "node_modules"],
+  "ignorePatterns": ["build", "dist", "node_modules", "src/paraglide"],
   "options": {
     "maxWarnings": 0,
     "reportUnusedDisableDirectives": "error",
@@ -105,6 +108,26 @@
         "import/no-cycle": ["error", { "ignoreExternal": true, "ignoreTypes": true }],
         "import/no-duplicates": "error",
         "import/no-self-import": "error",
+        "paraglide/no-dynamic-message-access": "error",
+        "react/jsx-no-literals": [
+          "error",
+          {
+            "noStrings": true,
+            "ignoreProps": true,
+            "allowedStrings": ["pkgsilo"],
+            "restrictedAttributes": [
+              "alt",
+              "aria-description",
+              "aria-label",
+              "aria-placeholder",
+              "aria-roledescription",
+              "aria-valuetext",
+              "label",
+              "placeholder",
+              "title"
+            ]
+          }
+        ],
         "typescript/array-type": ["error", { "default": "generic", "readonly": "generic" }],
         "typescript/ban-ts-comment": [
           "error",
@@ -132,6 +155,7 @@
     {
       "files": ["**/*.test.{ts,tsx}", "src/test/**/*.{ts,tsx}"],
       "rules": {
+        "react/jsx-no-literals": "off",
         "testing-library/await-async-events": ["error", { "eventModule": "userEvent" }],
         "testing-library/await-async-queries": "error",
         "testing-library/await-async-utils": "error",

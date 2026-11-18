@@ -1,5 +1,6 @@
 import { URL, fileURLToPath } from "node:url";
 
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
@@ -7,7 +8,18 @@ import { defineConfig } from "vitest/config";
 // proxies the API and MCP to the server of `task run`. Vitest reads the test section; its reports go
 // to build/, which git ignores.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Compiles messages/ into src/paraglide/ for the dev server, the build and the tests. The i18n
+    // script in package.json compiles the same for the type check: keep the options in step.
+    paraglideVitePlugin({
+      project: "./project.inlang",
+      outdir: "./src/paraglide",
+      // The browser's language, else English. localStorage goes first once the UI can switch the
+      // language: the runtime stores the first locale it detects there, which would then stick.
+      strategy: ["preferredLanguage", "baseLocale"],
+    }),
+  ],
   build: {
     outDir: "dist",
     emptyOutDir: true,
@@ -33,8 +45,8 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      // The entry point only mounts App; src/test/ holds the test helpers.
-      exclude: ["src/main.tsx", "src/test/**"],
+      // The entry point only mounts App; src/test/ holds the test helpers; src/paraglide/ is generated.
+      exclude: ["src/main.tsx", "src/test/**", "src/paraglide/**"],
       reporter: ["text", "html", "lcov"],
       reportsDirectory: "build/coverage",
     },

@@ -6,6 +6,7 @@
     "build": "tsc --noEmit && vite build",
     "dev": "vite",
     "fmt": "oxfmt",
+    "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy preferredLanguage baseLocale",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "vitest run --coverage",
@@ -16,6 +17,8 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@inlang/paraglide-js": "3.2.2",
+    "@inlang/plugin-message-format": "4.6.0",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
