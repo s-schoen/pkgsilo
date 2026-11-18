@@ -137,6 +137,20 @@
       "groupName": "Vite (major)"
     },
     {
+      // The coverage provider must have Vitest's exact version.
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "matchPackageNames": [
+        "vitest",
+        "@vitest/**"
+      ],
+      "groupName": "Vitest (major)"
+    },
+    {
       // One pull request per tool, since a new mockery or golangci-lint may need regenerated
       // mocks or lint fixes before it can be merged.
       "matchManagers": [
