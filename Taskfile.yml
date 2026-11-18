@@ -43,12 +43,27 @@ tasks:
     cmds:
       - pnpm run i18n
 
+  # Generates the API client into ui/src/api/gen, which git ignores, from the OpenAPI document that
+  # app/openapi_test.go pins. Orval has no Vite plugin, so every task that reads src/ depends on this
+  # one.
+  "ui:gen:api":
+    dir: ui
+    deps:
+      - ui:install
+    sources:
+      - ../app/testdata/openapi.json
+      - orval.config.ts
+    generates:
+      - src/api/gen/**/*
+    cmds:
+      - pnpm run gen:api
+
   "ui:dev":
     desc: Run the Vite dev server of the web UI, which proxies /api and /mcp to the server of `task run`
     interactive: true
     dir: ui
     deps:
-      - ui:install
+      - ui:gen:api
     cmds:
       - pnpm run dev
 
@@ -56,6 +71,7 @@ tasks:
     desc: Build the web UI into ui/dist, which `task build:prod` embeds
     dir: ui
     deps:
+      - ui:gen:api
       - ui:i18n
     sources:
       - src/**/*
@@ -75,7 +91,7 @@ tasks:
     desc: Test the web UI, with the coverage in ui/build/coverage and a JUnit report in ui/build/junit.xml
     dir: ui
     deps:
-      - ui:install
+      - ui:gen:api
     cmds:
       - pnpm run test --reporter=default --reporter=junit --outputFile.junit=build/junit.xml {{.CLI_ARGS}}
 
@@ -83,6 +99,7 @@ tasks:
     desc: Lint the web UI with oxlint, type-aware and with the TypeScript type check
     dir: ui
     deps:
+      - ui:gen:api
       - ui:i18n
     cmds:
       - pnpm run lint {{.CLI_ARGS}}
@@ -90,6 +107,7 @@ tasks:
   "ui:lint:fix":
     dir: ui
     deps:
+      - ui:gen:api
       - ui:i18n
     cmds:
       - pnpm run lint:fix {{.CLI_ARGS}}

@@ -6,6 +6,7 @@
     "build": "tsc --noEmit && vite build",
     "dev": "vite",
     "fmt": "oxfmt",
+    "gen:api": "orval",
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy preferredLanguage baseLocale",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
@@ -13,10 +14,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tanstack/react-query": "5.108.0",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@faker-js/faker": "10.6.0",
     "@inlang/paraglide-js": "3.2.2",
     "@inlang/plugin-message-format": "4.6.0",
     "@testing-library/dom": "10.4.2",
@@ -31,6 +35,7 @@
     "eslint-plugin-testing-library": "7.16.2",
     "jsdom": "31.0.1",
     "msw": "3.0.6",
+    "orval": "8.48.0",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
     "oxlint-tsgolint": "7.0.2007",

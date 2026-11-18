@@ -4,5 +4,6 @@ build/
 .scratch/
 ui/node_modules/
 ui/dist/
+ui/src/api/gen/
 .task
 .rumdl_cache

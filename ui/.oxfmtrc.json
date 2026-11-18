@@ -19,5 +19,12 @@
   "sortPackageJson": {
     "sortScripts": true
   },
-  "ignorePatterns": ["build", "dist", "node_modules", "pnpm-lock.yaml", "src/paraglide"]
+  "ignorePatterns": [
+    "build",
+    "dist",
+    "node_modules",
+    "pnpm-lock.yaml",
+    "src/api/gen",
+    "src/paraglide"
+  ]
 }

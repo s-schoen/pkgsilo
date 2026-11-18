@@ -89,7 +89,8 @@ id = "oxlint"
 name = "oxlint (ui)"
 language = "system"
 entry = "task ui:lint"
-files = '^ui/'
+# The API client is generated from the OpenAPI document, so a change of the API can break the UI.
+files = '^(ui/|app/testdata/openapi\.json$)'
 pass_filenames = false
 require_serial = true
 
