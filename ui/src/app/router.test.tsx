@@ -1,3 +1,5 @@
+import { DbClient } from "@tanstack/react-db";
+import { QueryClient } from "@tanstack/react-query";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -32,5 +34,13 @@ describe("router", () => {
 
     expect(await screen.findByText(m.welcome())).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("gives the routes the clients of the API and of TanStack DB", async () => {
+    const { router } = renderRoute("/");
+    await screen.findByText(m.welcome());
+
+    expect(router.options.context.queryClient).toBeInstanceOf(QueryClient);
+    expect(router.options.context.dbClient).toBeInstanceOf(DbClient);
   });
 });

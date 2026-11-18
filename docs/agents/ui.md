@@ -22,8 +22,8 @@ Open the URL that Vite prints.
 
 - `app/` assembles the UI, as `app/` does the service: the router (`router.tsx`) and the routes (`routes/`).
 - `features/<feature>/` is one slice, like `feature/<feature>/`, such as `features/home/`.
-  It holds only the folders it needs: `components/`, `hooks/`, `api/` (query options built from the generated client, for the loaders), `types/` and `utils/`.
-- `components/`, `hooks/`, `lib/` and `utils/` hold the code that features share, such as `components/layouts/app-layout.tsx`.
+  It holds only the folders it needs: `components/`, `hooks/`, `api/` (query options and collections built from the generated client, for the loaders), `types/` and `utils/`.
+- `components/`, `hooks/`, `lib/` and `utils/` hold the code that features share, such as `components/layouts/app-layout.tsx`, the form hook in `components/form/` and `lib/zod-locale.ts`.
   Create such a folder when its first file comes.
 - `api/gen/` is the generated API client, `paraglide/` the compiled messages, and `test/` the test helpers.
 - `main.tsx` mounts the app.
@@ -47,18 +47,20 @@ TanStack Router routes by the files in `src/app/routes/`: `__root.tsx` is the la
   Both read their options from `tsr.config.json`.
   The file is ignored by git, as is `.tanstack/`, the generator's temporary folder.
 - The router splits each route's component into its own chunk (`autoCodeSplitting`).
-- `createAppRouter` in `src/app/router.tsx` creates the router, with the `QueryClient` in the context of every route (`RouterContext` in `__root.tsx`).
+- `createAppRouter` in `src/app/router.tsx` creates the router, with the `QueryClient` and the `DbClient` in the context of every route (`RouterContext` in `__root.tsx`).
   A loader fills the cache of the API's hooks with `context.queryClient.ensureQueryData(…)`, and the page then reads it with the same hook.
+  A loader loads a collection with `await context.dbClient.collection(groupsCollection).preload()`, and the page then reads it with `useLiveQuery` (see "Client store").
   The router preloads a route when the pointer rests on a link to it, and leaves it to TanStack Query whether the cached data is fresh (`defaultPreloadStaleTime: 0`).
 - Link with `<Link to="/…">`, which the routes type: a link to a route that doesn't exist fails the type check.
 - `core/spa` answers every path without an extension with `index.html`, so a deep link reaches the router.
-- Test a route with `renderRoute(path)` from `@/test/render`, which renders the whole app at that path, with a memory history and its own `QueryClient`, and returns the `router` too.
+- Test a route with `renderRoute(path)` from `@/test/render`, which renders the whole app at that path, with a memory history and its own `QueryClient` and `DbClient`, and returns the `router` too.
   A route's component loads from its own chunk, so find it with a `findBy` query.
 - A test file in `src/app/routes/` isn't a route (`routeFileIgnorePattern` in `tsr.config.json`).
 
 ## Devtools
 
-`main.tsx` mounts TanStack Devtools, with the panels of TanStack Query and TanStack Router.
+`main.tsx` mounts TanStack Devtools, with the panels of TanStack Query, TanStack Router and TanStack Form.
+TanStack DB has no panel; its collections load through TanStack Query, whose panel shows their queries.
 They show on the dev server only: the `devtools()` plugin in `vite.config.ts` strips them from the build.
 Add the panel of a new TanStack library there.
 
@@ -90,6 +92,67 @@ Orval generates the API client into `ui/src/api/gen/` from `app/testdata/openapi
   The client doesn't check the responses with them.
 - After a change of the API, `go test ./app -run TestDocs -update` rewrites the document, and `task ui:lint` then reports the code that the change breaks.
   The prek hook `oxlint` runs on a commit that changes the document too.
+
+## Client store (TanStack DB)
+
+TanStack DB (`@tanstack/react-db`, a 1.0 release candidate) keeps the API's resources in collections on the client, which live queries read and join, and which apply a change at once (optimistically) while it's sent to the API.
+Use it for the resources that a page lists, filters or changes; a single read or a call such as a login stays with the API's hooks.
+
+- `main.tsx` creates a `DbClient` over the app's `QueryClient`, provides it with `DbProvider` and passes it to the router's context.
+- A collection is a descriptor that `collectionOptions` creates, with `queryCollectionOptions` from `@tanstack/query-db-collection`, so that it loads through TanStack Query.
+  It goes in `features/<feature>/api/<name>-collection.ts`, or `src/api/collections/` once several features share it.
+  Its `queryFn` and its handlers call the functions of the generated client, not `fetch`:
+
+  ```ts
+  export const groupsCollection = collectionOptions("groups", (client) =>
+    queryCollectionOptions({
+      id: "groups",
+      queryClient: client.requireDependency<QueryClient>("queryClient"),
+      queryKey: getListGroupsQueryKey(),
+      queryFn: async ({ signal }) => { /* listGroups({ offset, limit: 100 }, { signal }) until nextOffset is null */ },
+      getKey: (group) => group.id,
+      onInsert: async ({ transaction, collection }) => {
+        await Promise.all(transaction.mutations.map((m) => createGroup({ name: m.modified.name })));
+        await collection.utils.refetch();
+      },
+      // onUpdate with patchGroup, onDelete with deleteGroup, the same way.
+    }),
+  );
+  ```
+
+- A collection's `queryFn` loads every page: the lists of the API return at most 100 resources per request, and the collection's queries see only what it has loaded.
+- A loader preloads the collection (see "Routing"); a component reads it with `useLiveQuery((q) => q.from({ group: groupsCollection }))` and changes it with `useDbClient().collection(groupsCollection).insert(…)`, `.update(…)` or `.delete(…)`.
+  When a handler rejects, the collection rolls the change back.
+- Test with `renderWithClient`, `renderHookWithClient` or `renderRoute`, which give each test its own `DbClient`, and mock the requests with MSW as for the API's hooks.
+- TanStack DB holds most of the entry chunk's size (about 290 kB minified, 83 kB gzipped), since `main.tsx` creates the `DbClient`.
+
+## Forms
+
+Build a form with TanStack Form through `useAppForm` from `@/components/form/use-app-form.ts`, which binds the shared field and form components:
+
+```tsx
+const form = useAppForm({
+  defaultValues: { name: "" },
+  validators: { onChange: CreateGroupBody },
+  onSubmit: async ({ value }) => { await createGroup.mutateAsync({ data: value }); },
+});
+
+<form onSubmit={(event) => { event.preventDefault(); void form.handleSubmit(); }}>
+  <form.AppField name="name">{(field) => <field.TextField label={m.groupName()} />}</form.AppField>
+  <form.AppForm><form.SubmitButton label={m.save()} /></form.AppForm>
+</form>
+```
+
+- Validate with the generated zod schema of the request (`CreateGroupBody` from `src/api/gen/zod/<tag>/<tag>.zod.ts`), extended with `.extend()` or `.refine()` for the rules that the schema doesn't state.
+- Submit with a mutation of the API's hooks, or with an insert or update of a collection.
+- Import zod from `zod/v4` (and its locales from `zod/v4/locales`); `no-restricted-imports` rejects `zod`.
+  The generated schemas import `zod`, the same module, so they share zod's settings.
+- `TextField` shows a field's errors once the user has left it or submitted the form, in a `role="alert"` element that describes the input; `SubmitButton` is disabled while the form submits or can't.
+  Register a new field or form component in `use-app-form.ts`, and read the field with `useFieldContext<Value>()` or the form with `useFormContext()` from `form-contexts.ts`.
+- Their `label` is a message, as `react/jsx-no-literals` checks.
+- zod's messages, such as a schema's validation error, follow the locale: `main.tsx` calls `configureZodLocale(getLocale())` (`src/lib/zod-locale.ts`), whose map must name a zod locale for every locale of the UI.
+  `src/test/setup.ts` sets English for the tests.
+- A test finds an input by its label, and an error through zod's message for the same value (`schema.safeParse(value).error?.issues[0]?.message`), never as a literal.
 
 ## Translations
 
@@ -134,7 +197,7 @@ The CI job `ui-test` runs them on every push and uploads the coverage and the JU
   They're removed after each test.
   Take a handler from the generated `src/api/gen/client/<tag>/<tag>.msw.ts`, such as `getGetGroupMockHandler({ data: { id: "…" } })`, which answers with faker data for the members that the argument leaves out, or pass a function to build the response from the request.
   Write an `http.get("/api/v1/…", …)` handler yourself for an error response.
-- Render a component or hook that uses the API's hooks with `renderWithClient` or `renderHookWithClient` from `@/test/render`, which give each test its own `QueryClient` that doesn't retry.
+- Render a component or hook that uses the API's hooks or a collection with `renderWithClient` or `renderHookWithClient` from `@/test/render`, which give each test its own `QueryClient` that doesn't retry and its own `DbClient`.
   A request that no handler takes rejects with an MSW error and never reaches the network.
 - Vitest undoes `vi.spyOn`, `vi.stubEnv` and `vi.stubGlobal` before each test, so a test doesn't restore them itself.
 - `src/test/setup.ts` runs before every test file.
