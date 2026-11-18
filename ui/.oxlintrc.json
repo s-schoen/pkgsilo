@@ -151,6 +151,10 @@
         "eslint/no-restricted-imports": [
           "error",
           {
+            "paths": [
+              { "name": "zod", "message": "Import zod from zod/v4." },
+              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." }
+            ],
             "patterns": [
               {
                 "group": ["./*", "../*"],
@@ -182,6 +186,10 @@
         "eslint/no-restricted-imports": [
           "error",
           {
+            "paths": [
+              { "name": "zod", "message": "Import zod from zod/v4." },
+              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." }
+            ],
             "patterns": [
               {
                 "group": ["./*", "../*"],
@@ -202,6 +210,10 @@
         "eslint/no-restricted-imports": [
           "error",
           {
+            "paths": [
+              { "name": "zod", "message": "Import zod from zod/v4." },
+              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." }
+            ],
             "patterns": [
               {
                 "group": ["./*", "../*"],
