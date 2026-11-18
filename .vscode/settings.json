@@ -1,5 +1,21 @@
 {
   "json.schemaDownload.trustedDomains": {
     "https://docs.renovatebot.com/": true
+  },
+  // The Oxc extension looks for oxlint and oxfmt only in the root's node_modules; they're installed in
+  // ui/. Relative paths resolve against the workspace folder. Each tool finds the config in ui/.
+  "oxc.path.oxlint": "ui/node_modules/.bin/oxlint",
+  "oxc.path.oxfmt": "ui/node_modules/.bin/oxfmt",
+  "oxc.tsConfigPath": "ui/tsconfig.json",
+  // VS Code scopes settings by language, not by directory: only ui/ has TypeScript. JSON is left out,
+  // since the root has JSON that oxfmt doesn't own; the prek hook formats ui/'s JSON.
+  "[typescript][typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": false,
+    // Formats first, then applies the lint fixes.
+    "editor.codeActionsOnSave": {
+      "source.format.oxc": "always",
+      "source.fixAll.oxc": "always"
+    }
   }
 }
