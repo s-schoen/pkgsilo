@@ -5,5 +5,7 @@ build/
 ui/node_modules/
 ui/dist/
 ui/src/api/gen/
+ui/src/app/routeTree.gen.ts
+ui/.tanstack/
 .task
 .rumdl_cache

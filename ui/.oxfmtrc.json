@@ -25,6 +25,8 @@
     "node_modules",
     "pnpm-lock.yaml",
     "src/api/gen",
-    "src/paraglide"
+    "src/app/routeTree.gen.ts",
+    "src/paraglide",
+    ".tanstack"
   ]
 }

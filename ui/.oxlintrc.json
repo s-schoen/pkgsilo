@@ -11,7 +11,15 @@
   "env": {
     "es2023": true
   },
-  "ignorePatterns": ["build", "dist", "node_modules", "src/api/gen", "src/paraglide"],
+  "ignorePatterns": [
+    "build",
+    "dist",
+    "node_modules",
+    ".tanstack",
+    "src/api/gen",
+    "src/app/routeTree.gen.ts",
+    "src/paraglide"
+  ],
   "options": {
     "maxWarnings": 0,
     "reportUnusedDisableDirectives": "error",
@@ -129,6 +137,7 @@
           }
         ],
         "typescript/array-type": ["error", { "default": "generic", "readonly": "generic" }],
+        "unicorn/filename-case": ["error", { "case": "kebabCase" }],
         "typescript/ban-ts-comment": [
           "error",
           { "ts-expect-error": false, "ts-ignore": "allow-with-description" }
@@ -146,6 +155,61 @@
               {
                 "group": ["./*", "../*"],
                 "message": "Import from src/ with the @/ alias."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The names of the route files are the URL's syntax, such as __root.tsx and $groupId.tsx.
+      "files": ["src/app/routes/**"],
+      "rules": {
+        "unicorn/filename-case": "off"
+      }
+    },
+    {
+      // Imports flow one way: shared code -> features -> app. An override replaces the rule's
+      // options, so each repeats the pattern against relative imports.
+      "files": [
+        "src/api/**/*.{ts,tsx}",
+        "src/components/**/*.{ts,tsx}",
+        "src/hooks/**/*.{ts,tsx}",
+        "src/lib/**/*.{ts,tsx}",
+        "src/utils/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["./*", "../*"],
+                "message": "Import from src/ with the @/ alias."
+              },
+              {
+                "group": ["@/features/**", "@/app/**"],
+                "message": "Shared code doesn't import features or the app."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/features/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["./*", "../*"],
+                "message": "Import from src/ with the @/ alias."
+              },
+              {
+                "group": ["@/app/**"],
+                "message": "A feature doesn't import the app."
               }
             ]
           }

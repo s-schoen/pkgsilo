@@ -58,6 +58,21 @@ tasks:
     cmds:
       - pnpm run gen:api
 
+  # Generates the route tree into ui/src/app/routeTree.gen.ts, which git ignores, from the route
+  # files in ui/src/app/routes, for the type check of the build and of the lint. The Vite plugin
+  # generates it by itself for the dev server, the build and the tests. Both read tsr.config.json.
+  "ui:routes":
+    dir: ui
+    deps:
+      - ui:install
+    sources:
+      - src/app/routes/**/*
+      - tsr.config.json
+    generates:
+      - src/app/routeTree.gen.ts
+    cmds:
+      - pnpm run routes
+
   "ui:dev":
     desc: Run the Vite dev server of the web UI, which proxies /api and /mcp to the server of `task run`
     interactive: true
@@ -73,6 +88,7 @@ tasks:
     deps:
       - ui:gen:api
       - ui:i18n
+      - ui:routes
     sources:
       - src/**/*
       - messages/**/*
@@ -81,6 +97,7 @@ tasks:
       - package.json
       - pnpm-lock.yaml
       - tsconfig.json
+      - tsr.config.json
       - vite.config.ts
     generates:
       - dist/**/*
@@ -101,6 +118,7 @@ tasks:
     deps:
       - ui:gen:api
       - ui:i18n
+      - ui:routes
     cmds:
       - pnpm run lint {{.CLI_ARGS}}
 
@@ -109,6 +127,7 @@ tasks:
     deps:
       - ui:gen:api
       - ui:i18n
+      - ui:routes
     cmds:
       - pnpm run lint:fix {{.CLI_ARGS}}
 

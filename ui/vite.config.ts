@@ -1,6 +1,8 @@
 import { URL, fileURLToPath } from "node:url";
 
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
+import { devtools } from "@tanstack/devtools-vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
@@ -9,6 +11,13 @@ import { defineConfig } from "vitest/config";
 // to build/, which git ignores.
 export default defineConfig({
   plugins: [
+    // TanStack Devtools (src/main.tsx) for the dev server only: it strips them from the build, and
+    // does nothing in the tests.
+    devtools(),
+    // Generates src/app/routeTree.gen.ts from src/app/routes/ for the dev server, the build and the
+    // tests, and splits each route's component into its own chunk. It reads tsr.config.json, as the
+    // routes script in package.json does. It must come before react().
+    tanstackRouter(),
     react(),
     // Compiles messages/ into src/paraglide/ for the dev server, the build and the tests. The i18n
     // script in package.json compiles the same for the type check: keep the options in step.
@@ -45,9 +54,15 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      // The entry point only mounts App; src/test/ holds the test helpers; src/api/gen/ and
-      // src/paraglide/ are generated.
-      exclude: ["src/main.tsx", "src/test/**", "src/api/gen/**", "src/paraglide/**"],
+      // The entry point only mounts the router; src/test/ holds the test helpers; src/api/gen/,
+      // src/app/routeTree.gen.ts and src/paraglide/ are generated.
+      exclude: [
+        "src/main.tsx",
+        "src/test/**",
+        "src/api/gen/**",
+        "src/app/routeTree.gen.ts",
+        "src/paraglide/**",
+      ],
       reporter: ["text", "html", "lcov"],
       reportsDirectory: "build/coverage",
     },
