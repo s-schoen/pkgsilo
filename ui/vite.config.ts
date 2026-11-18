@@ -1,5 +1,6 @@
-import react from "@vitejs/plugin-react";
 import { URL, fileURLToPath } from "node:url";
+
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 // The build goes to dist/, which the Go binary embeds with -tags webui (embed.go). The dev server
