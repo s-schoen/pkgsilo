@@ -16,6 +16,21 @@ The Go binary embeds its build and serves it at `/`.
 `task run` serves the API on `:8080`, and `task ui:dev` runs the Vite dev server, which proxies `/api`
 and `/mcp` to it. Open the URL that Vite prints.
 
+## Linting and formatting
+
+`task ui:fmt` formats with oxfmt (`ui/.oxfmtrc.json`), which also sorts the imports and `package.json`.
+`task ui:lint` lints with oxlint (`ui/.oxlintrc.json`); `task ui:lint:fix` applies its fixes. Both cover
+all of `ui/`. The prek hooks `oxfmt` and `oxlint` run them on a commit that touches `ui/`, and the CI job
+`lint` on every push.
+
+- oxlint is type-aware (oxlint-tsgolint) and also reports TypeScript's errors, so a type error fails the
+  lint as well as `task ui:build`. Every warning fails it too.
+- Import from `src/` with the `@/` alias (`@/App.tsx`), not with a relative path.
+- Tests get the Testing Library rules (eslint-plugin-testing-library, an ESLint plugin that oxlint runs):
+  await `userEvent` calls and `findBy` queries, and don't await the synchronous ones.
+- Disable a rule only with an `oxlint-disable` comment; oxlint ignores `eslint-disable`, and an unused
+  disable comment is an error.
+
 ## Tests
 
 `task ui:test` runs the tests once, with coverage; `pnpm run test:watch` in `ui/` reruns them on change.
