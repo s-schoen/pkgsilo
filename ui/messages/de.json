@@ -1,4 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "welcome": "Willkommen bei pkgsilo."
+  "welcome": "Willkommen bei pkgsilo.",
+  "notFound": "Diese Seite gibt es nicht.",
+  "goHome": "Zur Startseite"
 }
