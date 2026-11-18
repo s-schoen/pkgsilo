@@ -1,4 +1,5 @@
-# Codecov settings for the coverage and test results that the test (PostgreSQL) job of ci.yml uploads.
+# Codecov settings for the coverage and test results that the test (PostgreSQL) and ui-test jobs of ci.yml
+# upload.
 # Validate changes with: curl -X POST --data-binary @.github/codecov.yml https://codecov.io/validate
 
 # Informational: the statuses report coverage but never fail a pull request, so they never hold back
@@ -18,9 +19,11 @@ comment:
   layout: "condensed_header, diff, components, condensed_files"
   require_changes: true
 
-# The coverage profile names files by import path: the module path pkgsilo becomes the repository root.
+# The Go coverage profile names files by import path: the module path pkgsilo becomes the repository
+# root. The web UI's lcov report names them relative to ui/.
 fixes:
   - "pkgsilo/::"
+  - "^src/::ui/src/"
 
 # One component per feature slice, so that a pull request shows the coverage of each.
 component_management:
@@ -55,3 +58,7 @@ component_management:
       name: test helpers
       paths:
         - "test/**"
+    - component_id: ui
+      name: web UI
+      paths:
+        - "ui/src/**"

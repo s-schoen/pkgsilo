@@ -1,8 +1,9 @@
 name: CI
 
-# Every pushed commit gets the prek hooks, the short tests and the build with the web UI. Pull requests and master add the tests that
-# need a PostgreSQL container, and upload their coverage and results to Codecov (.github/codecov.yml). Go
-# comes from the toolchain line in go.mod, every other tool from mise.toml.
+# Every pushed commit gets the prek hooks, the short tests, the build with the web UI and the web UI's
+# tests. Pull requests and master add the tests that need a PostgreSQL container. Both test jobs upload
+# their coverage and results to Codecov (.github/codecov.yml). Go comes from the toolchain line in go.mod,
+# every other tool from mise.toml.
 on:
   push:
   pull_request:
@@ -77,6 +78,36 @@ jobs:
         with:
           install_args: node pnpm task
       - run: task build:prod
+
+  # Uploads on every push, so that Codecov has the web UI's coverage of each branch commit and of master.
+  ui-test:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # The Codecov uploads authenticate with an OIDC token instead of a secret.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          install_args: node pnpm task
+      - run: task ui:test
+      # As in the test (PostgreSQL) job below.
+      - if: ${{ !env.ACT }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: ui/build/coverage/lcov.info
+          disable_search: true
+      - if: ${{ !cancelled() && !env.ACT }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          report_type: test_results
+          use_oidc: true
+          files: ui/build/junit.xml
+          disable_search: true
 
   test:
     name: test (PostgreSQL)
