@@ -1,4 +1,5 @@
-// Keeps the Go modules, the mise.toml tools and the GitHub Actions up to date. Pull requests
+// Keeps the Go modules, the web UI's pnpm dependencies, the mise.toml tools and the GitHub Actions
+// up to date. Pull requests
 // for vulnerable dependencies are opened at once; everything else waits for the weekly schedule
 // and for its release to be 3 days old. Minor and patch updates of 1.0+ dependencies are merged
 // by Renovate once CI is green.
@@ -12,6 +13,8 @@
   // breaks existing dev volumes, so it's raised by hand.
   "enabledManagers": [
     "gomod",
+    // Renovate's manager for package.json, which updates ui/pnpm-lock.yaml with pnpm.
+    "npm",
     "mise",
     "github-actions"
   ],
@@ -85,6 +88,53 @@
         "toolchain"
       ],
       "groupName": "Go toolchain"
+    },
+    {
+      "matchManagers": [
+        "npm"
+      ],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "UI dependencies (non-major)"
+    },
+    {
+      // A major update of React needs the types of the same major.
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "matchPackageNames": [
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom"
+      ],
+      "groupName": "React (major)"
+    },
+    {
+      // A major update of Vite may need a new major of its React plugin.
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "matchPackageNames": [
+        "vite",
+        "@vitejs/**"
+      ],
+      "groupName": "Vite (major)"
     },
     {
       // One pull request per tool, since a new mockery or golangci-lint may need regenerated

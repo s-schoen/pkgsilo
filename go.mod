@@ -4,6 +4,9 @@ go 1.27.0
 
 toolchain go1.27.4
 
+// npm packages may ship .go files, which go build ./... and the linters would pick up.
+ignore ./ui/node_modules
+
 require (
 	github.com/caarlos0/env/v11 v11.4.2
 	github.com/cedar-policy/cedar-go v1.9.2
