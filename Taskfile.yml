@@ -5,14 +5,55 @@ tasks:
     cmds:
       - go build -o build/pkgsilo ./cmd
 
+  # Embeds the web UI (-tags webui), which `build` leaves out, so that it needs no Node.
   "build:prod":
+    deps:
+      - ui:build
     env:
       CGO_ENABLED: "0"
     vars:
       VERSION:
         sh: git describe --tags --always --dirty
     cmds:
-      - go build -trimpath -ldflags "-s -w -X main.version={{.VERSION}}" -o build/pkgsilo ./cmd/
+      - go build -trimpath -tags webui -ldflags "-s -w -X main.version={{.VERSION}}" -o build/pkgsilo ./cmd/
+
+  "ui:install":
+    dir: ui
+    sources:
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+    # Also reinstalls a deleted node_modules.
+    generates:
+      - node_modules/.modules.yaml
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  "ui:dev":
+    desc: Run the Vite dev server of the web UI, which proxies /api and /mcp to the server of `task run`
+    interactive: true
+    dir: ui
+    deps:
+      - ui:install
+    cmds:
+      - pnpm run dev
+
+  "ui:build":
+    desc: Build the web UI into ui/dist, which `task build:prod` embeds
+    dir: ui
+    deps:
+      - ui:install
+    sources:
+      - src/**/*
+      - index.html
+      - package.json
+      - pnpm-lock.yaml
+      - tsconfig.json
+      - vite.config.ts
+    generates:
+      - dist/**/*
+    cmds:
+      - pnpm run build
 
   run:
     interactive: true

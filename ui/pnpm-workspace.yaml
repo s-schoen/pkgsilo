@@ -1,0 +1,14 @@
+blockExoticSubdeps: true
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 525600
+trustLockfile: false
+strictDepBuilds: true
+allowBuilds:
+  # Required native binary setup for Vite, Vitest, and tsx.
+  esbuild: true
+auditLevel: moderate
+engineStrict: true
+pmOnFail: error
