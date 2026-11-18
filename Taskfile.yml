@@ -55,6 +55,14 @@ tasks:
     cmds:
       - pnpm run build
 
+  "ui:test":
+    desc: Test the web UI, with the coverage in ui/build/coverage and a JUnit report in ui/build/junit.xml
+    dir: ui
+    deps:
+      - ui:install
+    cmds:
+      - pnpm run test --reporter=default --reporter=junit --outputFile.junit=build/junit.xml {{.CLI_ARGS}}
+
   run:
     interactive: true
     dotenv:
