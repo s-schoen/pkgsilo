@@ -358,3 +358,49 @@ func TestBrowserProtections(t *testing.T) {
 	mcp := apptest.MCP(t, crossSite.WithHeader("Origin", "https://attacker.example"))
 	assert.Equal(t, "admin", mcp.Call("identity_whoami", "").Decode[identityapi.IdentityResponse]().Username.Value)
 }
+
+// TestUI checks that the paths that no route of the API or MCP takes serve the web UI, which the client
+// needs no credential for, while the API keeps its problems:
+//
+//  1. Get /: 200 with the UI's index.html, which a browser must revalidate, and a Content-Security-Policy
+//     that lets the UI load from its own origin.
+//  2. Get a client-side route: 200 with the same index.html.
+//  3. Get a missing asset: 404 problem with the API's Content-Security-Policy.
+//  4. Get a path under /api/v1 that no route takes: 404 problem, not the UI.
+//  5. Post to /: 405 problem.
+func TestUI(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t).Anonymous()
+	const (
+		uiPolicy = "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; " +
+			"form-action 'self'"
+		apiPolicy = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+	)
+	notFound := envelope.NotFoundProblem.New(envelope.Occurrence{})
+
+	// 1. Root.
+	root := api.Get("/")
+	root.AssertStatus(http.StatusOK)
+	assert.Equal(t, "text/html; charset=utf-8", root.Header().Get("Content-Type"))
+	assert.Equal(t, "no-cache", root.Header().Get("Cache-Control"))
+	assert.Equal(t, uiPolicy, root.Header().Get("Content-Security-Policy"))
+
+	// 2. Client-side route.
+	route := api.Get("/identities/42")
+	route.AssertStatus(http.StatusOK)
+	assert.Equal(t, root.Body.String(), route.Body.String())
+	assert.Equal(t, uiPolicy, route.Header().Get("Content-Security-Policy"))
+
+	// 3. Missing asset.
+	asset := api.Get("/assets/missing.js")
+	asset.AssertProblem(notFound)
+	assert.Equal(t, apiPolicy, asset.Header().Get("Content-Security-Policy"))
+
+	// 4. Unrouted API path.
+	unrouted := api.Get("/api/v1/nope")
+	unrouted.AssertProblem(notFound)
+	assert.Equal(t, apiPolicy, unrouted.Header().Get("Content-Security-Policy"))
+
+	// 5. Post.
+	api.Post("/", "").AssertProblem(envelope.MethodNotAllowedProblem.New(envelope.Occurrence{}))
+}

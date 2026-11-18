@@ -22,6 +22,7 @@ import (
 	"pkgsilo/core/server"
 	"pkgsilo/core/telemetry"
 	sessionservice "pkgsilo/feature/session/service"
+	"pkgsilo/ui"
 )
 
 // telemetryShutdownTimeout bounds the shutdown of the telemetry once the servers have stopped.
@@ -54,6 +55,9 @@ func run() error {
 	slog.SetDefault(log)
 
 	log.Info("starting pkgsilo", "version", version)
+	if !ui.Built {
+		log.Warn("built without the web ui: / serves a placeholder page, build with `task build:prod` to embed the ui")
+	}
 
 	// OpenTelemetry reports its own errors, such as failed exports, to a global handler, which would
 	// otherwise print them with the standard library's log.

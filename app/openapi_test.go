@@ -59,7 +59,8 @@ func TestDocs_Valid(t *testing.T) {
 }
 
 // TestDocs_Routes checks that the OpenAPI document describes every route of the API, and no other, so that a
-// route can't be added, moved or removed without its description. Only the document itself isn't in it.
+// route can't be added, moved or removed without its description. Only the document itself, MCP and the web
+// UI aren't in it.
 func TestDocs_Routes(t *testing.T) {
 	t.Parallel()
 	handler := NewHandler(router.Options{}, nil, nil, sessionservice.Lifetimes{},
@@ -71,7 +72,7 @@ func TestDocs_Routes(t *testing.T) {
 	var served []string
 	err := chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		route = strings.TrimSuffix(strings.ReplaceAll(route, "/*/", "/"), "/")
-		if route == apiPath+specPath || route == mcpPath {
+		if route == apiPath+specPath || route == mcpPath || route == uiPath {
 			return nil
 		}
 		served = append(served, method+" "+route)

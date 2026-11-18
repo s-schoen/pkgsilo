@@ -18,6 +18,7 @@ import (
 	"pkgsilo/core/middleware"
 	"pkgsilo/core/openapi"
 	"pkgsilo/core/router"
+	"pkgsilo/core/spa"
 	apikeyapi "pkgsilo/feature/apikey/api"
 	apikeyrepo "pkgsilo/feature/apikey/repository"
 	apikeyservice "pkgsilo/feature/apikey/service"
@@ -44,6 +45,7 @@ import (
 	sessionapi "pkgsilo/feature/session/api"
 	sessionrepo "pkgsilo/feature/session/repository"
 	sessionservice "pkgsilo/feature/session/service"
+	"pkgsilo/ui"
 )
 
 const (
@@ -61,12 +63,15 @@ const (
 	specPath = "/openapi.json"
 	// mcpPath is the path of the MCP endpoint, at the root, outside apiPath.
 	mcpPath = "/mcp"
+	// uiPath is the pattern of the web UI, which gets every path that no other route takes.
+	uiPath = "/*"
 )
 
 // NewHandler returns the HTTP API: the routes of every feature, backed by db, mounted under /api/v1
 // on the router that opts configures, and the MCP endpoint at /mcp, which serves the tools of the
-// features to agents. The OpenAPI document of the API is at /api/v1/openapi.json. All routes but the health
-// check and the document need an authenticated request. The routes under /api/v1 reject state-changing
+// features to agents. Every other path serves the web UI of package ui, which needs no authentication. The
+// OpenAPI document of the API is at /api/v1/openapi.json. All routes but the health check, the document and
+// the UI need an authenticated request. The routes under /api/v1 reject state-changing
 // requests that a browser sends from another origin, and no response is stored unless its handler says so.
 // API keys are hashed under the secret apiKeyPepper. A login with a password creates a session, whose cookie
 // authenticates the routes under /api/v1, but not /mcp, until it exceeds sessionLifetimes. Requests and errors
@@ -123,6 +128,8 @@ func NewHandler(
 			r.Mount(policiesPath, policyapi.NewHandler(policies, logger).Routes())
 		})
 	})
+	// After the API, which keeps the 404 problem of router.New for a path under /api/v1 that it doesn't route.
+	r.Handle(uiPath, spa.Handler(ui.FS(), logger))
 
 	return r
 }
