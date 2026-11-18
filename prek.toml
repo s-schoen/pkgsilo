@@ -93,6 +93,15 @@ files = '^ui/'
 pass_filenames = false
 require_serial = true
 
+# Like golangci-lint fmt, the fixes rewrite the files, so the commit fails until they're staged. What
+# rumdl can't fix fails the hook too.
+[[repos.hooks]]
+id = "rumdl"
+name = "rumdl"
+language = "system"
+entry = "rumdl check --fix"
+types = ["markdown"]
+
 [[repos.hooks]]
 id = "cog-verify"
 name = "conventional commit message"

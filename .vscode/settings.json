@@ -17,5 +17,10 @@
       "source.format.oxc": "always",
       "source.fixAll.oxc": "always"
     }
+  },
+  // The rumdl extension reads .rumdl.toml, as the prek hook does, and formats with its fixes.
+  "[markdown]": {
+    "editor.defaultFormatter": "rvben.rumdl",
+    "editor.formatOnSave": true
   }
 }
