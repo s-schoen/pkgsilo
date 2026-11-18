@@ -40,8 +40,8 @@ the same features with the same authorization, and a web UI at `/`.
 ## Commands
 
 `task generate` (mocks), `task lint`, `task test` (needs Docker for PostgreSQL), `task test:short`
-(without), `task db:migrate:new -- <name>`, `task ui:dev`, `task ui:build` and `task ui:test` (the web
-UI), `task build:prod` (the binary with the web UI). Run changed workflows locally with `task ci:push`
+(without), `task db:migrate:new -- <name>`, `task ui:dev`, `task ui:build`, `task ui:test`, `task ui:lint`
+and `task ui:fmt` (the web UI), `task build:prod` (the binary with the web UI). Run changed workflows locally with `task ci:push`
 and `task ci:pr` (act) before pushing them.
 
 ## Git
