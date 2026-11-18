@@ -1,6 +1,6 @@
 name: CI
 
-# Every pushed commit gets the prek hooks and the short tests. Pull requests and master add the tests that
+# Every pushed commit gets the prek hooks, the short tests and the build with the web UI. Pull requests and master add the tests that
 # need a PostgreSQL container, and upload their coverage and results to Codecov (.github/codecov.yml). Go
 # comes from the toolchain line in go.mod, every other tool from mise.toml.
 on:
@@ -62,6 +62,21 @@ jobs:
         with:
           install_args: task
       - run: task test:short
+
+  # Builds the binary as it's released, with the web UI embedded, which the other jobs leave out.
+  build:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          install_args: node pnpm task
+      - run: task build:prod
 
   test:
     name: test (PostgreSQL)
