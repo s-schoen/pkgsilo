@@ -1,21 +1,29 @@
-/* The variant's class (.primary, .secondary, .danger) sets the colors of .button. The states come
-   from the data attributes of React Aria Components, which behave the same for mouse, touch and
-   keyboard, unlike :hover and :active. */
+/* The variant's class (.primary, .secondary, …) sets the colors of .button, and the size's class
+   (.sm, .md, .lg) its dimensions. The states come from the data attributes of React Aria
+   Components, which behave the same for mouse, touch and keyboard, unlike :hover and :active. A
+   disabled button changes its colors instead of fading out, as each variant sets. */
 .button {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  min-block-size: var(--size-control);
-  padding-block: var(--space-1);
-  padding-inline: var(--space-4);
-  border: var(--border-width) solid var(--button-border);
-  border-radius: var(--radius-md);
+  gap: var(--button-gap);
+  block-size: var(--button-height);
+  padding-block: 0;
+  padding-inline: var(--button-padding);
+  border: var(--border-width) solid var(--button-border, transparent);
+  border-radius: var(--radius-control);
   background: var(--button-bg);
+  box-shadow: var(--button-shadow, none);
   color: var(--button-text);
+  font-size: var(--button-font-size);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-tight);
-  transition: background-color var(--duration-fast);
+  white-space: nowrap;
+  cursor: pointer;
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: var(--duration-normal);
+  transition-timing-function: var(--ease-out);
   /* Only the keyboard's focus shows the ring, below. */
   outline: none;
 
@@ -33,42 +41,104 @@
   }
 
   &[data-disabled] {
-    opacity: var(--opacity-disabled);
+    border-color: var(--button-border-disabled, transparent);
+    background: var(--button-bg-disabled);
+    box-shadow: none;
+    color: var(--button-text-disabled);
+    cursor: not-allowed;
   }
+}
+
+.sm {
+  --button-height: var(--control-height-sm);
+  --button-padding: var(--control-padding-sm);
+  --button-gap: var(--control-gap-sm);
+  --button-font-size: var(--font-size-sm);
+}
+
+.md {
+  --button-height: var(--control-height-md);
+  --button-padding: var(--control-padding-md);
+  --button-gap: var(--control-gap-md);
+  --button-font-size: var(--font-size-sm);
+}
+
+.lg {
+  --button-height: var(--control-height-lg);
+  --button-padding: var(--control-padding-lg);
+  --button-gap: var(--control-gap-lg);
+  --button-font-size: var(--font-size-md);
 }
 
 /* A button with an icon alone is square. */
 .iconOnly {
-  inline-size: var(--size-control);
+  inline-size: var(--button-height);
   padding-inline: 0;
 }
 
 .icon {
   flex-shrink: 0;
-  inline-size: 1.25em;
-  block-size: 1.25em;
+  inline-size: 1.2em;
+  block-size: 1.2em;
 }
 
 .primary {
   --button-bg: var(--color-accent);
   --button-bg-hovered: var(--color-accent-hovered);
   --button-bg-pressed: var(--color-accent-pressed);
-  --button-border: transparent;
   --button-text: var(--color-on-accent);
+  --button-bg-disabled: var(--color-layer-disabled);
+  --button-text-disabled: var(--color-on-disabled);
 }
 
+/* Raised off its layer by a border and a shadow. */
 .secondary {
-  --button-bg: var(--color-bg-subtle);
-  --button-bg-hovered: var(--color-bg-subtle-hovered);
-  --button-bg-pressed: var(--color-bg-subtle-pressed);
-  --button-border: var(--color-border);
-  --button-text: var(--color-text);
+  --button-bg: var(--color-layer-2);
+  --button-bg-hovered: var(--color-layer-2-hovered);
+  --button-bg-pressed: var(--color-layer-2-pressed);
+  --button-border: var(--color-border-strong);
+  --button-shadow: var(--shadow-raised);
+  --button-text: var(--color-text-secondary);
+  --button-bg-disabled: transparent;
+  --button-border-disabled: var(--color-border-subtle);
+  --button-text-disabled: var(--color-text-disabled);
+}
+
+.tertiary {
+  --button-bg: var(--color-layer-3);
+  --button-bg-hovered: var(--color-layer-3-hovered);
+  --button-bg-pressed: var(--color-layer-3-pressed);
+  --button-text: var(--color-text-secondary);
+  --button-bg-disabled: transparent;
+  --button-text-disabled: var(--color-text-disabled);
+}
+
+.ghost {
+  --button-bg: transparent;
+  --button-bg-hovered: var(--color-layer-transparent-hovered);
+  --button-bg-pressed: var(--color-layer-transparent-pressed);
+  --button-text: var(--color-text-secondary);
+  --button-bg-disabled: transparent;
+  --button-text-disabled: var(--color-text-disabled);
 }
 
 .danger {
   --button-bg: var(--color-danger);
   --button-bg-hovered: var(--color-danger-hovered);
   --button-bg-pressed: var(--color-danger-pressed);
-  --button-border: transparent;
   --button-text: var(--color-on-danger);
+  --button-bg-disabled: var(--color-layer-disabled);
+  --button-text-disabled: var(--color-on-disabled);
+}
+
+.dangerOutline {
+  --button-bg: transparent;
+  --button-bg-hovered: var(--color-danger-subtle);
+  --button-bg-pressed: var(--color-danger-subtle-pressed);
+  --button-border: var(--color-border-danger);
+  --button-shadow: var(--shadow-raised);
+  --button-text: var(--color-text-danger);
+  --button-bg-disabled: transparent;
+  --button-border-disabled: var(--color-border-subtle);
+  --button-text-disabled: var(--color-text-disabled);
 }

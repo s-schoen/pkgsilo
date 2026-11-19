@@ -1,5 +1,6 @@
 /* The design tokens of the UI, which global.css loads: a component's CSS module takes its colors,
-   sizes and fonts from these, never as literal values.
+   sizes and fonts from these, never as literal values. The values follow Plane's design (its
+   @makeplane/propel tokens), expressed in this project's names.
 
    A color is light-dark(<light>, <dark>) and follows the operating system's color scheme. The
    data-color-scheme attribute on <html> forces one: Storybook's toolbar sets it, and a setting of
@@ -8,30 +9,83 @@
 :root {
   color-scheme: light dark;
 
-  /* The page and the text on it. A subtle background sets a control apart from the page, with a
-     shade for each of its states. */
-  --color-bg: light-dark(oklch(99% 0.003 260), oklch(18% 0.01 260));
-  --color-bg-subtle: light-dark(oklch(96% 0.005 260), oklch(24% 0.012 260));
-  --color-bg-subtle-hovered: light-dark(oklch(92% 0.007 260), oklch(29% 0.014 260));
-  --color-bg-subtle-pressed: light-dark(oklch(88% 0.009 260), oklch(33% 0.016 260));
-  --color-text: light-dark(oklch(22% 0.01 260), oklch(94% 0.005 260));
-  --color-text-muted: light-dark(oklch(45% 0.015 260), oklch(72% 0.012 260));
-  --color-border: light-dark(oklch(82% 0.01 260), oklch(38% 0.015 260));
+  /* Depth: the canvas is the page itself (on <body>, once); surfaces sit on it side by side; layers
+     stack inside a surface, layer-1 in surface-1 and so on. Each layer has a shade for each state
+     of what it fills; the transparent layer has only those, for ghost buttons and rows. */
+  --color-canvas: light-dark(oklch(96.1% 0.0013 286), oklch(16.9% 0.0021 286));
+  --color-surface-1: light-dark(oklch(100% 0 0), oklch(19.2% 0.002 286));
+  --color-surface-2: light-dark(oklch(99.1% 0 0), oklch(21.6% 0.0025 231));
 
-  /* The main action and the selection, with the text on it. Dark mode lightens the accent and
-     darkens the text on it, so that the hovered and pressed shades keep their contrast too. */
-  --color-accent: light-dark(oklch(50% 0.17 255), oklch(75% 0.12 255));
-  --color-accent-hovered: light-dark(oklch(45% 0.17 255), oklch(80% 0.1 255));
-  --color-accent-pressed: light-dark(oklch(40% 0.16 255), oklch(70% 0.13 255));
-  --color-on-accent: light-dark(oklch(99% 0 0), oklch(20% 0.02 255));
+  --color-layer-1: light-dark(oklch(98.2% 0 0), oklch(21.6% 0.0025 231));
+  --color-layer-1-hovered: light-dark(oklch(96.1% 0.0013 286), oklch(23.8% 0.0029 231));
+  --color-layer-1-pressed: light-dark(oklch(94% 0.0017 248), oklch(25.9% 0.0033 231));
+  --color-layer-1-selected: light-dark(oklch(94% 0.0017 248), oklch(25.9% 0.0033 231));
 
-  /* An action that destroys data, and an error. */
-  --color-danger: light-dark(oklch(52% 0.2 25), oklch(72% 0.15 25));
-  --color-danger-hovered: light-dark(oklch(47% 0.19 25), oklch(77% 0.13 25));
-  --color-danger-pressed: light-dark(oklch(42% 0.18 25), oklch(67% 0.16 25));
-  --color-on-danger: light-dark(oklch(99% 0 0), oklch(20% 0.03 25));
+  --color-layer-2: light-dark(oklch(100% 0 0), oklch(23.8% 0.0029 231));
+  --color-layer-2-hovered: light-dark(oklch(99.1% 0 0), oklch(25.9% 0.0033 231));
+  --color-layer-2-pressed: light-dark(oklch(98.2% 0 0), oklch(30.1% 0.0041 231));
+  --color-layer-2-selected: light-dark(oklch(98.2% 0 0), oklch(30.1% 0.0041 231));
 
-  --color-focus-ring: light-dark(oklch(55% 0.2 255), oklch(75% 0.14 255));
+  --color-layer-3: light-dark(oklch(96.1% 0.0013 286), oklch(25.9% 0.0033 231));
+  --color-layer-3-hovered: light-dark(oklch(94% 0.0017 248), oklch(30.1% 0.0041 231));
+  --color-layer-3-pressed: light-dark(oklch(91.2% 0.0017 248), oklch(34.2% 0.0049 231));
+  --color-layer-3-selected: light-dark(oklch(91.2% 0.0017 248), oklch(34.2% 0.0049 231));
+
+  --color-layer-transparent-hovered: light-dark(oklch(14.8% 0.0034 197 / 4%), oklch(100% 0 0 / 5%));
+  --color-layer-transparent-pressed: light-dark(oklch(14.8% 0.0034 197 / 6%), oklch(100% 0 0 / 7%));
+  --color-layer-transparent-selected: light-dark(
+    oklch(14.8% 0.0034 197 / 8%),
+    oklch(100% 0 0 / 10%)
+  );
+
+  /* The fill of a disabled filled control, with the text on it. */
+  --color-layer-disabled: light-dark(oklch(94% 0.0017 248), oklch(40% 0.0059 231));
+  --color-on-disabled: light-dark(oklch(14.8% 0.0034 197 / 20%), oklch(100% 0 0 / 20%));
+
+  /* Dims the page behind a modal overlay. */
+  --color-backdrop: light-dark(oklch(14.8% 0.0034 197 / 30%), oklch(14.8% 0.0034 197 / 80%));
+
+  /* The text, from the most to the least important. */
+  --color-text: light-dark(oklch(16.9% 0.0021 286), oklch(92.4% 0.0017 231));
+  --color-text-secondary: light-dark(oklch(32.3% 0.0045 220), oklch(84.6% 0.0035 231));
+  --color-text-tertiary: light-dark(oklch(41.8% 0.0072 240), oklch(76.6% 0.0054 231));
+  --color-text-placeholder: light-dark(oklch(49.3% 0.0079 234), oklch(68.4% 0.0074 231));
+  --color-text-disabled: light-dark(oklch(58.2% 0.0089 229), oklch(59.9% 0.0096 231));
+  --color-text-accent: light-dark(oklch(43.5% 0.104 242), oklch(63.1% 0.1263 238));
+  --color-text-danger: light-dark(oklch(47.5% 0.1647 29), oklch(79.1% 0.0874 24));
+
+  --color-border-subtle: light-dark(oklch(94% 0.0017 248), oklch(25.9% 0.0033 231));
+  --color-border-strong: light-dark(oklch(87.8% 0.0035 248), oklch(34.2% 0.0049 231));
+  --color-border-danger: light-dark(oklch(52.8% 0.185 29), oklch(72% 0.124 25));
+
+  /* The main action and the selection, a muted sky blue, with the text on it. Dark mode lightens
+     the accent and puts dark text on it. */
+  --color-accent: light-dark(oklch(48% 0.1158 243), oklch(63.1% 0.1263 238));
+  --color-accent-hovered: light-dark(oklch(43.5% 0.104 242), oklch(70.1% 0.1145 235));
+  --color-accent-pressed: light-dark(oklch(34% 0.0783 240), oklch(75.4% 0.0953 234));
+  --color-accent-subtle: light-dark(oklch(97.2% 0.0167 231), oklch(25.1% 0.0418 235));
+  --color-accent-subtle-hovered: light-dark(oklch(94.3% 0.0341 230), oklch(32.1% 0.0581 236));
+  --color-accent-subtle-pressed: light-dark(oklch(90.1% 0.0587 232), oklch(40.9% 0.0777 237));
+  --color-on-accent: light-dark(oklch(100% 0 0), oklch(16.9% 0.0021 286));
+
+  /* An action that destroys data, and an error. Dark mode keeps the fill dark enough for white
+     text, where Plane's lighter one falls below the contrast minimum. */
+  --color-danger: light-dark(oklch(52.8% 0.185 29), oklch(52.8% 0.185 29));
+  --color-danger-hovered: light-dark(oklch(47.5% 0.1647 29), oklch(47.5% 0.1647 29));
+  --color-danger-pressed: light-dark(oklch(42.1% 0.1438 29), oklch(42.1% 0.1438 29));
+  --color-danger-subtle: light-dark(oklch(95% 0.0186 22), oklch(24.4% 0.0729 28));
+  --color-danger-subtle-hovered: light-dark(oklch(92.1% 0.0289 23), oklch(28.6% 0.0905 28));
+  --color-danger-subtle-pressed: light-dark(oklch(88.5% 0.042 23), oklch(34.5% 0.1141 29));
+  --color-on-danger: light-dark(oklch(100% 0 0), oklch(98.5% 0 0));
+
+  --color-focus-ring: light-dark(oklch(48% 0.1158 243), oklch(63.1% 0.1263 238));
+
+  /* Shadows, soft and cool: raised lifts a control off its layer, overlay a popup off the page. */
+  --shadow-raised: 0 1px 6px -1px rgb(41 47 61 / 3%), 0 1px 4px 0 rgb(41 47 61 / 4%);
+  --shadow-raised-strong: 0 2px 4px -1px rgb(41 47 61 / 4%), 0 4px 6px -1px rgb(41 47 61 / 5%);
+  --shadow-overlay: 0 10px 10px -5px rgb(41 47 61 / 4%), 0 10px 40px -5px rgb(41 47 61 / 4%);
+  --shadow-overlay-strong:
+    0 10px 10px -10px rgb(41 47 61 / 4%), 0 30px 60px -12px rgb(41 47 61 / 10%);
 
   /* Spacing, for padding, margins and gaps. */
   --space-1: 0.25rem;
@@ -43,36 +97,63 @@
   --space-7: 3rem;
   --space-8: 4rem;
 
-  /* The height of a control (a button, an input), so that controls side by side line up. */
-  --size-control: 2.25rem;
+  /* The sizes of a control (a button, an input), so that controls side by side line up: md is the
+     default. The padding is the inline one; the gap separates an icon from the text. */
+  --control-height-sm: 1.5rem;
+  --control-height-md: 1.75rem;
+  --control-height-lg: 2rem;
+  --control-height-xl: 2.25rem;
+  --control-padding-sm: 0.5rem;
+  --control-padding-md: 0.625rem;
+  --control-padding-lg: 0.75rem;
+  --control-padding-xl: 0.875rem;
+  --control-gap-sm: 0.25rem;
+  --control-gap-md: 0.375rem;
+  --control-gap-lg: 0.375rem;
+
+  /* The height of the app's header. */
+  --size-header: 3.25rem;
 
   --border-width: 1px;
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-full: 9999px;
+  --radius-control: var(--radius-md);
 
-  /* The system's fonts: the Content-Security-Policy loads nothing from other origins. */
-  --font-sans: system-ui, sans-serif;
+  /* Inter, which global.css loads from the UI's own files: the Content-Security-Policy loads
+     nothing from other origins. */
+  --font-sans:
+    "Inter Variable", system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Noto Color Emoji";
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  --font-size-sm: 0.875rem;
-  --font-size-md: 1rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.5rem;
-  --font-weight-normal: 400;
+  /* sm is the text of a control, md the text of the page. */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.8125rem;
+  --font-size-md: 0.875rem;
+  --font-size-lg: 1rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 2rem;
+  /* Inter's variable weights: its regular is a little heavier than 400. */
+  --font-weight-normal: 450;
   --font-weight-medium: 500;
+  --font-weight-semibold: 600;
   --font-weight-bold: 700;
-  --line-height-tight: 1.25;
-  --line-height-normal: 1.5;
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.54;
 
   --focus-ring-width: 2px;
-  --focus-ring-offset: 2px;
+  --focus-ring-offset: 1px;
 
-  /* A disabled control fades out; the WCAG exempt it from the contrast minimum. */
-  --opacity-disabled: 0.45;
-
-  /* The duration of a state's transition, such as a hovered button's background. */
-  --duration-fast: 120ms;
+  /* Motion: fast for a popup or a tooltip, normal for a control's state and a backdrop, slow for a
+     drawer. An overlay enters from this scale, with its opacity, and leaves to it. */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --scale-overlay-start: 0.95;
 }
 
 :root[data-color-scheme="light"] {
@@ -86,5 +167,7 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --duration-fast: 0s;
+    --duration-normal: 0s;
+    --duration-slow: 0s;
   }
 }
