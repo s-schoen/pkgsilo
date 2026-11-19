@@ -94,6 +94,11 @@ jobs:
       - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
           install_args: node pnpm task
+      # Chromium for the stories' tests, with the system's libraries that it needs: ui:browsers, a
+      # dependency of ui:test, installs only Chromium.
+      - run: task ui:install
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: ui
       - run: task ui:test
       # As in the test (PostgreSQL) job below.
       - if: ${{ !env.ACT }}
