@@ -1,0 +1,7 @@
+/* The breakpoints of the layout, as custom media queries. A CSS module that needs one imports this
+   file first, with @import "@/styles/media.css";, and then writes @media (--md) { … }. Lightning
+   CSS (vite.config.ts) replaces the queries when it compiles the module, so the file adds no CSS of
+   its own, however many modules import it. */
+@custom-media --sm (width >= 40rem);
+@custom-media --md (width >= 48rem);
+@custom-media --lg (width >= 64rem);
