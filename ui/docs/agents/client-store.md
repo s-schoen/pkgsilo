@@ -5,7 +5,7 @@ How the UI keeps the API's resources in collections on the client.
 TanStack DB (`@tanstack/react-db`, a 1.0 release candidate) keeps the API's resources in collections on the client, which live queries read and join, and which apply a change at once (optimistically) while it's sent to the API.
 Use it for the resources that a page lists, filters or changes; a single read or a call such as a login stays with the API's hooks.
 
-- `createClients()` in `src/app/clients.ts` creates a `DbClient` over a `QueryClient`; `main.tsx` provides it with `DbProvider` and passes it to the router's context.
+- `createClients()` in `src/app/clients.ts` creates a `DbClient` over a `QueryClient`; `AppProviders` (`src/app/app-providers.tsx`) provides both, and `main.tsx` passes them to the router's context too.
 - A collection is a descriptor that `collectionOptions` creates, with `queryCollectionOptions` from `@tanstack/query-db-collection`, so that it loads through TanStack Query.
   It goes in `features/<feature>/api/<name>-collection.ts`, or `src/api/collections/` once several features share it.
   Its `queryFn` and its handlers call the functions of the generated client, not `fetch`:

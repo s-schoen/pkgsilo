@@ -6,7 +6,7 @@ Orval generates the API client into `ui/src/api/gen/` from `app/testdata/openapi
 `src/api/gen/` is ignored by git, and `task ui:gen:api` generates it; `ui:dev`, `ui:build`, `ui:test` and `ui:lint` depend on that task.
 
 - Call the API through the generated TanStack Query hooks in `src/api/gen/client/<tag>/<tag>.ts`, such as `useGetGroup` and `useCreateGroup`, not with `fetch`.
-  `main.tsx` provides their `QueryClient`.
+  `AppProviders` (`src/app/app-providers.tsx`) provides their `QueryClient`, around the app in `main.tsx`, each test and each story.
 - A hook resolves with `{ data, status, headers }`, where `data` is the response body, so the resource is in `data.data`.
   An error response rejects: the hook's `error` has the HTTP status in `status` and the problem in `info`.
 - The types of the bodies are in `src/api/gen/client/model/`.
