@@ -7,6 +7,6 @@ ui/dist/
 ui/src/api/gen/
 ui/src/app/routeTree.gen.ts
 ui/.tanstack/
-ui/.storybook/public/
 .task
 .rumdl_cache
+.playwright-mcp/

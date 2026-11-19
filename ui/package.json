@@ -13,9 +13,8 @@
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy preferredLanguage baseLocale",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "msw:init": "msw init .storybook/public --save false",
     "routes": "tsr generate",
-    "storybook": "storybook dev -p 6006 --no-open",
+    "storybook": "storybook dev -p 6006 --exact-port --no-open",
     "storybook:build": "storybook build -o build/storybook",
     "test": "vitest run --coverage",
     "test:watch": "vitest"

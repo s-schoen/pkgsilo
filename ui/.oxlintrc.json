@@ -19,8 +19,7 @@
     ".tanstack",
     "src/api/gen",
     "src/app/routeTree.gen.ts",
-    "src/paraglide",
-    ".storybook/public"
+    "src/paraglide"
   ],
   "options": {
     "maxWarnings": 0,
@@ -99,7 +98,7 @@
   },
   "overrides": [
     {
-      "files": ["orval.config.ts", "vite.config.ts"],
+      "files": ["orval.config.ts", "vite.config.ts", "vitest.config.ts"],
       "env": {
         "node": true
       }

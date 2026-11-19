@@ -27,7 +27,6 @@
     "src/api/gen",
     "src/app/routeTree.gen.ts",
     "src/paraglide",
-    ".storybook/public",
     ".tanstack"
   ]
 }

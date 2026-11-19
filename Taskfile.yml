@@ -88,29 +88,15 @@ tasks:
     cmds:
       - pnpm run routes
 
-  # Generates the service worker of MSW into ui/.storybook/public, which git ignores, from the installed
-  # msw: Storybook serves it to the stories (msw-storybook-addon), and to their tests.
-  "ui:msw":
-    dir: ui
-    run: once
-    deps:
-      - ui:install
-    sources:
-      - package.json
-      - pnpm-lock.yaml
-    generates:
-      - .storybook/public/mockServiceWorker.js
-    cmds:
-      - pnpm run msw:init
-
   # Installs the Chromium of the installed Playwright, in which the storybook project of Vitest runs
-  # the stories. It does nothing if it's there. CI installs it with --with-deps, for the system's
-  # libraries.
+  # the stories, unless it's there. CI installs it before, with --with-deps for the system's libraries.
   "ui:browsers":
     dir: ui
     run: once
     deps:
       - ui:install
+    status:
+      - test -e "$(node -p "require('playwright').chromium.executablePath()")"
     cmds:
       - pnpm exec playwright install chromium
 
@@ -129,7 +115,6 @@ tasks:
     dir: ui
     deps:
       - ui:gen:api
-      - ui:msw
     cmds:
       - pnpm run storybook
 
@@ -138,7 +123,6 @@ tasks:
     dir: ui
     deps:
       - ui:gen:api
-      - ui:msw
     cmds:
       - pnpm run storybook:build
 
@@ -169,10 +153,27 @@ tasks:
     dir: ui
     deps:
       - ui:gen:api
-      - ui:msw
       - ui:browsers
     cmds:
       - pnpm run test --reporter=default --reporter=junit --outputFile.junit=build/junit.xml {{.CLI_ARGS}}
+
+  "ui:test:unit":
+    desc: Test the web UI without its stories, in jsdom, which needs no browser
+    dir: ui
+    deps:
+      - ui:gen:api
+    cmds:
+      - pnpm run test --project unit {{.CLI_ARGS}}
+
+  "ui:test:watch":
+    desc: Test the web UI and its stories on every change
+    interactive: true
+    dir: ui
+    deps:
+      - ui:gen:api
+      - ui:browsers
+    cmds:
+      - pnpm run test:watch {{.CLI_ARGS}}
 
   "ui:lint":
     desc: Lint the web UI with oxlint, type-aware and with the TypeScript type check
