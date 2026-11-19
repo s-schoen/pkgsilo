@@ -77,7 +77,7 @@ const (
 // authenticates the routes under /api/v1, but not /mcp, until it exceeds sessionLifetimes. Requests and errors
 // are logged to logger, and metrics are recorded with meterProvider: every request but a health check is
 // measured, and so are authentications and authorization decisions. Every request but a health check gets a
-// server span from tracerProvider.
+// server span from tracerProvider. It panics if the web UI can't be read, a bug of the build.
 func NewHandler(
 	opts router.Options, db *sqlx.DB, apiKeyPepper []byte, sessionLifetimes sessionservice.Lifetimes,
 	logger *slog.Logger, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider,
@@ -129,7 +129,14 @@ func NewHandler(
 		})
 	})
 	// After the API, which keeps the 404 problem of router.New for a path under /api/v1 that it doesn't route.
-	r.Handle(uiPath, spa.Handler(ui.FS(), logger))
+	// The UI's own 404 is the same problem, and the router answers the other methods with its 405.
+	webUI, err := spa.Handler(ui.FS(), r.NotFoundHandler())
+	if err != nil {
+		// The UI is embedded in the binary, so it can't be read only if the build is broken.
+		panic(fmt.Sprintf("app: %v", err))
+	}
+	r.Method(http.MethodGet, uiPath, webUI)
+	r.Method(http.MethodHead, uiPath, webUI)
 
 	return r
 }

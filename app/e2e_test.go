@@ -364,13 +364,16 @@ func TestBrowserProtections(t *testing.T) {
 //
 //  1. Get /: 200 with the UI's index.html, which a browser must revalidate, and a Content-Security-Policy
 //     that lets the UI load from its own origin.
-//  2. Get a client-side route: 200 with the same index.html.
+//  2. A browser navigates to client-side routes, one with a dot in its last segment: 200 with the same
+//     index.html.
 //  3. Get a missing asset: 404 problem with the API's Content-Security-Policy.
-//  4. Get a path under /api/v1 that no route takes: 404 problem, not the UI.
-//  5. Post to /: 405 problem.
+//  4. Get the OAuth metadata that an MCP client looks for after a 401: 404 problem, not the UI.
+//  5. A browser navigates to a path under /api/v1 that no route takes: 404 problem, not the UI.
+//  6. Post to /: 405 problem that allows GET and HEAD.
 func TestUI(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t).Anonymous()
+	browser := api.WithHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	const (
 		uiPolicy = "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; " +
 			"form-action 'self'"
@@ -385,22 +388,29 @@ func TestUI(t *testing.T) {
 	assert.Equal(t, "no-cache", root.Header().Get("Cache-Control"))
 	assert.Equal(t, uiPolicy, root.Header().Get("Content-Security-Policy"))
 
-	// 2. Client-side route.
-	route := api.Get("/identities/42")
-	route.AssertStatus(http.StatusOK)
-	assert.Equal(t, root.Body.String(), route.Body.String())
-	assert.Equal(t, uiPolicy, route.Header().Get("Content-Security-Policy"))
+	// 2. Client-side routes.
+	for _, path := range []string{"/identities/42", "/packages/lodash.merge"} {
+		route := browser.Get(path)
+		route.AssertStatus(http.StatusOK)
+		assert.Equal(t, root.Body.String(), route.Body.String(), path)
+		assert.Equal(t, uiPolicy, route.Header().Get("Content-Security-Policy"), path)
+	}
 
 	// 3. Missing asset.
 	asset := api.Get("/assets/missing.js")
 	asset.AssertProblem(notFound)
 	assert.Equal(t, apiPolicy, asset.Header().Get("Content-Security-Policy"))
 
-	// 4. Unrouted API path.
-	unrouted := api.Get("/api/v1/nope")
+	// 4. OAuth metadata.
+	api.Get("/.well-known/oauth-protected-resource").AssertProblem(notFound)
+
+	// 5. Unrouted API path.
+	unrouted := browser.Get("/api/v1/nope")
 	unrouted.AssertProblem(notFound)
 	assert.Equal(t, apiPolicy, unrouted.Header().Get("Content-Security-Policy"))
 
-	// 5. Post.
-	api.Post("/", "").AssertProblem(envelope.MethodNotAllowedProblem.New(envelope.Occurrence{}))
+	// 6. Post.
+	post := api.Post("/", "")
+	post.AssertProblem(envelope.MethodNotAllowedProblem.New(envelope.Occurrence{}))
+	assert.Equal(t, []string{http.MethodGet, http.MethodHead}, post.Header().Values("Allow"))
 }
