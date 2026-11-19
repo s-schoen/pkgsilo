@@ -3,16 +3,18 @@ package spa
 
 import (
 	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"log/slog"
+	"mime"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
-
-	"pkgsilo/core/envelope"
+	"time"
 )
 
 const (
@@ -31,101 +33,177 @@ const (
 		"form-action 'self'"
 )
 
-// errNotFile is returned by open for a path that names no regular file.
-var errNotFile = errors.New("not a file")
-
-// Handler returns the handler that serves the application in fsys, which holds index.html at its root, for
-// GET and HEAD requests. A path that names a file in fsys gets that file. A path without an extension that
-// names none, such as /identities/42, is a client-side route and gets index.html. Any other path gets a 404
-// problem, so that a stale page that asks for an asset of an older build gets no HTML in its place.
+// Handler returns the handler that serves the application in fsys, which holds index.html at its root. The
+// caller routes only GET and HEAD requests to it.
 //
-// The files under assets/ may be cached forever, and every other file must be revalidated. The files get a
-// Content-Security-Policy that lets the application load from its own origin, while problems keep the
-// policy that middleware.SecurityHeaders sets. Unexpected errors of fsys are logged to logger and
-// answered with a 500 problem.
-func Handler(fsys fs.FS, logger *slog.Logger) http.Handler {
+// A path that names a file in fsys gets that file. Any other path gets index.html if the request is a
+// browser's navigation, such as to the client-side route /identities/42 or /packages/lodash.merge, and
+// notFound otherwise, such as a stale page's request for an asset of an older build, or an API client's for a
+// path that no route takes. A navigation is a request that accepts text/html by name, as browsers ask for a
+// page but not for a script, a style or an image.
+//
+// The files under assets/ may be cached forever, and every other file must be revalidated, which its ETag
+// answers. A file is sent compressed with gzip to a client that accepts it, if that makes it smaller. The files
+// get a Content-Security-Policy that lets the application load from its own origin, while notFound's
+// responses keep the policy that middleware.SecurityHeaders sets.
+//
+// Handler reads and compresses every file of fsys when it's called, and returns an error if it can't, or if fsys
+// has no index.html.
+func Handler(fsys fs.FS, notFound http.Handler) (http.Handler, error) {
+	files, err := readFiles(fsys)
+	if err != nil {
+		return nil, err
+	}
+	index, ok := files[indexFile]
+	if !ok {
+		return nil, errors.New("read the application: no " + indexFile)
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			w.Header().Add("Allow", http.MethodGet)
-			w.Header().Add("Allow", http.MethodHead)
-			envelope.WriteProblem(w, envelope.MethodNotAllowedProblem.New(envelope.Occurrence{}))
-
-			return
-		}
-
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 		if name == "" {
 			name = indexFile
 		}
-		file, err := open(fsys, name)
-		if errors.Is(err, errNotFile) && path.Ext(name) == "" {
-			name = indexFile
-			file, err = open(fsys, name)
-		}
-		if errors.Is(err, errNotFile) {
-			envelope.WriteProblem(w, envelope.NotFoundProblem.New(envelope.Occurrence{}))
+		if f, ok := files[name]; ok {
+			f.serve(w, r)
 
 			return
 		}
-		if err != nil {
-			logger.ErrorContext(r.Context(), "serve single-page application", "error", err)
-			envelope.WriteProblem(w, envelope.InternalServerErrorProblem.New(envelope.Occurrence{}))
+		// Whether a missing path gets index.html depends on the request's Accept header.
+		w.Header().Add("Vary", "Accept")
+		if !accepts(r.Header.Values("Accept"), "text/html") {
+			notFound.ServeHTTP(w, r)
 
 			return
 		}
-		defer func() { _ = file.closer.Close() }()
+		index.serve(w, r)
+	}), nil
+}
 
-		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
-		if strings.HasPrefix(name, assetsDir) {
-			w.Header().Set("Cache-Control", assetCacheControl)
-		} else {
-			w.Header().Set("Cache-Control", pageCacheControl)
+// readFiles returns the regular files of fsys by their names.
+func readFiles(fsys fs.FS) (map[string]*file, error) {
+	var names []string
+	err := fs.WalkDir(fsys, ".", func(name string, entry fs.DirEntry, err error) error {
+		if err == nil && entry.Type().IsRegular() {
+			names = append(names, name)
 		}
-		// The files of an embedded build have no modification time, so they get no Last-Modified.
-		http.ServeContent(w, r, name, file.info.ModTime(), file.content)
+
+		return err
 	})
-}
-
-// file is an open file of the application.
-type file struct {
-	info    fs.FileInfo
-	content io.ReadSeeker
-	closer  io.Closer
-}
-
-// open opens the regular file name of fsys. It returns errNotFile if fsys has no such file, and the error of
-// fsys for any other failure.
-func open(fsys fs.FS, name string) (file, error) {
-	f, err := fsys.Open(name)
-	if errors.Is(err, fs.ErrNotExist) {
-		return file{}, errNotFile
-	}
 	if err != nil {
-		return file{}, fmt.Errorf("open %s: %w", name, err)
-	}
-	info, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-
-		return file{}, fmt.Errorf("stat %s: %w", name, err)
-	}
-	if !info.Mode().IsRegular() {
-		_ = f.Close()
-
-		return file{}, errNotFile
+		return nil, fmt.Errorf("read the application: %w", err)
 	}
 
-	content, ok := f.(io.ReadSeeker)
-	if !ok {
-		// http.ServeContent needs to seek, which the files of embed.FS and fstest.MapFS can.
-		b, err := io.ReadAll(f)
+	files := make(map[string]*file, len(names))
+	for _, name := range names {
+		content, err := fs.ReadFile(fsys, name)
 		if err != nil {
-			_ = f.Close()
-
-			return file{}, fmt.Errorf("read %s: %w", name, err)
+			return nil, fmt.Errorf("read the application: %w", err)
 		}
-		content = bytes.NewReader(b)
+		f, err := newFile(name, content)
+		if err != nil {
+			return nil, err
+		}
+		files[name] = f
 	}
 
-	return file{info: info, content: content, closer: f}, nil
+	return files, nil
+}
+
+// file is a regular file of the application, as the handler serves it.
+type file struct {
+	contentType  string
+	cacheControl string
+	plain        representation
+	// gzipped is nil if gzip doesn't make the file smaller.
+	gzipped *representation
+}
+
+// representation is the content of a file in one encoding, with its ETag.
+type representation struct {
+	content []byte
+	etag    string
+}
+
+// newFile returns the file name of the application, with content.
+func newFile(name string, content []byte) (*file, error) {
+	f := &file{
+		contentType:  mime.TypeByExtension(path.Ext(name)),
+		cacheControl: pageCacheControl,
+		plain:        newRepresentation(content),
+	}
+	if f.contentType == "" {
+		f.contentType = http.DetectContentType(content)
+	}
+	if strings.HasPrefix(name, assetsDir) {
+		f.cacheControl = assetCacheControl
+	}
+
+	var gzipped bytes.Buffer
+	zw, err := gzip.NewWriterLevel(&gzipped, gzip.BestCompression)
+	if err != nil {
+		return nil, fmt.Errorf("compress %s: %w", name, err)
+	}
+	if _, err := zw.Write(content); err != nil {
+		return nil, fmt.Errorf("compress %s: %w", name, err)
+	}
+	if err := zw.Close(); err != nil {
+		return nil, fmt.Errorf("compress %s: %w", name, err)
+	}
+	if gzipped.Len() < len(content) {
+		r := newRepresentation(gzipped.Bytes())
+		f.gzipped = &r
+	}
+
+	return f, nil
+}
+
+// newRepresentation returns content with a strong ETag of its hash.
+func newRepresentation(content []byte) representation {
+	sum := sha256.Sum256(content)
+
+	return representation{content: content, etag: `"` + base64.RawURLEncoding.EncodeToString(sum[:16]) + `"`}
+}
+
+// serve writes f to w, compressed if r accepts gzip, and answers r's conditional and range headers.
+func (f *file) serve(w http.ResponseWriter, r *http.Request) {
+	header := w.Header()
+	header.Set("Content-Security-Policy", contentSecurityPolicy)
+	header.Set("Cache-Control", f.cacheControl)
+	header.Set("Content-Type", f.contentType)
+	rep := f.plain
+	if f.gzipped != nil {
+		header.Add("Vary", "Accept-Encoding")
+		if accepts(r.Header.Values("Accept-Encoding"), "gzip") {
+			rep = *f.gzipped
+			header.Set("Content-Encoding", "gzip")
+		}
+	}
+	header.Set("ETag", rep.etag)
+	// The files of an embedded build have no modification time, so they get no Last-Modified: the ETag
+	// validates them.
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(rep.content))
+}
+
+// accepts reports whether the values of an Accept or Accept-Encoding header list want with a weight above 0. A
+// wildcard, such as */*, doesn't count: a client that accepts anything didn't ask for want.
+func accepts(values []string, want string) bool {
+	for _, value := range values {
+		for element := range strings.SplitSeq(value, ",") {
+			// It parses an element of Accept-Encoding too, which is a token with parameters.
+			name, params, err := mime.ParseMediaType(element)
+			if err != nil || name != want {
+				continue
+			}
+			if q, ok := params["q"]; ok {
+				if weight, err := strconv.ParseFloat(q, 64); err != nil || weight <= 0 {
+					continue
+				}
+			}
+
+			return true
+		}
+	}
+
+	return false
 }
