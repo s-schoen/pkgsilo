@@ -31,6 +31,15 @@ export default defineConfig({
       strategy: ["preferredLanguage", "baseLocale"],
     }),
   ],
+  css: {
+    // Lightning CSS instead of PostCSS, for the dev server, the build and the tests. It lowers
+    // nesting and, with the draft, @custom-media for Vite's default target (baseline widely
+    // available), the target of the JS and of the CSS minification as well: so no targets here.
+    transformer: "lightningcss",
+    lightningcss: {
+      drafts: { customMedia: true },
+    },
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,
