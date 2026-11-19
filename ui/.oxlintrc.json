@@ -154,12 +154,21 @@
           {
             "paths": [
               { "name": "zod", "message": "Import zod from zod/v4." },
-              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." }
+              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." },
+              {
+                "name": "@tabler/icons-react",
+                "message": "Import each icon from @tabler/icons-react/icons/<IconName>: the package root makes the tools compile every icon.",
+                "allowTypeImports": true
+              }
             ],
             "patterns": [
               {
                 "group": ["./*", "../*"],
                 "message": "Import from src/ with the @/ alias."
+              },
+              {
+                "group": ["@/components/ui/*/*"],
+                "message": "Import a component of the UI library by its folder: @/components/ui/<name>."
               }
             ]
           }
@@ -189,7 +198,48 @@
           {
             "paths": [
               { "name": "zod", "message": "Import zod from zod/v4." },
-              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." }
+              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." },
+              {
+                "name": "@tabler/icons-react",
+                "message": "Import each icon from @tabler/icons-react/icons/<IconName>: the package root makes the tools compile every icon.",
+                "allowTypeImports": true
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["./*", "../*"],
+                "message": "Import from src/ with the @/ alias."
+              },
+              {
+                "group": ["@/features/**", "@/app/**"],
+                "message": "Shared code doesn't import features or the app."
+              },
+              {
+                "group": ["@/components/ui/*/*"],
+                "message": "Import a component of the UI library by its folder: @/components/ui/<name>."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // A component of the UI library is a folder, whose index.ts is what other code imports. Its own
+      // files import each other by their path, so they repeat the shared code's options without the
+      // pattern against that.
+      "files": ["src/components/ui/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              { "name": "zod", "message": "Import zod from zod/v4." },
+              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." },
+              {
+                "name": "@tabler/icons-react",
+                "message": "Import each icon from @tabler/icons-react/icons/<IconName>: the package root makes the tools compile every icon.",
+                "allowTypeImports": true
+              }
             ],
             "patterns": [
               {
@@ -237,7 +287,12 @@
           {
             "paths": [
               { "name": "zod", "message": "Import zod from zod/v4." },
-              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." }
+              { "name": "zod/locales", "message": "Import zod's locales from zod/v4/locales." },
+              {
+                "name": "@tabler/icons-react",
+                "message": "Import each icon from @tabler/icons-react/icons/<IconName>: the package root makes the tools compile every icon.",
+                "allowTypeImports": true
+              }
             ],
             "patterns": [
               {
@@ -247,6 +302,10 @@
               {
                 "group": ["@/app/**"],
                 "message": "A feature doesn't import the app."
+              },
+              {
+                "group": ["@/components/ui/*/*"],
+                "message": "Import a component of the UI library by its folder: @/components/ui/<name>."
               }
             ]
           }

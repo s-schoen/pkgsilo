@@ -1,0 +1,74 @@
+/* The variant's class (.primary, .secondary, .danger) sets the colors of .button. The states come
+   from the data attributes of React Aria Components, which behave the same for mouse, touch and
+   keyboard, unlike :hover and :active. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--size-control);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-4);
+  border: var(--border-width) solid var(--button-border);
+  border-radius: var(--radius-md);
+  background: var(--button-bg);
+  color: var(--button-text);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  transition: background-color var(--duration-fast);
+  /* Only the keyboard's focus shows the ring, below. */
+  outline: none;
+
+  &[data-hovered] {
+    background: var(--button-bg-hovered);
+  }
+
+  &[data-pressed] {
+    background: var(--button-bg-pressed);
+  }
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  &[data-disabled] {
+    opacity: var(--opacity-disabled);
+  }
+}
+
+/* A button with an icon alone is square. */
+.iconOnly {
+  inline-size: var(--size-control);
+  padding-inline: 0;
+}
+
+.icon {
+  flex-shrink: 0;
+  inline-size: 1.25em;
+  block-size: 1.25em;
+}
+
+.primary {
+  --button-bg: var(--color-accent);
+  --button-bg-hovered: var(--color-accent-hovered);
+  --button-bg-pressed: var(--color-accent-pressed);
+  --button-border: transparent;
+  --button-text: var(--color-on-accent);
+}
+
+.secondary {
+  --button-bg: var(--color-bg-subtle);
+  --button-bg-hovered: var(--color-bg-subtle-hovered);
+  --button-bg-pressed: var(--color-bg-subtle-pressed);
+  --button-border: var(--color-border);
+  --button-text: var(--color-text);
+}
+
+.danger {
+  --button-bg: var(--color-danger);
+  --button-bg-hovered: var(--color-danger-hovered);
+  --button-bg-pressed: var(--color-danger-pressed);
+  --button-border: transparent;
+  --button-text: var(--color-on-danger);
+}
