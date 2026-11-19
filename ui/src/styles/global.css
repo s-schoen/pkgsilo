@@ -1,5 +1,8 @@
-/* The global styles of the UI, which main.tsx and .storybook/preview.tsx load once: the tokens, a
-   small reset and the base of the page. A component styles itself in its CSS module. */
+/* The global styles of the UI, which main.tsx and .storybook/preview.tsx load once: the font, the
+   tokens, a small reset and the base of the page. A component styles itself in its CSS module. */
+/* Inter's variable font, in the UI's own files: the browser fetches only the subsets that the page's
+   text needs, through their unicode-range. */
+@import "@fontsource-variable/inter/wght.css";
 @import "@/styles/tokens.css";
 
 *,
@@ -8,13 +11,18 @@
   box-sizing: border-box;
 }
 
+/* The page is the canvas: a page's content sits on a surface (tokens.css). */
 body {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--font-size-md);
+  font-weight: var(--font-weight-normal);
   line-height: var(--line-height-normal);
   color: var(--color-text);
-  background: var(--color-bg);
+  background: var(--color-canvas);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* Controls take the font of the page instead of the browser's own. */
@@ -23,6 +31,10 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+::placeholder {
+  color: var(--color-text-placeholder);
 }
 
 /* The focus ring of an element that no component styles, such as a link. */
