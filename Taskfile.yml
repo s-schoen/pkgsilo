@@ -17,8 +17,11 @@ tasks:
     cmds:
       - go build -trimpath -tags webui -ldflags "-s -w -X main.version={{.VERSION}}" -o build/pkgsilo ./cmd/
 
+  # The generators below depend on it, and a task that needs several of them starts them at once: run once,
+  # so that only one pnpm install writes into node_modules.
   "ui:install":
     dir: ui
+    run: once
     sources:
       - package.json
       - pnpm-lock.yaml
@@ -33,11 +36,15 @@ tasks:
   # of the lint. The Vite plugin compiles them by itself for the dev server, the build and the tests.
   "ui:i18n":
     dir: ui
+    run: once
     deps:
       - ui:install
+    # package.json and the lockfile too, so that a new compiler compiles them again.
     sources:
       - messages/**/*
       - project.inlang/**/*
+      - package.json
+      - pnpm-lock.yaml
     generates:
       - src/paraglide/**/*
     cmds:
@@ -48,11 +55,15 @@ tasks:
   # one.
   "ui:gen:api":
     dir: ui
+    run: once
     deps:
       - ui:install
+    # package.json and the lockfile too, so that a new orval generates the client again.
     sources:
       - ../app/testdata/openapi.json
       - orval.config.ts
+      - package.json
+      - pnpm-lock.yaml
     generates:
       - src/api/gen/**/*
     cmds:
@@ -63,11 +74,15 @@ tasks:
   # generates it by itself for the dev server, the build and the tests. Both read tsr.config.json.
   "ui:routes":
     dir: ui
+    run: once
     deps:
       - ui:install
+    # package.json and the lockfile too, so that a new router-cli generates the tree again.
     sources:
       - src/app/routes/**/*
       - tsr.config.json
+      - package.json
+      - pnpm-lock.yaml
     generates:
       - src/app/routeTree.gen.ts
     cmds:
