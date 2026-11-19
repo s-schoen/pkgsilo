@@ -1,0 +1,32 @@
+/* The global styles of the UI, which main.tsx and .storybook/preview.tsx load once: the tokens, a
+   small reset and the base of the page. A component styles itself in its CSS module. */
+@import "@/styles/tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+/* Controls take the font of the page instead of the browser's own. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* The focus ring of an element that no component styles, such as a link. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}

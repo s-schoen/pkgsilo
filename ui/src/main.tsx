@@ -1,5 +1,7 @@
 // Before any other import: zod reads the setting when it creates a schema.
 import "@/lib/zod-jitless.ts";
+// The tokens and the base of the page, before any component's styles.
+import "@/styles/global.css";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { formDevtoolsPlugin } from "@tanstack/react-form-devtools";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
