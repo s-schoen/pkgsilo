@@ -1,0 +1,36 @@
+/* The frame of every page: the header on the canvas, then the page on a surface that the canvas
+   shows around it. */
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100dvh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  block-size: var(--size-header);
+  padding-inline: var(--space-4);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.brand {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.main {
+  flex: 1;
+  margin-block-end: var(--space-2);
+  margin-inline: var(--space-2);
+  padding: var(--space-5);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
