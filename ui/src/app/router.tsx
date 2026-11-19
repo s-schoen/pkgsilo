@@ -2,13 +2,10 @@ import { createRouter } from "@tanstack/react-router";
 
 import { routeTree } from "@/app/routeTree.gen.ts";
 
-import type { DbClient } from "@tanstack/react-db";
-import type { QueryClient } from "@tanstack/react-query";
+import type { RouterContext } from "@/app/routes/__root.tsx";
 import type { RouterHistory } from "@tanstack/react-router";
 
-type AppRouterOptions = {
-  queryClient: QueryClient;
-  dbClient: DbClient;
+type AppRouterOptions = RouterContext & {
   // The browser's history by default; the tests pass a memory history.
   history?: RouterHistory;
 };

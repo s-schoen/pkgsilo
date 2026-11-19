@@ -1,3 +1,5 @@
+// Before any other import, as in main.tsx: zod reads the setting when it creates a schema.
+import "@/lib/zod-jitless.ts";
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
