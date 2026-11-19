@@ -34,9 +34,11 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    // A key matches a URL that starts with it, or one that its pattern matches if it starts with ^.
+    // So /api/ and /mcp alone, not a route of the UI that only begins with them, such as /api-keys.
     proxy: {
-      "/api": "http://localhost:8080",
-      "/mcp": "http://localhost:8080",
+      "/api/": "http://localhost:8080",
+      "^/mcp(?:[/?]|$)": "http://localhost:8080",
     },
   },
   resolve: {

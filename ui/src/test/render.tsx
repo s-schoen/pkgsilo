@@ -1,28 +1,25 @@
-import { DbClient, DbProvider } from "@tanstack/react-db";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DbProvider } from "@tanstack/react-db";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { render, renderHook } from "@testing-library/react";
 
+import { createClients } from "@/app/clients.ts";
 import { createAppRouter } from "@/app/router.tsx";
 
+import type { RouterContext } from "@/app/routes/__root.tsx";
 import type { ReactElement, ReactNode } from "react";
 
 // The clients of one test, as main.tsx creates them for the app, so that no cached response or
 // collection leaks into another test. Queries and mutations don't retry, so that they fail at the
 // first error response.
 function testClients() {
-  const queryClient = new QueryClient({
+  return createClients({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const dbClient = new DbClient({ queryClient });
-  return { queryClient, dbClient };
 }
 
 // Provides the clients to children, as main.tsx does.
-function withClients(
-  { queryClient, dbClient }: ReturnType<typeof testClients>,
-  children: ReactNode,
-) {
+function withClients({ queryClient, dbClient }: RouterContext, children: ReactNode) {
   return (
     <QueryClientProvider client={queryClient}>
       <DbProvider client={dbClient}>{children}</DbProvider>

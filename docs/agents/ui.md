@@ -13,14 +13,14 @@ The Go binary embeds its build and serves it at `/`.
 
 ## Development
 
-`task run` serves the API on `:8080`, and `task ui:dev` runs the Vite dev server, which proxies `/api` and `/mcp` to it.
+`task run` serves the API on `:8080`, and `task ui:dev` runs the Vite dev server, which proxies `/api/…` and `/mcp` to it.
 Open the URL that Vite prints.
 
 ## Layout
 
 `ui/src/` is cut by feature, like the Go service:
 
-- `app/` assembles the UI, as `app/` does the service: the router (`router.tsx`) and the routes (`routes/`).
+- `app/` assembles the UI, as `app/` does the service: the router (`router.tsx`), the routes (`routes/`) and the clients of the router's context (`clients.ts`).
 - `features/<feature>/` is one slice, like `feature/<feature>/`, such as `features/home/`.
   It holds only the folders it needs: `components/`, `hooks/`, `api/` (query options and collections built from the generated client, for the loaders), `types/` and `utils/`.
 - `components/`, `hooks/`, `lib/` and `utils/` hold the code that features share, such as `components/layouts/app-layout.tsx`, the form hook in `components/form/` and `lib/zod-locale.ts`.
@@ -52,7 +52,8 @@ TanStack Router routes by the files in `src/app/routes/`: `__root.tsx` is the la
   A loader loads a collection with `await context.dbClient.collection(groupsCollection).preload()`, and the page then reads it with `useLiveQuery` (see "Client store").
   The router preloads a route when the pointer rests on a link to it, and leaves it to TanStack Query whether the cached data is fresh (`defaultPreloadStaleTime: 0`).
 - Link with `<Link to="/…">`, which the routes type: a link to a route that doesn't exist fails the type check.
-- `core/spa` answers every path without an extension with `index.html`, so a deep link reaches the router.
+- `core/spa` answers a browser's navigation to every path that names no file with `index.html`, so a deep link reaches the router.
+- A stale tab whose route chunk is gone after a deploy reloads the page once when it renders that route, so that it loads the new build (`lazyRouteComponent` of the router, which the code splitting uses).
 - Test a route with `renderRoute(path)` from `@/test/render`, which renders the whole app at that path, with a memory history and its own `QueryClient` and `DbClient`, and returns the `router` too.
   A route's component loads from its own chunk, so find it with a `findBy` query.
 - A test file in `src/app/routes/` isn't a route (`routeFileIgnorePattern` in `tsr.config.json`).
@@ -98,7 +99,7 @@ Orval generates the API client into `ui/src/api/gen/` from `app/testdata/openapi
 TanStack DB (`@tanstack/react-db`, a 1.0 release candidate) keeps the API's resources in collections on the client, which live queries read and join, and which apply a change at once (optimistically) while it's sent to the API.
 Use it for the resources that a page lists, filters or changes; a single read or a call such as a login stays with the API's hooks.
 
-- `main.tsx` creates a `DbClient` over the app's `QueryClient`, provides it with `DbProvider` and passes it to the router's context.
+- `createClients()` in `src/app/clients.ts` creates a `DbClient` over a `QueryClient`; `main.tsx` provides it with `DbProvider` and passes it to the router's context.
 - A collection is a descriptor that `collectionOptions` creates, with `queryCollectionOptions` from `@tanstack/query-db-collection`, so that it loads through TanStack Query.
   It goes in `features/<feature>/api/<name>-collection.ts`, or `src/api/collections/` once several features share it.
   Its `queryFn` and its handlers call the functions of the generated client, not `fetch`:
@@ -150,6 +151,8 @@ const form = useAppForm({
 - `TextField` shows a field's errors once the user has left it or submitted the form, in a `role="alert"` element that describes the input; `SubmitButton` is disabled while the form submits or can't.
   Register a new field or form component in `use-app-form.ts`, and read the field with `useFieldContext<Value>()` or the form with `useFormContext()` from `form-contexts.ts`.
 - Their `label` is a message, as `react/jsx-no-literals` checks.
+- zod parses with `jitless`, since the UI's Content-Security-Policy forbids the code that it would compile otherwise.
+  `src/lib/zod-jitless.ts` sets it, and must stay the first import of `main.tsx` and `src/test/setup.ts`: zod reads it when it creates a schema.
 - zod's messages, such as a schema's validation error, follow the locale: `main.tsx` calls `configureZodLocale(getLocale())` (`src/lib/zod-locale.ts`), whose map must name a zod locale for every locale of the UI.
   `src/test/setup.ts` sets English for the tests.
 - A test finds an input by its label, and an error through zod's message for the same value (`schema.safeParse(value).error?.issues[0]?.message`), never as a literal.
@@ -206,11 +209,14 @@ The CI job `ui-test` runs them on every push and uploads the coverage and the JU
 
 ## Serving (`core/spa`)
 
-`app.NewHandler` mounts `spa.Handler(ui.FS(), …)` at `/*`, after `/mcp` and `/api/v1`, so a path under `/api/v1` that no route takes still gets the 404 problem.
+`app.NewHandler` mounts `spa.Handler(ui.FS(), …)` at `/*` for GET and HEAD, after `/mcp` and `/api/v1`, so a path under `/api/v1` that no route takes still gets the 404 problem.
+The router answers the other methods with its 405 problem.
 
 - A path that names a file gets it.
-  A path without an extension that names none, such as `/identities/42`, is a client-side route and gets `index.html`.
-  A missing path with an extension gets the 404 problem, so that a stale tab gets no HTML for an asset of an older build.
-- `assets/*` (names hashed by Vite) are cached forever; every other file gets `no-cache`.
+  Any other path gets `index.html` if the request is a browser's navigation, which accepts `text/html` by name, such as to `/identities/42` or `/packages/lodash.merge`: a client-side route.
+  Every other request gets the 404 problem: a stale tab gets no HTML for an asset of an older build, and an API or MCP client none for a path that no route takes, such as `/.well-known/oauth-protected-resource`.
+- `assets/*` (names hashed by Vite) are cached forever; every other file gets `no-cache` and an ETag, so that a browser revalidates it with a 304.
+- `spa.Handler` reads and compresses the files once, when the server starts, and `app.NewHandler` panics if it can't (a broken build) or if there is no `index.html`.
+  A file is sent with gzip to a client that accepts it, if gzip makes it smaller.
 - The UI's files get the Content-Security-Policy `default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`, instead of the API's, which blocks every script.
   So the UI has no inline scripts or styles and loads nothing from other origins.
