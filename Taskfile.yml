@@ -88,6 +88,32 @@ tasks:
     cmds:
       - pnpm run routes
 
+  # Generates the service worker of MSW into ui/.storybook/public, which git ignores, from the installed
+  # msw: Storybook serves it to the stories (msw-storybook-addon), and to their tests.
+  "ui:msw":
+    dir: ui
+    run: once
+    deps:
+      - ui:install
+    sources:
+      - package.json
+      - pnpm-lock.yaml
+    generates:
+      - .storybook/public/mockServiceWorker.js
+    cmds:
+      - pnpm run msw:init
+
+  # Installs the Chromium of the installed Playwright, in which the storybook project of Vitest runs
+  # the stories. It does nothing if it's there. CI installs it with --with-deps, for the system's
+  # libraries.
+  "ui:browsers":
+    dir: ui
+    run: once
+    deps:
+      - ui:install
+    cmds:
+      - pnpm exec playwright install chromium
+
   "ui:dev":
     desc: Run the Vite dev server of the web UI, which proxies /api and /mcp to the server of `task run`
     interactive: true
@@ -96,6 +122,25 @@ tasks:
       - ui:gen:api
     cmds:
       - pnpm run dev
+
+  "ui:storybook":
+    desc: Run Storybook on :6006, with the stories of the web UI and its MCP server at /mcp
+    interactive: true
+    dir: ui
+    deps:
+      - ui:gen:api
+      - ui:msw
+    cmds:
+      - pnpm run storybook
+
+  "ui:storybook:build":
+    desc: Build Storybook into ui/build/storybook
+    dir: ui
+    deps:
+      - ui:gen:api
+      - ui:msw
+    cmds:
+      - pnpm run storybook:build
 
   "ui:build":
     desc: Build the web UI into ui/dist, which `task build:prod` embeds
@@ -120,10 +165,12 @@ tasks:
       - pnpm run build
 
   "ui:test":
-    desc: Test the web UI, with the coverage in ui/build/coverage and a JUnit report in ui/build/junit.xml
+    desc: Test the web UI and its stories, with the coverage in ui/build/coverage and a JUnit report in ui/build/junit.xml
     dir: ui
     deps:
       - ui:gen:api
+      - ui:msw
+      - ui:browsers
     cmds:
       - pnpm run test --reporter=default --reporter=junit --outputFile.junit=build/junit.xml {{.CLI_ARGS}}
 
