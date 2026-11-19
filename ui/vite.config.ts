@@ -38,6 +38,10 @@ export default defineConfig({
     transformer: "lightningcss",
     lightningcss: {
       drafts: { customMedia: true },
+      // The class names of a CSS module (*.module.css) name the file and the class, so that the
+      // browser's devtools show where they come from. [local] goes last, as Lightning CSS requires
+      // for the line names of a grid's areas.
+      cssModules: { pattern: "[name]_[hash]_[local]" },
     },
   },
   build: {

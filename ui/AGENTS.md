@@ -8,6 +8,7 @@ The Go binary embeds its build and serves it at `/` (`docs/agents/ui.md`).
 Versions are in `package.json`.
 
 - React, TypeScript and Vite.
+- React Aria Components as the base of the components, styled with CSS modules, which Vite compiles with Lightning CSS; Tabler's icons (`@tabler/icons-react`).
 - TanStack Router (routes by file), Query (the API's data), DB (collections on the client) and Form.
   TanStack Devtools show their panels on the dev server only; add the panel of a new TanStack library in `main.tsx`.
 - zod v4 for validation, imported from `zod/v4`.
@@ -43,6 +44,8 @@ The prek hooks `oxfmt` and `oxlint` run on a commit that touches `ui/`.
 - `app/` assembles the UI: the router (`router.tsx`), the routes (`routes/`) and the clients of the router's context (`clients.ts`).
 - `features/<feature>/` is one slice, with only the folders it needs: `components/`, `hooks/`, `api/` (query options and collections for the loaders), `types/`, `utils/`.
 - `components/`, `hooks/`, `lib/` and `utils/` hold the code that features share; create such a folder when its first file comes.
+  `components/ui/` is the UI library, which every view builds on.
+- `styles/` holds the global CSS: the tokens, the base of the page and the breakpoints.
 - `test/` holds the test helpers; `main.tsx` mounts the app.
 
 Rules:
@@ -50,6 +53,7 @@ Rules:
 - Imports go one way: shared code (`api`, `components`, `hooks`, `lib`, `utils`) → `features` → `app`; `no-restricted-imports` in `.oxlintrc.json` checks it.
   A route composes features: a feature imports no other feature, which no lint rule checks.
 - Import the file itself through the `@/` alias, as in `@/features/home/components/home-page.tsx`.
+  A component of the UI library is the exception: import it by its folder, as `@/components/ui/button`, whose `index.ts` is its public API; `no-restricted-imports` checks it.
 - File names are kebab-case, except the route files, whose names are the URL's syntax.
 - Every text the user reads is a message (`m.welcome()`), and tests and stories find it through the message (`ui/docs/agents/translations.md`).
 - The UI's Content-Security-Policy allows only its own files: scripts and styles live in files, and everything loads from the UI's origin (images may also be `data:` URLs).
@@ -98,6 +102,7 @@ A UI change is done when:
 
 Read before you work on:
 
+- **Components and styling** (`src/components/ui/`, `*.module.css`, `src/styles/`, icons): `ui/docs/agents/components.md`.
 - **Routes** (`src/app/routes/`, `router.tsx`, loaders, links): `ui/docs/agents/routing.md`.
 - **API calls** (the generated client and its hooks): `ui/docs/agents/api-client.md`.
 - **Collections** (TanStack DB, `useLiveQuery`): `ui/docs/agents/client-store.md`.

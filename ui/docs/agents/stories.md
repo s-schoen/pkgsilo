@@ -15,6 +15,7 @@ It builds the stories with `vite.config.ts`, as the app, without the app's devto
 - `preview.tsx` wraps each story in its own clients, as `renderWithClient` does a test, so a component that uses the API's hooks or a collection renders.
   No story has a router yet: a component with a `<Link>` needs a decorator with a memory history first.
 - The toolbar's locale (`en`, `de`) sets the messages, zod's messages and `<html lang>`; a story pins one with `globals: { locale: "de" }`.
+- The toolbar's color scheme (`light`, `dark`) sets `data-color-scheme` on `<html>`, light whatever the operating system prefers; a story pins one with `globals: { colorScheme: "dark" }`.
 - MSW mocks the API in the stories as in the tests, with the generated handlers: `beforeEach: ({ msw }) => { msw.use(getGetGroupMockHandler({ … })); }`.
   They're removed after the story, and a request to `/api/` that no handler takes fails.
   `main.ts` serves MSW's service worker from the installed `msw`.

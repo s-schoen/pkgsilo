@@ -1,5 +1,7 @@
 // Before any other import, as in main.tsx: zod reads the setting when it creates a schema.
 import "@/lib/zod-jitless.ts";
+// The tokens and the base of the page, as in main.tsx.
+import "@/styles/global.css";
 // The preview of addon-mcp, which sizes a story that the MCP tools embed (stories-preview). Storybook
 // loads an addon's preview by itself only for a preview without definePreview, and addon-mcp exports
 // it to no one, so it's imported by its path.
@@ -29,6 +31,14 @@ const withLocale: Decorator = (Story, { globals }) => {
   overwriteGetLocale(() => locale);
   configureZodLocale(locale);
   document.documentElement.lang = locale;
+  return <Story />;
+};
+
+// Renders the story in the color scheme of the toolbar, whatever the operating system prefers:
+// src/styles/tokens.css forces it through the attribute.
+const withColorScheme: Decorator = (Story, { globals }) => {
+  document.documentElement.dataset["colorScheme"] =
+    globals["colorScheme"] === "dark" ? "dark" : "light";
   return <Story />;
 };
 
@@ -99,8 +109,18 @@ export default definePreview({
         dynamicTitle: true,
       },
     },
+    colorScheme: {
+      description: "The color scheme of the tokens",
+      toolbar: {
+        title: "Color scheme",
+        icon: "contrast",
+        items: ["light", "dark"],
+        dynamicTitle: true,
+      },
+    },
   },
-  initialGlobals: { locale: baseLocale },
+  // Light, not the operating system's scheme, so that a story's test sees the same colors anywhere.
+  initialGlobals: { locale: baseLocale, colorScheme: "light" },
   // The last one wraps the others: the clients are outermost.
-  decorators: [withLocale, withClients],
+  decorators: [withColorScheme, withLocale, withClients],
 });
