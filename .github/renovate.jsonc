@@ -161,6 +161,22 @@
       "groupName": "Vitest (major)"
     },
     {
+      // Storybook's packages are released together, and the addons and the ESLint plugin require
+      // Storybook's exact version.
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "matchPackageNames": [
+        "storybook",
+        "@storybook/**",
+        "eslint-plugin-storybook"
+      ],
+      "groupName": "Storybook (major)"
+    },
+    {
       // oxlint declares the oxlint-tsgolint versions it runs with as a peer range.
       "matchManagers": [
         "npm"
