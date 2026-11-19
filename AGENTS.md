@@ -32,11 +32,12 @@ pkgsilo is a Go service with a REST API under `/api/v1` and an MCP endpoint at `
 - **API routes, request or response types** (`feature/*/api`, its `docs.go`): `docs/agents/openapi.md`.
 - **End-to-end tests** (`e2e_test.go`): `docs/agents/e2e-tests.md`.
 - **Telemetry** (metrics, spans, or logging errors): `docs/agents/telemetry.md`.
-- **The web UI** (`ui/`, `core/spa`): `docs/agents/ui.md`.
+- **The web UI** (`ui/`): `ui/AGENTS.md`.
+- **Embedding or serving the web UI** (`ui/embed*.go`, `core/spa`): `docs/agents/ui.md`.
 
 ## Commands
 
-`task generate` (mocks), `task lint`, `task test` (needs Docker for PostgreSQL), `task test:short` (without), `task db:migrate:new -- <name>`, `task ui:dev`, `task ui:build`, `task ui:gen:api` (the API client), `task ui:test`, `task ui:lint`, `task ui:fmt` and `task ui:storybook` (the web UI), `task build:prod` (the binary with the web UI).
+`task generate` (mocks), `task lint`, `task test` (needs Docker for PostgreSQL), `task test:short` (without), `task db:migrate:new -- <name>`, `task build:prod` (the binary with the web UI); the web UI's tasks are in `ui/AGENTS.md`.
 Run changed workflows locally with `task ci:push` and `task ci:pr` (act) before pushing them.
 
 ## Git
