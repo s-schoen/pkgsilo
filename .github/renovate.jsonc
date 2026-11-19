@@ -1,5 +1,5 @@
-// Keeps the Go modules, the web UI's pnpm dependencies, the mise.toml tools and the GitHub Actions
-// up to date. Pull requests
+// Keeps the Go modules, the web UI's pnpm dependencies, the MCP SDK of the compatibility test, the
+// mise.toml tools and the GitHub Actions up to date. Pull requests
 // for vulnerable dependencies are opened at once; everything else waits for the weekly schedule
 // and for its release to be 3 days old. Minor and patch updates of 1.0+ dependencies are merged
 // by Renovate once CI is green.
@@ -13,7 +13,8 @@
   // breaks existing dev volumes, so it's raised by hand.
   "enabledManagers": [
     "gomod",
-    // Renovate's manager for package.json, which updates ui/pnpm-lock.yaml with pnpm.
+    // Renovate's manager for package.json: ui/, whose pnpm-lock.yaml it updates with pnpm, and
+    // app/testdata/mcpcompat, whose package-lock.json it updates with npm.
     "npm",
     "mise",
     "github-actions"
@@ -105,6 +106,15 @@
         "patch"
       ],
       "groupName": "UI dependencies (non-major)"
+    },
+    {
+      // The MCP SDK that TestMCP_Compatibility drives the endpoint with isn't part of the UI. A new
+      // SDK may need the test to follow it, so it gets its own pull request, which doesn't hold
+      // up the UI's.
+      "matchFileNames": [
+        "app/testdata/mcpcompat/**"
+      ],
+      "groupName": "MCP SDK"
     },
     {
       // A major update of React needs the types of the same major.
