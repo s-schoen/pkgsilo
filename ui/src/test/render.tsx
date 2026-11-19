@@ -1,12 +1,10 @@
-import { DbProvider } from "@tanstack/react-db";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { render, renderHook } from "@testing-library/react";
 
+import { AppProviders } from "@/app/app-providers.tsx";
 import { createClients } from "@/app/clients.ts";
 import { createAppRouter } from "@/app/router.tsx";
 
-import type { RouterContext } from "@/app/routes/__root.tsx";
 import type { ReactElement, ReactNode } from "react";
 
 // The clients of one test, as main.tsx creates them for the app, so that no cached response or
@@ -18,19 +16,10 @@ function testClients() {
   });
 }
 
-// Provides the clients to children, as main.tsx does.
-function withClients({ queryClient, dbClient }: RouterContext, children: ReactNode) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <DbProvider client={dbClient}>{children}</DbProvider>
-    </QueryClientProvider>
-  );
-}
-
 function clientsWrapper() {
   const clients = testClients();
   return function ClientsWrapper({ children }: { children: ReactNode }) {
-    return withClients(clients, children);
+    return <AppProviders clients={clients}>{children}</AppProviders>;
   };
 }
 
@@ -52,6 +41,10 @@ export function renderRoute(path: string) {
     ...clients,
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  const result = render(withClients(clients, <RouterProvider router={router} />));
+  const result = render(
+    <AppProviders clients={clients}>
+      <RouterProvider router={router} />
+    </AppProviders>,
+  );
   return { ...result, router };
 }

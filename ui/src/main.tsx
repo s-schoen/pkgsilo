@@ -1,15 +1,14 @@
 // Before any other import: zod reads the setting when it creates a schema.
 import "@/lib/zod-jitless.ts";
-import { DbProvider } from "@tanstack/react-db";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { formDevtoolsPlugin } from "@tanstack/react-form-devtools";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import { RouterProvider } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
+import { AppProviders } from "@/app/app-providers.tsx";
 import { createClients } from "@/app/clients.ts";
 import { createAppRouter } from "@/app/router.tsx";
 import { configureZodLocale } from "@/lib/zod-locale.ts";
@@ -25,18 +24,16 @@ document.documentElement.lang = getLocale();
 // The validation errors of the forms, in the same language.
 configureZodLocale(getLocale());
 
-const { queryClient, dbClient } = createClients();
+const clients = createClients();
 
-const router = createAppRouter({ queryClient, dbClient });
+const router = createAppRouter(clients);
 
 // The devtools show only on the dev server: the devtools plugin in vite.config.ts strips them from
 // the build.
 createRoot(root).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <DbProvider client={dbClient}>
-        <RouterProvider router={router} />
-      </DbProvider>
+    <AppProviders clients={clients}>
+      <RouterProvider router={router} />
       <TanStackDevtools
         plugins={[
           { name: "TanStack Query", render: <ReactQueryDevtoolsPanel /> },
@@ -44,6 +41,6 @@ createRoot(root).render(
           formDevtoolsPlugin(),
         ]}
       />
-    </QueryClientProvider>
+    </AppProviders>
   </StrictMode>,
 );
