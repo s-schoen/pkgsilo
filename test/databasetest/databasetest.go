@@ -105,7 +105,10 @@ func NewWithProviders(
 func setup() error {
 	ctx := context.Background()
 
+	// Every test has its own database and pool, and the packages run in parallel processes, so the peak
+	// is packages × parallel tests × pool size. That exceeds PostgreSQL's default max_connections of 100.
 	ctr, err := postgres.Run(ctx, "postgres:18-alpine",
+		testcontainers.WithCmd("postgres", "-c", "max_connections=1000"),
 		postgres.BasicWaitStrategies(),
 		testcontainers.WithReuseByName("pkgsilo-test-"+testcontainers.SessionID()),
 	)
