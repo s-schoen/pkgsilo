@@ -3,7 +3,8 @@
   "plugins": ["eslint", "import", "jsx-a11y", "oxc", "react", "typescript", "unicorn", "vitest"],
   "jsPlugins": [
     "eslint-plugin-testing-library",
-    { "name": "paraglide", "specifier": "@inlang/paraglide-js/eslint" }
+    { "name": "paraglide", "specifier": "@inlang/paraglide-js/eslint" },
+    "eslint-plugin-storybook"
   ],
   "categories": {
     "correctness": "error"
@@ -18,7 +19,8 @@
     ".tanstack",
     "src/api/gen",
     "src/app/routeTree.gen.ts",
-    "src/paraglide"
+    "src/paraglide",
+    ".storybook/public"
   ],
   "options": {
     "maxWarnings": 0,
@@ -202,6 +204,30 @@
             ]
           }
         ]
+      }
+    },
+    {
+      // Storybook's configuration: main.ts runs in Node, preview.tsx in the browser of the stories.
+      "files": [".storybook/**"],
+      "env": {
+        "node": true,
+        "browser": true
+      },
+      "rules": {
+        // Fast Refresh doesn't reload the preview, which exports its configuration, not components.
+        "react/only-export-components": "off",
+        "storybook/no-uninstalled-addons": "error"
+      }
+    },
+    {
+      "files": ["src/**/*.stories.tsx"],
+      "rules": {
+        "storybook/await-interactions": "error",
+        "storybook/context-in-play-function": "error",
+        "storybook/no-redundant-story-name": "error",
+        "storybook/no-renderer-packages": "error",
+        "storybook/prefer-pascal-case": "error",
+        "storybook/use-storybook-expect": "error"
       }
     },
     {

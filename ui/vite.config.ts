@@ -1,9 +1,11 @@
 import { URL, fileURLToPath } from "node:url";
 
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
+import { storybookTest } from "@storybook/addon-vitest/vitest-plugin";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
+import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 
 // The build goes to dist/, which the Go binary embeds with -tags webui (embed.go). The dev server
@@ -47,8 +49,40 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "jsdom",
-    setupFiles: ["./src/test/setup.ts"],
+    // Two projects, which inherit the plugins above and the options of this section (extends: true),
+    // and add up to one coverage report: `vitest --project unit` runs only the first.
+    projects: [
+      // The tests next to the code (*.test.ts, *.test.tsx), in jsdom.
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          environment: "jsdom",
+          include: ["src/**/*.test.{ts,tsx}"],
+          setupFiles: ["./src/test/setup.ts"],
+        },
+      },
+      // Every story (*.stories.tsx) as a test in Chromium, with its play function and the
+      // accessibility check (.storybook/preview.tsx). `task ui:browsers` installs Chromium.
+      {
+        extends: true,
+        plugins: [
+          storybookTest({
+            configDir: fileURLToPath(new URL("./.storybook", import.meta.url)),
+            storybookScript: "pnpm run storybook",
+          }),
+        ],
+        test: {
+          name: "storybook",
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: [{ browser: "chromium" }],
+          },
+        },
+      },
+    ],
     // Undo vi.spyOn, vi.stubEnv and vi.stubGlobal before each test, so that no test needs to clean up.
     restoreMocks: true,
     unstubEnvs: true,
@@ -56,11 +90,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      // The entry point only mounts the router; src/test/ holds the test helpers; src/api/gen/,
-      // src/app/routeTree.gen.ts and src/paraglide/ are generated.
+      // The entry point only mounts the router; src/test/ holds the test helpers and the stories
+      // are tests; src/api/gen/, src/app/routeTree.gen.ts and src/paraglide/ are generated.
       exclude: [
         "src/main.tsx",
         "src/test/**",
+        "src/**/*.stories.tsx",
         "src/api/gen/**",
         "src/app/routeTree.gen.ts",
         "src/paraglide/**",
