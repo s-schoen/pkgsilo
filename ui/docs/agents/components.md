@@ -13,6 +13,33 @@ How to build a component of the UI library, style it with a CSS module and the t
   The wrapper adds the look and the props of the project, such as `variant`.
 - A component styles itself and takes no `className` or `style`: its parent lays it out in its own CSS module, with `gap` or a grid.
 - `button/` is the reference component.
+- A field (`text-field/`, `select/`, `combo-box/`, `checkbox/`, `switch/`) takes `label`, `description` and `errorMessage` as messages, shows the error while `isInvalid` is set, and renders the parts of `field/` (`Label`, `Description`, `FieldError`) inside the React Aria field that it wraps.
+  Its `validationBehavior` is always `"aria"`: a form's schema validates it, never the browser.
+  A form binds it through `@/components/form` (`ui/docs/agents/forms.md`).
+- A component that only React Aria's behavior needs, such as `MenuTrigger`, `TooltipTrigger` or `DialogTrigger`, is re-exported as it is from the folder of the component it pairs with.
+
+## The components
+
+| Need                                             | Component                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| An action                                        | `button` (`isPending` while it runs)                          |
+| Navigation                                       | `link`, `tabs` (a `Tab` with `href`)                          |
+| Text input                                       | `text-field` (`TextField`, `TextArea`)                        |
+| One of a few options                             | `select`                                                      |
+| One of many options, by typing                   | `combo-box`                                                   |
+| A yes or no that a form submits                  | `checkbox`                                                    |
+| A setting that applies at once                   | `switch`                                                      |
+| Actions of a row or a toolbar                    | `menu`                                                        |
+| The name of an icon-only button                  | `tooltip`                                                     |
+| A task that interrupts the page                  | `modal`                                                       |
+| A question before an action that can't be undone | `confirm-dialog`                                              |
+| The outcome of an action                         | `toast` (`showToast()`; the root route renders the `Toaster`) |
+| Loading                                          | `spinner`                                                     |
+| A status                                         | `badge`                                                       |
+| A line between content                           | `separator`                                                   |
+| Building blocks of the above                     | `field`, `popover`, `list-box`                                |
+
+`toast/` builds on React Aria's `UNSTABLE_` toasts: only that folder names them, so that a change of their API stays there.
 
 ## CSS modules
 
@@ -83,8 +110,15 @@ React's `style` prop, and the positioning of React Aria's overlays, pass: they s
 
 ## Locale
 
-React Aria formats dates and numbers, and has strings of its own (in ComboBox, DatePicker and others), in the locale of its `I18nProvider`, else the browser's.
-Before the first such component:
+React Aria formats dates and numbers, and has strings of its own (a ComboBox's button, a toast region's name), in the locale of the messages: `AppProviders` wraps the app, the tests and the stories in its `I18nProvider` with paraglide's `getLocale()`.
+`@react-aria/optimize-locales-plugin` in `vite.config.ts` keeps only React Aria's strings of the UI's locales (`project.inlang/settings.json`).
 
-- Wrap the app in `I18nProvider` with paraglide's `getLocale()`, wherever `AppProviders` wraps it: `main.tsx`, `src/test/render.tsx` and `.storybook/preview.tsx`.
-- Add `@react-aria/optimize-locales-plugin` to `vite.config.ts` with the UI's locales, so that the build drops React Aria's other languages.
+## Links and routes
+
+React Aria's links (`Link`, a `MenuItem`'s or a `Tab`'s `href`) navigate through TanStack Router: `src/app/root-layout.tsx` wraps the routes in React Aria's `RouterProvider`, and types `href` as a route, which the type check checks as it checks `<Link to>`.
+Outside a router, as in a story, a link is a plain `<a>`.
+
+## Overlays
+
+A popover, a menu, a tooltip, a modal and a toast render in a portal at the end of `<body>`, which stacks them in the order they open: none sets a `z-index`.
+They enter and leave on `[data-entering]` and `[data-exiting]` (`ui/docs/agents/design.md`).
