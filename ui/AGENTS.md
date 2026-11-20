@@ -50,7 +50,7 @@ The prek hooks `oxfmt` and `oxlint` run on a commit that touches `ui/`.
 
 Rules:
 
-- Imports go one way: shared code (`api`, `components`, `hooks`, `lib`, `utils`) → `features` → `app`; `no-restricted-imports` in `.oxlintrc.json` checks it.
+- Imports go one way: shared code (`api`, `components`, `hooks`, `lib`, `utils`) → `features` → `app`; `no-restricted-imports` in `oxlint.config.ts` checks it.
   A route composes features: a feature imports no other feature, which no lint rule checks.
 - Import the file itself through the `@/` alias, as in `@/features/home/components/home-page.tsx`.
   A component of the UI library is the exception: import it by its folder, as `@/components/ui/button`, whose `index.ts` is its public API; `no-restricted-imports` checks it.
@@ -58,6 +58,7 @@ Rules:
 - Every text the user reads is a message (`m.welcome()`), and tests and stories find it through the message (`ui/docs/agents/translations.md`).
 - The UI's Content-Security-Policy allows only its own files: scripts and styles live in files, and everything loads from the UI's origin (images may also be `data:` URLs).
   It forbids the code that zod compiles, so zod parses `jitless`: `@/lib/zod-jitless.ts` stays the first import of `main.tsx`, `src/test/setup.ts` and `.storybook/preview.tsx`, since zod reads the setting when it creates a schema, and no lint rule checks the order.
+- `oxlint.config.ts` is oxlint's configuration, in TypeScript, so that its overrides share the options of `no-restricted-imports`: an override replaces a rule's options.
 - Disable a lint rule with an `oxlint-disable` comment (oxlint ignores `eslint-disable`); an unused one is an error; Always add a comment on why you disable a rule
 
 ## Generated files
