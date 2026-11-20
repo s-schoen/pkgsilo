@@ -3,6 +3,13 @@
    Components, which behave the same for mouse, touch and keyboard, unlike :hover and :active. A
    disabled button changes its colors instead of fading out, as each variant sets. */
 .button {
+  /* The defaults of the properties that only some variants set. Custom properties inherit, so a
+     fallback in var() would take an ancestor's value instead: these reset it, and a variant's class,
+     which comes later in this file, overrides them. */
+  --button-border: transparent;
+  --button-shadow: none;
+  --button-border-disabled: transparent;
+
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -11,10 +18,10 @@
   block-size: var(--button-height);
   padding-block: 0;
   padding-inline: var(--button-padding);
-  border: var(--border-width) solid var(--button-border, transparent);
+  border: var(--border-width) solid var(--button-border);
   border-radius: var(--radius-control);
   background: var(--button-bg);
-  box-shadow: var(--button-shadow, none);
+  box-shadow: var(--button-shadow);
   color: var(--button-text);
   font-size: var(--button-font-size);
   font-weight: var(--font-weight-medium);
@@ -41,7 +48,7 @@
   }
 
   &[data-disabled] {
-    border-color: var(--button-border-disabled, transparent);
+    border-color: var(--button-border-disabled);
     background: var(--button-bg-disabled);
     box-shadow: none;
     color: var(--button-text-disabled);
