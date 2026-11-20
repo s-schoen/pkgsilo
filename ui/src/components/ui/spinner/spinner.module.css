@@ -1,0 +1,23 @@
+/* A ring in the color of the text, with a quarter of it drawn solid, turning. */
+.spinner {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.ring {
+  inline-size: 1.2em;
+  block-size: 1.2em;
+  stroke: currentcolor;
+  animation: spin var(--duration-spin) linear infinite;
+}
+
+.track {
+  opacity: 0.25;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}

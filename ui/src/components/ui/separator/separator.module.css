@@ -1,0 +1,15 @@
+.separator {
+  flex-shrink: 0;
+  margin: 0;
+  border: none;
+}
+
+.horizontal {
+  inline-size: 100%;
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+
+.vertical {
+  align-self: stretch;
+  border-inline-start: var(--border-width) solid var(--color-border-subtle);
+}

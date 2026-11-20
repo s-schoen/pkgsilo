@@ -4,6 +4,7 @@ import { expect, fn } from "storybook/test";
 
 import preview from "#.storybook/preview";
 import { Button } from "@/components/ui/button";
+import { m } from "@/paraglide/messages.js";
 
 const variants = ["primary", "secondary", "tertiary", "ghost", "danger", "danger-outline"] as const;
 
@@ -101,6 +102,37 @@ export const Disabled = meta.story({
 
     await expect(button).toBeDisabled();
     await expect(args.onPress).not.toHaveBeenCalled();
+  },
+});
+
+// While its action runs, the button shows a spinner, keeps its width and its focus, and ignores
+// presses.
+export const Pending = meta.story({
+  args: { isPending: true },
+  play: async ({ args, canvas, userEvent }) => {
+    const button = canvas.getByRole("button", { name: args.children });
+
+    await userEvent.click(button);
+
+    await expect(canvas.getByRole("progressbar", { name: m.loading() })).toBeVisible();
+    await expect(button).toHaveFocus();
+    await expect(args.onPress).not.toHaveBeenCalled();
+  },
+});
+
+// Pending keeps the width of the content that the spinner covers.
+export const PendingKeepsWidth = meta.story({
+  args: { icon: IconPlus, children: "Add" },
+  render: (args) => (
+    <div style={{ display: "flex", gap: "var(--space-2)" }}>
+      <Button {...args} />
+      <Button {...args} isPending />
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    const [idle, pending] = canvas.getAllByRole("button");
+
+    await expect(pending.getBoundingClientRect().width).toBe(idle.getBoundingClientRect().width);
   },
 });
 

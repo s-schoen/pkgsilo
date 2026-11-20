@@ -1,0 +1,37 @@
+.link {
+  color: var(--link-text);
+  text-decoration: var(--link-decoration);
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+  outline: none;
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-normal) var(--ease-out);
+
+  &[data-hovered] {
+    color: var(--link-text-hovered);
+    text-decoration: underline;
+  }
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    text-decoration: none;
+    cursor: not-allowed;
+  }
+}
+
+.primary {
+  --link-text: var(--color-text-accent);
+  --link-text-hovered: var(--color-accent-hovered);
+  --link-decoration: underline;
+}
+
+.secondary {
+  --link-text: var(--color-text-tertiary);
+  --link-text-hovered: var(--color-text);
+  --link-decoration: none;
+}

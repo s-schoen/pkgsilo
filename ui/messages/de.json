@@ -2,5 +2,10 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "welcome": "Willkommen bei pkgsilo.",
   "notFound": "Diese Seite gibt es nicht.",
-  "goHome": "Zur Startseite"
+  "goHome": "Zur Startseite",
+  "loading": "Wird geladen",
+  "noResults": "Keine Ergebnisse",
+  "close": "Schließen",
+  "dismiss": "Ausblenden",
+  "cancel": "Abbrechen"
 }

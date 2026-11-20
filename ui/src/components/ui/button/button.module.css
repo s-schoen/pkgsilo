@@ -2,6 +2,22 @@
    (.sm, .md, .lg) its dimensions. The states come from the data attributes of React Aria
    Components, which behave the same for mouse, touch and keyboard, unlike :hover and :active. A
    disabled button changes its colors instead of fading out, as each variant sets. */
+/* The content of the button (its icon and text), and the spinner that covers it while it's pending.
+   They come before .button, whose pending state hides the content. */
+.content {
+  display: inline-flex;
+  gap: inherit;
+  align-items: center;
+}
+
+.pending {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .button {
   /* The defaults of the properties that only some variants set. Custom properties inherit, so a
      fallback in var() would take an ancestor's value instead: these reset it, and a variant's class,
@@ -10,6 +26,7 @@
   --button-shadow: none;
   --button-border-disabled: transparent;
 
+  position: relative;
   display: inline-flex;
   flex-shrink: 0;
   gap: var(--button-gap);
@@ -47,12 +64,22 @@
     outline-offset: var(--focus-ring-offset);
   }
 
-  &[data-disabled] {
+  &[data-disabled],
+  &[data-pending] {
     color: var(--button-text-disabled);
     cursor: not-allowed;
     background: var(--button-bg-disabled);
     border-color: var(--button-border-disabled);
     box-shadow: none;
+  }
+
+  /* A pending button keeps its content, and so its width and its name, under the spinner. */
+  &[data-pending] {
+    cursor: progress;
+
+    .content {
+      opacity: 0;
+    }
   }
 }
 

@@ -1,14 +1,14 @@
 import { Button as AriaButton } from "react-aria-components/Button";
 
+import { Spinner } from "@/components/ui/spinner";
+
 import type { TablerIcon } from "@tabler/icons-react";
 import type { Ref } from "react";
 import type { ButtonProps as AriaButtonProps } from "react-aria-components/Button";
 
 import styles from "@/components/ui/button/button.module.css";
 
-// isPending is left out until the button has a look for it: a pending button ignores presses, so it
-// must look busy.
-type ButtonProps = Omit<AriaButtonProps, "children" | "className" | "style" | "isPending"> & {
+type ButtonProps = Omit<AriaButtonProps, "children" | "className" | "style"> & {
   // How much the button stands out: primary for the main action of a view, secondary for the
   // others, tertiary and ghost for the least ones (ghost has no fill until it's hovered), danger for
   // an action that destroys data, and danger-outline for one that a view offers next to others.
@@ -42,11 +42,15 @@ const variantClassNames = {
 // <Button onPress={…}>{m.save()}</Button>, with an icon of @tabler/icons-react before the text as
 // icon={IconPlus}, or alone as <Button icon={IconTrash} aria-label={m.delete()} />. It styles
 // itself: its parent lays it out.
+//
+// isPending, while the action runs, shows a spinner over the content, which keeps the button's width,
+// and ignores presses while the button keeps its focus.
 export function Button({
   variant = "primary",
   size = "md",
   icon: Icon,
   children,
+  isPending,
   ...props
 }: ButtonProps) {
   const classNames = [styles.button, variantClassNames[variant], styles[size]];
@@ -56,9 +60,16 @@ export function Button({
   }
 
   return (
-    <AriaButton {...props} className={classNames.join(" ")}>
-      {Icon && <Icon aria-hidden className={styles.icon} />}
-      {children}
+    <AriaButton {...props} isPending={isPending} className={classNames.join(" ")}>
+      <span className={styles.content}>
+        {Icon && <Icon aria-hidden className={styles.icon} />}
+        {children}
+      </span>
+      {isPending && (
+        <span className={styles.pending}>
+          <Spinner />
+        </span>
+      )}
     </AriaButton>
   );
 }

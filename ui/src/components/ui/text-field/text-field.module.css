@@ -1,0 +1,60 @@
+/* The box of an input or a text area: a field's border, which turns strong when hovered and the
+   accent with a soft ring when focused, and the danger color while invalid. React Aria sets the
+   states on the input itself. */
+.control {
+  inline-size: 100%;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+  outline: var(--focus-ring-width) solid transparent;
+  outline-offset: 0;
+  background: var(--color-layer-2);
+  border: var(--border-width) solid var(--color-border-field);
+  border-radius: var(--radius-control);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color, border-color, outline-color;
+
+  &[data-hovered] {
+    background: var(--color-layer-2-hovered);
+    border-color: var(--color-border-strong);
+  }
+
+  &[data-focused] {
+    outline-color: var(--color-focus-ring-field);
+    background: var(--color-layer-2);
+    border-color: var(--color-border-accent);
+  }
+
+  &[data-invalid] {
+    border-color: var(--color-border-danger);
+  }
+
+  &[data-invalid][data-focused] {
+    outline-color: var(--color-focus-ring-danger);
+  }
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+    background: var(--color-layer-2);
+    border-color: var(--color-border-field);
+  }
+}
+
+.input {
+  block-size: var(--control-height-md);
+  padding-block: 0;
+  padding-inline: var(--control-inset-md);
+  line-height: var(--line-height-tight);
+}
+
+.textArea {
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+  line-height: var(--line-height-normal);
+  resize: vertical;
+}

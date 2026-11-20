@@ -1,0 +1,25 @@
+/* A small raised label, which fades and grows in from its trigger. */
+.tooltip {
+  box-sizing: border-box;
+  max-inline-size: var(--size-tooltip-max);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  background: var(--color-layer-2);
+  border: var(--border-width) solid var(--color-border-field);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  transform-origin: var(--trigger-anchor-point);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-fast);
+  transition-property: opacity, transform;
+
+  &[data-entering],
+  &[data-exiting] {
+    opacity: 0;
+    transform: scale(var(--scale-overlay-start));
+  }
+}

@@ -58,6 +58,12 @@
   --color-border-subtle: light-dark(oklch(94% 0.0017 248), oklch(25.9% 0.0033 231));
   --color-border-strong: light-dark(oklch(87.8% 0.0035 248), oklch(34.2% 0.0049 231));
   --color-border-danger: light-dark(oklch(52.8% 0.185 29), oklch(72% 0.124 25));
+  /* The frame of a field (an input, a select's trigger), and of a tooltip. */
+  --color-border-field: light-dark(oklch(91.2% 0.0017 248), oklch(30.1% 0.0041 231));
+  /* The frame of a focused field. */
+  --color-border-accent: var(--color-accent);
+  /* The frame of an unchecked checkbox. */
+  --color-border-check: var(--color-text-tertiary);
 
   /* The main action and the selection, a muted sky blue, with the text on it. Dark mode lightens
      the accent and puts dark text on it. */
@@ -80,8 +86,22 @@
   --color-danger-subtle-pressed: light-dark(oklch(88.5% 0.042 23), oklch(34.5% 0.1141 29));
   --color-on-danger: light-dark(oklch(100% 0 0), oklch(98.5% 0 0));
 
+  /* A status: success (a key that works), warning (one that expires soon), as a subtle fill with
+     its text. Plane's values. */
+  --color-success-subtle: light-dark(oklch(95.6% 0.0256 154), oklch(29.8% 0.0631 151));
+  --color-text-success: light-dark(oklch(49.7% 0.1172 149), oklch(77.9% 0.1398 151));
+  --color-warning-subtle: light-dark(oklch(96.2% 0.0592 96), oklch(30.4% 0.0853 45));
+  --color-text-warning: light-dark(oklch(47.5% 0.1358 45), oklch(77.2% 0.1728 65));
+
+  /* The track of a switch that's off, and the thumb that slides on it. */
+  --color-toggle-off: var(--color-text-placeholder);
+  --color-toggle-thumb: oklch(100% 0 0);
+
   /* The ring of the keyboard's focus, in the accent. */
   --color-focus-ring: var(--color-accent);
+  /* The soft ring around a focused field, and around a focused field that's invalid. */
+  --color-focus-ring-field: light-dark(oklch(48% 0.1158 243 / 20%), oklch(63.1% 0.1263 238 / 20%));
+  --color-focus-ring-danger: light-dark(oklch(52.8% 0.185 29 / 20%), oklch(72% 0.124 25 / 20%));
 
   /* Shadows, soft and cool: raised lifts a control off its layer, overlay a popup off the page. */
   --shadow-raised: 0 1px 6px -1px rgb(41 47 61 / 3%), 0 1px 4px 0 rgb(41 47 61 / 4%);
@@ -99,6 +119,7 @@
   --space-6: 2rem;
   --space-7: 3rem;
   --space-8: 4rem;
+  --space-9: 5rem;
 
   /* The sizes of a control (a button, an input), so that controls side by side line up: md is the
      default. The padding is the inline one; the gap separates an icon from the text. */
@@ -113,14 +134,37 @@
   --control-gap-sm: 0.25rem;
   --control-gap-md: 0.375rem;
   --control-gap-lg: 0.375rem;
+  /* The inline padding of a field (an input, a select's trigger), a little less than a button's. */
+  --control-inset-md: 0.5rem;
 
   /* The height of the app's header. */
   --size-header: 3.25rem;
 
+  /* The box of a checkbox, and the track and thumb of a switch. */
+  --size-checkbox: 1rem;
+  --size-switch-inline: 1.6875rem;
+  --size-switch-block: 1rem;
+  --size-switch-thumb: 0.875rem;
+
+  /* A popup (a menu, a select's list) is as wide as its content, within these, and at least as
+     wide as its trigger. */
+  --size-popup-min: 12.75rem;
+  --size-popup-max: 25rem;
+  --size-tooltip-max: 20rem;
+
+  /* The widths of a dialog, an alert dialog and a toast. */
+  --size-dialog-sm: 36rem;
+  --size-dialog-md: 42rem;
+  --size-dialog-alert: 37.5rem;
+  --size-toast: 21.25rem;
+
   --border-width: 1px;
+  /* The bar under the selected tab. */
+  --border-width-indicator: 3px;
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
   --radius-full: 9999px;
   --radius-control: var(--radius-md);
 
@@ -157,6 +201,9 @@
   --ease-out: cubic-bezier(0, 0, 0.2, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --scale-overlay-start: 0.95;
+  /* One turn of a spinner. Reduced motion keeps it: a spinner that stops no longer says that
+     something is happening. */
+  --duration-spin: 800ms;
 }
 
 :root[data-color-scheme="light"] {
