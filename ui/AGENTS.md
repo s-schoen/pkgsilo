@@ -102,6 +102,7 @@ A UI change is done when:
 
 Read before you work on:
 
+- **Design** (how a view or component looks: depth, sizes, typography, motion, Plane's recipes): `ui/docs/agents/design.md`.
 - **Components and styling** (`src/components/ui/`, `*.module.css`, `src/styles/`, icons): `ui/docs/agents/components.md`.
 - **Routes** (`src/app/routes/`, `router.tsx`, loaders, links): `ui/docs/agents/routing.md`.
 - **API calls** (the generated client and its hooks): `ui/docs/agents/api-client.md`.

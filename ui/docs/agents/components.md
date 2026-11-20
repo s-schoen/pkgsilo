@@ -32,27 +32,7 @@ How to build a component of the UI library, style it with a CSS module and the t
 - `global.css`: the tokens, a small reset and the base of the page; `main.tsx` and `.storybook/preview.tsx` import it once.
 - `media.css`: the breakpoints, as custom media queries.
 
-The look follows Plane's design: near-neutral greys, a muted sky-blue accent, compact controls, soft shadows and short motion.
-The font is Inter Variable from `@fontsource-variable/inter`, which `global.css` loads from the UI's own files.
-
-## Depth: canvas, surfaces, layers
-
-- The canvas (`--color-canvas`) is the page itself: `global.css` sets it on `<body>`, and nothing else uses it.
-- A surface (`--color-surface-1`, `-2`) sits on the canvas, as the frame of `AppLayout`'s page does.
-  Surfaces are siblings, never nested; an overlay (a dialog, a popover) is on its own plane and may use a surface again.
-- A layer (`--color-layer-1` to `-3`) adds depth inside a surface: layer-1 in surface-1, layer-2 in surface-2, and the next layer inside a layer.
-  A control may take the next layer to stand out, as the secondary button's layer-2.
-- A state's shade matches its layer: `--color-layer-1` turns `--color-layer-1-hovered`, never another layer's shade.
-  A row or a button without a fill takes the transparent layer's shades (`--color-layer-transparent-hovered`).
-- Text takes `--color-text`, then `-secondary`, `-tertiary` and `-placeholder` as it matters less; borders `--color-border-subtle`, or `-strong` to stand out.
-
-## Sizes and motion
-
-- A control takes its height, inline padding and icon gap from the control sizes (`--control-height-md`, `--control-padding-md`, `--control-gap-md`), md unless a view needs another, and its text in `--font-size-sm`.
-- A control's state changes over `--duration-normal` with `--ease-out`, as the button's background.
-- An overlay enters and leaves on React Aria's `[data-entering]` and `[data-exiting]`: from `scale(var(--scale-overlay-start))` and `opacity: 0`, over `--duration-fast`, with `transform-origin: var(--trigger-anchor-point)`.
-  Its backdrop (`--color-backdrop`) fades over `--duration-normal`, and a drawer slides over `--duration-slow`.
-- `tokens.css` sets the durations to 0 when the user prefers reduced motion, so a module never needs its own query.
+What each token means and when a view or a component takes it: `ui/docs/agents/design.md`.
 
 ## Color schemes
 
