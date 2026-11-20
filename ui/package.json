@@ -38,6 +38,7 @@
     "@faker-js/faker": "10.6.0",
     "@inlang/paraglide-js": "3.2.2",
     "@inlang/plugin-message-format": "4.6.0",
+    "@react-aria/optimize-locales-plugin": "2.1.0",
     "@storybook/addon-a11y": "10.6.7",
     "@storybook/addon-docs": "10.6.7",
     "@storybook/addon-mcp": "10.6.7",

@@ -51,6 +51,9 @@ importers:
       '@inlang/plugin-message-format':
         specifier: 4.6.0
         version: 4.6.0
+      '@react-aria/optimize-locales-plugin':
+        specifier: 2.1.0
+        version: 2.1.0
       '@storybook/addon-a11y':
         specifier: 10.6.7
         version: 10.6.7(storybook@10.6.7(@types/react@19.3.0)(prettier@3.10.1)(react@19.3.1))
@@ -1672,6 +1675,9 @@ packages:
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
+
+  '@react-aria/optimize-locales-plugin@2.1.0':
+    resolution: {integrity: sha512-JN8dyMW/9qNbJt08xPDYin4MDe2IntrnCrnAgbmWfi9ob0uQaNv/m1k030kwlep3ip3Xf9DcPSgartxe26nZ/g==}
 
   '@react-types/shared@3.37.0':
     resolution: {integrity: sha512-VNlZuifu4tHdxWPfHvoMfKsHA9kVTCGkduv5vKVTdinm8wHFJNhyVB5RzIMiRFj0q3RKoCbP68u2zaoBSiFueg==}
@@ -5417,6 +5423,10 @@ snapshots:
     optional: true
 
   '@polka/url@1.0.0-next.29': {}
+
+  '@react-aria/optimize-locales-plugin@2.1.0':
+    dependencies:
+      unplugin: 2.3.11
 
   '@react-types/shared@3.37.0(react@19.3.1)':
     dependencies:

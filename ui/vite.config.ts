@@ -1,10 +1,17 @@
+import { readFileSync } from "node:fs";
 import { URL, fileURLToPath } from "node:url";
 
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
+import optimizeLocales from "@react-aria/optimize-locales-plugin";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+
+// The locales of the UI, from the project of the messages.
+const { locales } = JSON.parse(
+  readFileSync(new URL("./project.inlang/settings.json", import.meta.url), "utf8"),
+) as { locales: Array<string> };
 
 // The app's dev server and build, not Storybook (whose CLI sets STORYBOOK) or Vitest (VITEST), which
 // build the stories and tests with this config too: the devtools and the proxy below are the app's.
@@ -30,6 +37,9 @@ export default defineConfig({
       // language: the runtime stores the first locale it detects there, which would then stick.
       strategy: ["preferredLanguage", "baseLocale"],
     }),
+    // React Aria ships the strings and formats of ~30 languages (ComboBox, DatePicker, …): keep only
+    // those of the UI's locales, each with all its regions ("de" keeps de-DE and de-AT).
+    optimizeLocales.vite({ locales }),
   ],
   css: {
     // Lightning CSS instead of PostCSS, for the dev server, the build and the tests. It lowers
