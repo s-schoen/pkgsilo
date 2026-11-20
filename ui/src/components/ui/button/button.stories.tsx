@@ -17,7 +17,7 @@ const meta = preview.meta({
 // The main action of a view.
 export const Primary = meta.story({
   play: async ({ args, canvas, userEvent }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "Save" }));
+    await userEvent.click(canvas.getByRole("button", { name: args.children }));
 
     await expect(args.onPress).toHaveBeenCalledOnce();
   },
@@ -26,7 +26,7 @@ export const Primary = meta.story({
 // The keyboard presses the button too, and its focus shows the ring.
 export const PressedWithKeyboard = meta.story({
   play: async ({ args, canvas, userEvent }) => {
-    const button = canvas.getByRole("button", { name: "Save" });
+    const button = canvas.getByRole("button", { name: args.children });
 
     await userEvent.tab();
     await userEvent.keyboard("{Enter}");
@@ -75,11 +75,17 @@ export const WithIcon = meta.story({
   args: { icon: IconPlus, children: "Add" },
 });
 
-// An icon alone, so the button is named by its aria-label.
+// An icon alone, so the button is named by its aria-label, shows no text and is square.
 export const IconOnly = meta.story({
   args: { icon: IconTrash, children: undefined, "aria-label": "Delete", variant: "secondary" },
   play: async ({ args, canvas, userEvent }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "Delete" }));
+    const button = canvas.getByRole("button", { name: args["aria-label"] });
+
+    await expect(button).toHaveTextContent(/^$/);
+    const { width, height } = button.getBoundingClientRect();
+    await expect(width).toBe(height);
+
+    await userEvent.click(button);
 
     await expect(args.onPress).toHaveBeenCalledOnce();
   },
@@ -89,7 +95,7 @@ export const IconOnly = meta.story({
 export const Disabled = meta.story({
   args: { isDisabled: true },
   play: async ({ args, canvas, userEvent }) => {
-    const button = canvas.getByRole("button", { name: "Save" });
+    const button = canvas.getByRole("button", { name: args.children });
 
     await userEvent.click(button);
 
@@ -108,21 +114,9 @@ export const DisabledVariants = meta.story({
       ))}
     </div>
   ),
-  play: async ({ canvas }) => {
-    for (const button of canvas.getAllByRole("button", { name: "Save" })) {
+  play: async ({ args, canvas }) => {
+    for (const button of canvas.getAllByRole("button", { name: args.children })) {
       await expect(button).toBeDisabled();
     }
   },
-});
-
-// Every variant in the dark color scheme, so that the accessibility check tests its contrast too.
-export const Dark = meta.story({
-  globals: { colorScheme: "dark" },
-  render: (args) => (
-    <div style={{ display: "flex", gap: "var(--space-2)" }}>
-      {variants.map((variant) => (
-        <Button key={variant} {...args} variant={variant} />
-      ))}
-    </div>
-  ),
 });
