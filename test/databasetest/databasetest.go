@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -71,7 +72,7 @@ func NewWithProviders(
 
 	name := fmt.Sprintf("test_%x", randomBytes())
 	// The name is generated, so it's safe to format into the statement.
-	_, err := adminDB.ExecContext(t.Context(), fmt.Sprintf("CREATE DATABASE %s TEMPLATE %s", name, templateDatabase))
+	err := execWhenReady(t.Context(), adminDB, fmt.Sprintf("CREATE DATABASE %s TEMPLATE %s", name, templateDatabase))
 	if err != nil {
 		t.Fatalf("create test database: %v", err)
 	}
@@ -224,6 +225,21 @@ func openWhenReady(ctx context.Context, dbURL string) (*sqlx.DB, error) {
 		}
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("not ready after %s: %w", readyTimeout, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// execWhenReady runs stmt on db, retrying while the connection fails rather than the statement. A server
+// that another test process just started may accept a connection, which the ping of openWhenReady
+// proves, and still reset it while it restarts.
+func execWhenReady(ctx context.Context, db *sqlx.DB, stmt string) error {
+	deadline := time.Now().Add(readyTimeout)
+	for {
+		_, err := db.ExecContext(ctx, stmt)
+		var pgErr *pgconn.PgError
+		if err == nil || errors.As(err, &pgErr) || time.Now().After(deadline) {
+			return err
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

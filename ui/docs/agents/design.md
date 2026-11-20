@@ -27,13 +27,13 @@ The tokens in `src/styles/tokens.css` hold Plane's values; `ui/docs/agents/compo
 
 ## Typography
 
-| Text            | Size              | Weight                   | Color                  |
-| --------------- | ----------------- | ------------------------ | ---------------------- |
-| Page title      | `--font-size-xl`  | `--font-weight-semibold` | `--color-text`         |
-| Section heading | `--font-size-lg`  | `--font-weight-semibold` | `--color-text`         |
-| Body            | `--font-size-md`  | `--font-weight-normal`   | `--color-text`         |
-| Control         | `--font-size-sm`  | `--font-weight-medium`   | as the variant sets    |
-| Metadata        | `--font-size-xs`  | `--font-weight-normal`   | `--color-text-tertiary` |
+| Text            | Size             | Weight                   | Color                   |
+| --------------- | ---------------- | ------------------------ | ----------------------- |
+| Page title      | `--font-size-xl` | `--font-weight-semibold` | `--color-text`          |
+| Section heading | `--font-size-lg` | `--font-weight-semibold` | `--color-text`          |
+| Body            | `--font-size-md` | `--font-weight-normal`   | `--color-text`          |
+| Control         | `--font-size-sm` | `--font-weight-medium`   | as the variant sets     |
+| Metadata        | `--font-size-xs` | `--font-weight-normal`   | `--color-text-tertiary` |
 
 The font is Inter Variable from `@fontsource-variable/inter`, which `global.css` loads from the UI's own files.
 
@@ -57,20 +57,20 @@ Plane's components live in its published package `@makeplane/propel`, as Tailwin
 4. The look is done when every story of the component passes axe in the light and the dark scheme.
    Where Plane's pair fails the contrast, shift our token's lightness until it passes, and say why in `tokens.css`, as the dark danger fill does.
 
-| Plane (Tailwind)                                  | Ours                                                   |
-| ------------------------------------------------- | ------------------------------------------------------ |
-| `bg-layer-2`, `hover:bg-layer-2-hover`, `active:bg-layer-2-active` | `--color-layer-2`, its `-hovered` on `[data-hovered]`, its `-pressed` on `[data-pressed]` |
-| `bg-accent-primary`, `text-on-color`              | `--color-accent`, `--color-on-accent`                  |
-| `text-secondary`, `text-tertiary`                 | `--color-text-secondary`, `--color-text-tertiary`      |
-| `border-subtle`, `border-strong`                  | `--color-border-subtle`, `--color-border-strong`       |
-| `shadow-raised-100`, `shadow-overlay-100`         | `--shadow-raised`, `--shadow-overlay`                  |
-| `h-(--control-height-md)`, `px-(--control-padding-x-md)`, `gap-(--control-gap-md)` | `--control-height-md`, `--control-padding-md`, `--control-gap-md` |
-| `text-body-xs-medium`, `text-body-sm-regular`     | `--font-size-sm` medium, `--font-size-md` normal       |
-| `rounded-md`, `rounded-lg`                        | `--radius-md`, `--radius-lg`                           |
-| `duration-150`, `duration-200`, `duration-300`    | `--duration-fast`, `--duration-normal`, `--duration-slow` |
-| `data-starting-style:…`, `data-ending-style:…`    | `[data-entering]`, `[data-exiting]`                    |
-| `origin-(--transform-origin)`                     | `transform-origin: var(--trigger-anchor-point)`        |
-| `focus-visible:ring-2 ring-accent-strong ring-offset-1` | `[data-focus-visible]` with the outline of `--focus-ring-width`, `--focus-ring-offset` and `--color-focus-ring` |
-| `disabled:…`                                      | `[data-disabled]`                                      |
+| Plane (Tailwind)                                                                   | Ours                                                                                                            |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `bg-layer-2`, `hover:bg-layer-2-hover`, `active:bg-layer-2-active`                 | `--color-layer-2`, its `-hovered` on `[data-hovered]`, its `-pressed` on `[data-pressed]`                       |
+| `bg-accent-primary`, `text-on-color`                                               | `--color-accent`, `--color-on-accent`                                                                           |
+| `text-secondary`, `text-tertiary`                                                  | `--color-text-secondary`, `--color-text-tertiary`                                                               |
+| `border-subtle`, `border-strong`                                                   | `--color-border-subtle`, `--color-border-strong`                                                                |
+| `shadow-raised-100`, `shadow-overlay-100`                                          | `--shadow-raised`, `--shadow-overlay`                                                                           |
+| `h-(--control-height-md)`, `px-(--control-padding-x-md)`, `gap-(--control-gap-md)` | `--control-height-md`, `--control-padding-md`, `--control-gap-md`                                               |
+| `text-body-xs-medium`, `text-body-sm-regular`                                      | `--font-size-sm` medium, `--font-size-md` normal                                                                |
+| `rounded-md`, `rounded-lg`                                                         | `--radius-md`, `--radius-lg`                                                                                    |
+| `duration-150`, `duration-200`, `duration-300`                                     | `--duration-fast`, `--duration-normal`, `--duration-slow`                                                       |
+| `data-starting-style:…`, `data-ending-style:…`                                     | `[data-entering]`, `[data-exiting]`                                                                             |
+| `origin-(--transform-origin)`                                                      | `transform-origin: var(--trigger-anchor-point)`                                                                 |
+| `focus-visible:ring-2 ring-accent-strong ring-offset-1`                            | `[data-focus-visible]` with the outline of `--focus-ring-width`, `--focus-ring-offset` and `--color-focus-ring` |
+| `disabled:…`                                                                       | `[data-disabled]`                                                                                               |
 
 Plane is licensed AGPL-3.0: take its values (colors, sizes, timings) and write the CSS module yourself, with no file or class string copied from it.
