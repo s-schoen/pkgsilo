@@ -41,7 +41,17 @@ export default mergeConfig(
               enabled: true,
               headless: true,
               provider: playwright(),
-              instances: [{ browser: "chromium" }],
+              // Every story runs in both color schemes, so that its accessibility check tests the
+              // contrast of each: preview.tsx starts a story in the scheme of STORY_COLOR_SCHEME,
+              // unless the story pins one.
+              instances: [
+                { browser: "chromium", name: "storybook light" },
+                {
+                  browser: "chromium",
+                  name: "storybook dark",
+                  env: { STORY_COLOR_SCHEME: "dark" },
+                },
+              ],
             },
           },
         },

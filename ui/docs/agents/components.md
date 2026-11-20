@@ -7,7 +7,7 @@ How to build a component of the UI library, style it with a CSS module and the t
 - `src/components/ui/` is the UI library: one folder per component, named after it, with the component, its CSS module and its stories, as `button/button.tsx`, `button/button.module.css` and `button/button.stories.tsx`.
   A helper of one component only lives in its folder too.
 - The folder's `index.ts` exports what other code uses, which imports it by the folder: `import { Button } from "@/components/ui/button";`, the stories too.
-  The other files of the folder import each other by their path, as `button.tsx` imports `@/components/ui/button/button.module.css`.
+  The other files of the folder import each other by their path, as `button.tsx` imports `@/components/ui/button/button.module.css`, but never the files of another component, which `no-restricted-imports` checks.
   Storybook titles the stories `components/ui/<name>`: it drops a file name that repeats its folder's.
 - A component wraps one of React Aria Components, imported from its subpath (`react-aria-components/Button`), which brings the behavior, the keyboard and the ARIA.
   The wrapper adds the look and the props of the project, such as `variant`.
@@ -36,11 +36,11 @@ What each token means and when a view or a component takes it: `ui/docs/agents/d
 
 ## Color schemes
 
-- A color token is `light-dark(<light>, <dark>)`, in `oklch()`, so the page follows the operating system's scheme.
+- A color token is `light-dark(<light>, <dark>)`, in `oklch()`, so the page follows the operating system's scheme; a color that both schemes share is a single value, and one that repeats another token is `var()` of it.
   `data-color-scheme="light"` or `"dark"` on `<html>` forces one.
 - Lightning CSS lowers `light-dark()` to variables that it switches on `:root`.
   So a color token is defined on `:root`, and a scheme applies to the whole page, never to a part of it.
-- Every story's axe check tests the contrast of the light scheme; a story with `globals: { colorScheme: "dark" }` tests the dark one.
+- The tests run every story in both schemes (the browser instances `storybook light` and `storybook dark` in `vitest.config.ts`), so its axe check tests the contrast of each.
 
 ## Breakpoints
 
@@ -67,7 +67,7 @@ Lightning CSS replaces the queries when it compiles the module, so `media.css` a
 
 ## Stories
 
-On top of `ui/docs/agents/stories.md`: a story for each variant and state, a play function for each way to use the component (pointer and keyboard), and one story in the dark scheme.
+On top of `ui/docs/agents/stories.md`: a story for each variant and state, and a play function for each way to use the component (pointer and keyboard); the tests run each story in the dark scheme too.
 
 ## Content-Security-Policy
 
