@@ -12,27 +12,27 @@
 
   display: inline-flex;
   flex-shrink: 0;
+  gap: var(--button-gap);
   align-items: center;
   justify-content: center;
-  gap: var(--button-gap);
   block-size: var(--button-height);
   padding-block: 0;
   padding-inline: var(--button-padding);
-  border: var(--border-width) solid var(--button-border);
-  border-radius: var(--radius-control);
-  background: var(--button-bg);
-  box-shadow: var(--button-shadow);
-  color: var(--button-text);
   font-size: var(--button-font-size);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-tight);
+  color: var(--button-text);
   white-space: nowrap;
   cursor: pointer;
-  transition-property: background-color, border-color, color, box-shadow;
-  transition-duration: var(--duration-normal);
-  transition-timing-function: var(--ease-out);
   /* Only the keyboard's focus shows the ring, below. */
   outline: none;
+  background: var(--button-bg);
+  border: var(--border-width) solid var(--button-border);
+  border-radius: var(--radius-control);
+  box-shadow: var(--button-shadow);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color, border-color, color, box-shadow;
 
   &[data-hovered] {
     background: var(--button-bg-hovered);
@@ -48,11 +48,11 @@
   }
 
   &[data-disabled] {
-    border-color: var(--button-border-disabled);
-    background: var(--button-bg-disabled);
-    box-shadow: none;
     color: var(--button-text-disabled);
     cursor: not-allowed;
+    background: var(--button-bg-disabled);
+    border-color: var(--button-border-disabled);
+    box-shadow: none;
   }
 }
 

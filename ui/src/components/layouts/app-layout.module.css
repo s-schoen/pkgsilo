@@ -27,10 +27,10 @@
 
 .main {
   flex: 1;
+  padding: var(--space-5);
   margin-block-end: var(--space-2);
   margin-inline: var(--space-2);
-  padding: var(--space-5);
+  background: var(--color-surface-1);
   border: var(--border-width) solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--color-surface-1);
 }
