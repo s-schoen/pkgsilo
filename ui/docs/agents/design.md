@@ -25,6 +25,12 @@ The tokens in `src/styles/tokens.css` hold Plane's values; `ui/docs/agents/compo
   A row or a button without a fill takes the transparent layer's shades (`--color-layer-transparent-hovered`).
 - Text takes `--color-text`, then `-secondary`, `-tertiary` and `-placeholder` as it matters less.
 
+## Fields and statuses
+
+- A field's box (an input, a select's trigger, a combobox) is `--color-layer-2` with a `--color-border-field` border, inset by `--control-inset-md`: the border turns `--color-border-strong` when hovered, and `--color-border-accent` with an outline of `--color-focus-ring-field` while focused; an invalid field takes `--color-border-danger` and `--color-focus-ring-danger`.
+  A field shows its focus for the pointer too (`[data-focused]`), a button only for the keyboard (`[data-focus-visible]`).
+- A status is a subtle fill with its text: `--color-success-subtle` and `--color-text-success`, `--color-warning-subtle` and `--color-text-warning`, `--color-danger-subtle` and `--color-text-danger`, and the accent's for what's new or selected.
+
 ## Typography
 
 | Text            | Size             | Weight                   | Color                   |
