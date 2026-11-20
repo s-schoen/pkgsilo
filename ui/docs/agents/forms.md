@@ -26,7 +26,6 @@ const form = useAppForm({
 - `form.Form` renders React Aria's `<Form>`, which submits through `form.handleSubmit()` (Enter in a field too) and stacks the fields; its `validationBehavior` is `"aria"`, so the browser's own validation never blocks a submission.
 - The field components bind the fields of the UI library (`ui/docs/agents/components.md`): `TextField`, `TextArea` (strings), `Checkbox`, `Switch` (booleans), `Select` and `ComboBox`, whose field holds the id of the picked option, or `null` while there's none.
   `Select` and `ComboBox` take `items` and render each as a `ListBoxItem` (`@/components/ui/list-box`), as the UI library's do.
-
 - Validate with the generated zod schema of the request (`CreateGroupBody` from `src/api/gen/zod/<tag>/<tag>.zod.ts`), extended with `.extend()` or `.refine()` for the rules that the schema doesn't state.
   The schemas check the types and the required members, not the rules that only a `jsonschema` description states.
 - Submit with a mutation of the API's hooks (`ui/docs/agents/api-client.md`), or with an insert or update of a collection (`ui/docs/agents/client-store.md`).
