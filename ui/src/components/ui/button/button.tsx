@@ -1,20 +1,29 @@
 import { Button as AriaButton } from "react-aria-components/Button";
 
 import type { TablerIcon } from "@tabler/icons-react";
-import type { ReactNode } from "react";
+import type { Ref } from "react";
 import type { ButtonProps as AriaButtonProps } from "react-aria-components/Button";
 
 import styles from "@/components/ui/button/button.module.css";
 
-type ButtonProps = Omit<AriaButtonProps, "children" | "className" | "style"> & {
+// isPending is left out until the button has a look for it: a pending button ignores presses, so it
+// must look busy.
+type ButtonProps = Omit<AriaButtonProps, "children" | "className" | "style" | "isPending"> & {
   // How much the button stands out: primary for the main action of a view, secondary for the
   // others, tertiary and ghost for the least ones (ghost has no fill until it's hovered), danger for
   // an action that destroys data, and danger-outline for one that a view offers next to others.
   variant?: "primary" | "secondary" | "tertiary" | "ghost" | "danger" | "danger-outline";
   // The height, from the control sizes of the tokens: md unless a view needs another.
   size?: "sm" | "md" | "lg";
+  // For a parent that focuses the button or anchors an overlay to it.
+  ref?: Ref<HTMLButtonElement>;
 } & (
-    | { children: ReactNode; icon?: TablerIcon }
+    | {
+        // The text names the action, so it's a string (a message): null, false or a missing text
+        // would leave the button without a name.
+        children: string;
+        icon?: TablerIcon;
+      }
     // A button with an icon alone has no text, so it names its action with aria-label.
     | { children?: undefined; icon: TablerIcon; "aria-label": string }
   );
@@ -41,7 +50,8 @@ export function Button({
   ...props
 }: ButtonProps) {
   const classNames = [styles.button, variantClassNames[variant], styles[size]];
-  if (children === undefined) {
+  // An empty text shows nothing either, so the icon stands alone.
+  if (!children) {
     classNames.push(styles.iconOnly);
   }
 
