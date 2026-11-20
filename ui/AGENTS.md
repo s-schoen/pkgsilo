@@ -17,7 +17,7 @@ Versions are in `package.json`.
 - Vitest (`vitest.config.ts`) with two projects: `unit` runs the tests in jsdom, `storybook` runs the stories in Chromium.
   Testing Library and MSW in both.
 - Storybook with CSF Next and the addons for docs, a11y, Vitest and MCP.
-- oxlint (type-aware, so it reports TypeScript's errors too) and oxfmt.
+- oxlint (type-aware, so it reports TypeScript's errors too) and oxfmt; stylelint for the CSS.
 
 ## Commands
 
@@ -29,13 +29,13 @@ Run the tasks from the repo root: each one generates the files it needs first, w
   Open the URL that Vite prints.
 - `task ui:test`: every test and story, with coverage, as CI runs them.
   `task ui:test:unit` runs the tests alone, without a browser; `task ui:test:watch` reruns them all on every change.
-- `task ui:lint`: oxlint with the type check; every warning fails.
-  `task ui:lint:fix` applies its fixes.
+- `task ui:lint`: oxlint with the type check, then stylelint on the CSS; every warning fails.
+  `task ui:lint:fix` applies the fixes of both, such as stylelint's property order.
 - `task ui:fmt`: oxfmt, which also sorts the imports and `package.json`.
 - `task ui:gen:api`: the API client, after `go test ./app -run TestDocs -update` rewrote the OpenAPI document.
 - `task ui:build`: the production build in `ui/dist/`, which `task build:prod` embeds.
 
-The prek hooks `oxfmt` and `oxlint` run on a commit that touches `ui/`.
+The prek hooks `oxfmt` and `oxlint`, which runs `task ui:lint` and so stylelint too, run on a commit that touches `ui/`.
 
 ## Layout and rules
 
@@ -58,8 +58,10 @@ Rules:
 - Every text the user reads is a message (`m.welcome()`), and tests and stories find it through the message (`ui/docs/agents/translations.md`).
 - The UI's Content-Security-Policy allows only its own files: scripts and styles live in files, and everything loads from the UI's origin (images may also be `data:` URLs).
   It forbids the code that zod compiles, so zod parses `jitless`: `@/lib/zod-jitless.ts` stays the first import of `main.tsx`, `src/test/setup.ts` and `.storybook/preview.tsx`, since zod reads the setting when it creates a schema, and no lint rule checks the order.
+- `stylelint.config.ts` checks the CSS against the rules of the design (`ui/docs/agents/components.md`); each of its messages names the rule.
 - `oxlint.config.ts` is oxlint's configuration, in TypeScript, so that its overrides share the options of `no-restricted-imports`: an override replaces a rule's options.
 - Disable a lint rule with an `oxlint-disable` comment (oxlint ignores `eslint-disable`); an unused one is an error; Always add a comment on why you disable a rule
+- In CSS, disable a stylelint rule with `/* stylelint-disable-next-line <rule> -- <why> */`: stylelint fails a disable without the description and an unused one.
 
 ## Generated files
 

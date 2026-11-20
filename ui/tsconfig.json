@@ -26,6 +26,7 @@
     ".storybook/*",
     "orval.config.ts",
     "oxlint.config.ts",
+    "stylelint.config.ts",
     "vite.config.ts",
     "vitest.config.ts"
   ]
