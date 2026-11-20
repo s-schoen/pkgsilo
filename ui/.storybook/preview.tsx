@@ -120,7 +120,11 @@ export default definePreview({
     },
   },
   // Light, not the operating system's scheme, so that a story's test sees the same colors anywhere.
-  initialGlobals: { locale: baseLocale, colorScheme: "light" },
+  // The tests run every story a second time in dark: vitest.config.ts sets STORY_COLOR_SCHEME then.
+  initialGlobals: {
+    locale: baseLocale,
+    colorScheme: import.meta.env["STORY_COLOR_SCHEME"] === "dark" ? "dark" : "light",
+  },
   // The last one wraps the others: the clients are outermost.
   decorators: [withColorScheme, withLocale, withClients],
 });

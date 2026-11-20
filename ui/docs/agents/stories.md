@@ -10,12 +10,13 @@ It builds the stories with `vite.config.ts`, as the app, without the app's devto
 - A play function interacts through its context, `async ({ args, canvas, userEvent }) => { … }`, and asserts with `expect` from `storybook/test`; the lint rules of `eslint-plugin-storybook` check both.
   It finds text through its message and an input through its label, as a test does.
 - Every story's test runs axe: an accessibility violation fails it (`a11y: { test: "error" }` in `preview.tsx`).
+  The tests run every story twice, in the light and the dark scheme: `vitest.config.ts` sets `STORY_COLOR_SCHEME` for the dark run, which `preview.tsx` reads.
 - A text prop that the caller passes, such as a field's `label`, is an arg with sample text (`args: { label: "Name" }`), where the app passes a message.
   A play function finds that text through `args.label`, and the text that the component renders itself through its message.
 - `preview.tsx` wraps each story in its own clients, as `renderWithClient` does a test, so a component that uses the API's hooks or a collection renders.
   No story has a router yet: a component with a `<Link>` needs a decorator with a memory history first.
 - The toolbar's locale (`en`, `de`) sets the messages, zod's messages and `<html lang>`; a story pins one with `globals: { locale: "de" }`.
-- The toolbar's color scheme (`light`, `dark`) sets `data-color-scheme` on `<html>`, light whatever the operating system prefers; a story pins one with `globals: { colorScheme: "dark" }`.
+- The toolbar's color scheme (`light`, `dark`) sets `data-color-scheme` on `<html>`, light whatever the operating system prefers; a story pins one with `globals: { colorScheme: "dark" }`, which holds in both runs of the tests.
 - MSW mocks the API in the stories as in the tests, with the generated handlers: `beforeEach: ({ msw }) => { msw.use(getGetGroupMockHandler({ … })); }`.
   They're removed after the story, and a request to `/api/` that no handler takes fails.
   `main.ts` serves MSW's service worker from the installed `msw`.
