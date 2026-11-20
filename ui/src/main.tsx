@@ -26,6 +26,14 @@ document.documentElement.lang = getLocale();
 // The validation errors of the forms, in the same language.
 configureZodLocale(getLocale());
 
+// `task ui:dev:mock` (`vite --mode mock`): the browser answers the API. It starts before the first
+// render, so that no request escapes it. Vite replaces the mode of any other build with a constant,
+// so this branch and the import leave the production build.
+if (import.meta.env.MODE === "mock") {
+  const { startMocking } = await import("@/mocks/browser.ts");
+  await startMocking();
+}
+
 const clients = createClients();
 
 const router = createAppRouter(clients);

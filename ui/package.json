@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc --noEmit && vite build",
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
     "fmt": "oxfmt",
     "gen:api": "orval",
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy preferredLanguage baseLocale",
