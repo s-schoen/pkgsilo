@@ -1,0 +1,32 @@
+/* A raised surface off the page, which grows from its trigger as it enters and shrinks back to it
+   as it leaves. React Aria sets its max-height to the room on the screen. */
+.popover {
+  box-sizing: border-box;
+  padding: var(--space-1);
+  overflow: auto;
+  outline: none;
+  background: var(--color-surface-1);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  transform-origin: var(--trigger-anchor-point);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-fast);
+  transition-property: opacity, transform;
+
+  &[data-entering],
+  &[data-exiting] {
+    opacity: 0;
+    transform: scale(var(--scale-overlay-start));
+  }
+}
+
+.trigger {
+  min-inline-size: var(--trigger-width);
+  max-inline-size: max(var(--trigger-width), var(--size-popup-max));
+}
+
+.content {
+  min-inline-size: var(--size-popup-min);
+  max-inline-size: var(--size-popup-max);
+}

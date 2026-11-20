@@ -1,0 +1,85 @@
+.menu {
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding-block: var(--space-2) var(--space-1);
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+}
+
+/* A row that the pointer or the keyboard's focus highlights; React Aria sets data-focused for
+   both, since the pointer moves the focus. */
+.item {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: center;
+  min-block-size: var(--control-height-lg);
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  color: var(--menu-item-text);
+  text-decoration: none;
+  cursor: default;
+  outline: none;
+  border-radius: var(--radius-md);
+
+  &[data-focused] {
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  &[data-pressed] {
+    background: var(--color-layer-transparent-pressed);
+  }
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+  }
+}
+
+.neutral {
+  --menu-item-text: var(--color-text);
+  --menu-item-icon: var(--color-text-secondary);
+}
+
+.danger {
+  --menu-item-text: var(--color-text-danger);
+  --menu-item-icon: var(--color-text-danger);
+}
+
+.icon {
+  flex-shrink: 0;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+  color: var(--menu-item-icon);
+
+  .item[data-disabled] & {
+    color: inherit;
+  }
+}
+
+.label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Across the menu's padding, from edge to edge. */
+.separator {
+  margin-block: var(--space-1);
+  margin-inline: calc(-1 * var(--space-1));
+  border: none;
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}

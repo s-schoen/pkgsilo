@@ -1,0 +1,49 @@
+/* A subtle fill with the text of its status, which the variant's class sets. */
+.badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--control-gap-sm);
+  align-items: center;
+  inline-size: fit-content;
+  block-size: var(--control-height-sm);
+  padding-inline: var(--control-padding-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  vertical-align: middle;
+  color: var(--badge-text);
+  white-space: nowrap;
+  background: var(--badge-bg);
+  border-radius: var(--radius-sm);
+}
+
+.icon {
+  flex-shrink: 0;
+  inline-size: 1.1em;
+  block-size: 1.1em;
+}
+
+.neutral {
+  --badge-bg: var(--color-layer-3);
+  --badge-text: var(--color-text-secondary);
+}
+
+.accent {
+  --badge-bg: var(--color-accent-subtle);
+  --badge-text: var(--color-text-accent);
+}
+
+.success {
+  --badge-bg: var(--color-success-subtle);
+  --badge-text: var(--color-text-success);
+}
+
+.warning {
+  --badge-bg: var(--color-warning-subtle);
+  --badge-text: var(--color-text-warning);
+}
+
+.danger {
+  --badge-bg: var(--color-danger-subtle);
+  --badge-text: var(--color-text-danger);
+}

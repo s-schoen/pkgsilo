@@ -1,0 +1,57 @@
+.listBox {
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+/* A row that the pointer or the keyboard's focus highlights; React Aria sets data-focused for
+   both, since the pointer moves the focus. */
+.item {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: center;
+  min-block-size: var(--control-height-lg);
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  cursor: default;
+  outline: none;
+  border-radius: var(--radius-md);
+
+  &[data-focused] {
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+  }
+}
+
+.label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.check {
+  visibility: hidden;
+  flex-shrink: 0;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+  color: var(--color-text-secondary);
+
+  .item[data-selected] & {
+    visibility: visible;
+  }
+}
+
+.empty {
+  padding-block: var(--space-2);
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}

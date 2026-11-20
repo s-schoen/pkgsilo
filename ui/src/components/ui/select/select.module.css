@@ -1,0 +1,79 @@
+/* The trigger has the box of a field: its border turns strong when hovered, and the accent with a
+   soft ring while it's focused by the keyboard or its list is open, the danger color while
+   invalid. */
+.trigger {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: center;
+  justify-content: space-between;
+  inline-size: 100%;
+  block-size: var(--control-height-md);
+  padding-block: 0;
+  padding-inline: var(--control-inset-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  text-align: start;
+  cursor: default;
+  outline: var(--focus-ring-width) solid transparent;
+  outline-offset: 0;
+  background: var(--color-layer-2);
+  border: var(--border-width) solid var(--color-border-field);
+  border-radius: var(--radius-control);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color, border-color, outline-color;
+
+  &[data-hovered] {
+    background: var(--color-layer-2-hovered);
+    border-color: var(--color-border-strong);
+  }
+
+  &[data-focus-visible],
+  .select[data-open] & {
+    outline-color: var(--color-focus-ring-field);
+    background: var(--color-layer-2);
+    border-color: var(--color-border-accent);
+  }
+
+  .select[data-invalid] & {
+    border-color: var(--color-border-danger);
+  }
+
+  .select[data-invalid] &[data-focus-visible],
+  .select[data-invalid][data-open] & {
+    outline-color: var(--color-focus-ring-danger);
+  }
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+    background: var(--color-layer-2);
+    border-color: var(--color-border-field);
+  }
+}
+
+.value {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &[data-placeholder] {
+    color: var(--color-text-placeholder);
+  }
+}
+
+.chevron {
+  flex-shrink: 0;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+  color: var(--color-text-tertiary);
+  transition: transform var(--duration-normal) var(--ease-out);
+
+  .select[data-open] & {
+    transform: rotate(180deg);
+  }
+}

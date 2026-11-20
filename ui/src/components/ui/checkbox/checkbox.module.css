@@ -1,0 +1,86 @@
+/* The box, then the text, which the description and the error line up under. The states come from
+   the button (the <label>), which React Aria sets them on. */
+.field {
+  display: grid;
+  grid-template-columns: var(--size-checkbox) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-2);
+  align-items: start;
+
+  /* The description and the error. */
+  & > :not(.button) {
+    grid-column: 2;
+  }
+}
+
+.button {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  cursor: pointer;
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+  }
+}
+
+.box {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--size-checkbox);
+  block-size: var(--size-checkbox);
+  color: var(--color-on-accent);
+  background: transparent;
+  border: var(--border-width) solid var(--color-border-check);
+  border-radius: var(--radius-sm);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-fast);
+  transition-property: background-color, border-color;
+
+  /* By specificity, lowest first; disabled and hovered never meet: React Aria doesn't hover a
+     disabled control. */
+  .button[data-hovered] & {
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  .button[data-invalid] & {
+    border-color: var(--color-border-danger);
+  }
+
+  .button[data-focus-visible] & {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .button[data-disabled] & {
+    background: transparent;
+    border-color: var(--color-text-disabled);
+  }
+
+  .button:is([data-selected], [data-indeterminate]) & {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+
+  .button[data-disabled]:is([data-selected], [data-indeterminate]) & {
+    background: var(--color-text-disabled);
+    border-color: var(--color-text-disabled);
+  }
+
+  .button[data-hovered]:is([data-selected], [data-indeterminate]) & {
+    background: var(--color-accent-hovered);
+    border-color: var(--color-accent-hovered);
+  }
+}
+
+.icon {
+  inline-size: 0.85em;
+  block-size: 0.85em;
+  stroke-width: 3;
+}

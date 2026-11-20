@@ -1,0 +1,78 @@
+/* The track, then the text, which the description and the error line up under. The states come
+   from the button (the <label>), which React Aria sets them on. */
+.field {
+  display: grid;
+  grid-template-columns: var(--size-switch-inline) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-2);
+  align-items: start;
+
+  /* The description and the error. */
+  & > :not(.button) {
+    grid-column: 2;
+  }
+}
+
+.button {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  cursor: pointer;
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+  }
+}
+
+.track {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  inline-size: var(--size-switch-inline);
+  block-size: var(--size-switch-block);
+  padding: var(--border-width);
+  background: var(--color-toggle-off);
+  border-radius: var(--radius-full);
+  transition: background-color var(--duration-fast) var(--ease-out);
+
+  /* By specificity, lowest first; disabled and hovered never meet: React Aria doesn't hover a
+     disabled control. */
+  .button[data-focus-visible] & {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .button[data-disabled] & {
+    background: var(--color-text-disabled);
+  }
+
+  .button[data-selected] & {
+    background: var(--color-accent);
+  }
+
+  .button[data-disabled][data-selected] & {
+    opacity: 0.4;
+  }
+
+  .button[data-hovered][data-selected] & {
+    background: var(--color-accent-hovered);
+  }
+}
+
+.thumb {
+  inline-size: var(--size-switch-thumb);
+  block-size: var(--size-switch-thumb);
+  background: var(--color-toggle-thumb);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-raised);
+  transition: translate var(--duration-fast) var(--ease-out);
+
+  /* To the end of the track, inside its padding. */
+  .button[data-selected] & {
+    translate: calc(var(--size-switch-inline) - var(--size-switch-thumb) - 2 * var(--border-width));
+  }
+}

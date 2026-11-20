@@ -1,0 +1,28 @@
+/* The parts of a field: its root stacks the label, the control, the description and the error, as
+   wide as its parent, which sets the width. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+}
+
+.description {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-tertiary);
+}
+
+.error {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-danger);
+}

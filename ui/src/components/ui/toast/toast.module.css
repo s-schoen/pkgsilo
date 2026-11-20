@@ -1,0 +1,78 @@
+/* The toasts stack upward from the end of the page's bottom, the newest at the bottom. */
+.region {
+  position: fixed;
+  inset-block-end: var(--space-4);
+  inset-inline-end: var(--space-4);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-2);
+  inline-size: min(var(--size-toast), 100% - 2 * var(--space-4));
+  outline: none;
+  border-radius: var(--radius-lg);
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+}
+
+.toast {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: flex-start;
+  padding-block: var(--space-3);
+  padding-inline: var(--space-3) var(--space-2);
+  outline: none;
+  background: var(--color-surface-1);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay-strong);
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+}
+
+.neutral {
+  --toast-icon: var(--color-text-tertiary);
+}
+
+.success {
+  --toast-icon: var(--color-text-success);
+}
+
+.danger {
+  --toast-icon: var(--color-text-danger);
+}
+
+/* In line with the title's first line. */
+.icon {
+  flex-shrink: 0;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+  margin-block-start: 0.1em;
+  color: var(--toast-icon);
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  padding-block-start: 0.1em;
+}
+
+.title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+
+.description {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-tertiary);
+}

@@ -1,0 +1,99 @@
+.tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tabList {
+  display: flex;
+  gap: var(--space-1);
+  max-inline-size: 100%;
+  overflow-inline: auto;
+}
+
+/* A label over a bar: the label has a fill while hovered or selected, and the bar shows in the
+   text's color under the selected tab. */
+.tab {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  outline: none;
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+  }
+}
+
+.label {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: center;
+  justify-content: center;
+  block-size: var(--control-height-md);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-md);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color, color;
+
+  .tab[data-hovered] & {
+    color: var(--color-text-secondary);
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  .tab[data-pressed] & {
+    color: var(--color-text);
+    background: var(--color-layer-transparent-pressed);
+  }
+
+  .tab[data-selected] & {
+    color: var(--color-text);
+    background: var(--color-layer-transparent-selected);
+  }
+
+  .tab[data-focus-visible] & {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+}
+
+.icon {
+  flex-shrink: 0;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+}
+
+.bar {
+  block-size: var(--border-width-indicator);
+  margin-inline: var(--space-2);
+  background: transparent;
+  border-radius: var(--radius-full);
+  transition: background-color var(--duration-normal) var(--ease-out);
+
+  .tab[data-hovered] & {
+    background: var(--color-text-placeholder);
+  }
+
+  .tab[data-selected] & {
+    background: var(--color-text);
+  }
+}
+
+.tabPanel {
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  outline: none;
+  border-radius: var(--radius-md);
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+}
