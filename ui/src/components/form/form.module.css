@@ -1,0 +1,11 @@
+/* The fields stacked, each as wide as the form (a field fills its parent), and the buttons at their
+   start. */
+.form {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: start;
+
+  & > * {
+    max-inline-size: 100%;
+  }
+}

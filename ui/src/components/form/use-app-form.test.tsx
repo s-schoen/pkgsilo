@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod/v4";
@@ -20,17 +20,12 @@ function NameForm({ onSubmit }: { onSubmit: (value: Values) => Promise<void> | v
   });
 
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        void form.handleSubmit();
-      }}
-    >
-      <form.AppField name="name">{(field) => <field.TextField label="Name" />}</form.AppField>
-      <form.AppForm>
+    <form.AppForm>
+      <form.Form>
+        <form.AppField name="name">{(field) => <field.TextField label="Name" />}</form.AppField>
         <form.SubmitButton label="Save" />
-      </form.AppForm>
-    </form>
+      </form.Form>
+    </form.AppForm>
   );
 }
 
@@ -100,19 +95,36 @@ describe("useAppForm", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("disables the submit button while the form submits", async () => {
+  it("submits once, with a pending submit button, while the form submits", async () => {
     const user = userEvent.setup();
     let finishSubmission = () => {};
     const submission = new Promise<void>((resolve) => {
       finishSubmission = resolve;
     });
-    render(<NameForm onSubmit={() => submission} />);
+    const onSubmit = vi.fn<() => Promise<void>>(() => submission);
+    render(<NameForm onSubmit={onSubmit} />);
     await user.type(screen.getByRole("textbox", { name: "Name" }), "abc");
+    const button = screen.getByRole("button", { name: "Save" });
 
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(button);
+    await user.click(button);
 
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(button).toHaveAttribute("data-pending");
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
     finishSubmission();
-    expect(await screen.findByRole("button", { name: "Save" })).toBeEnabled();
+    await waitFor(() => {
+      expect(button).not.toHaveAttribute("data-pending");
+    });
+  });
+
+  it("submits with the Enter key in a field", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn<(value: Values) => void>();
+    render(<NameForm onSubmit={onSubmit} />);
+
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "abc{Enter}");
+
+    expect(onSubmit).toHaveBeenCalledWith({ name: "abc" });
   });
 });
