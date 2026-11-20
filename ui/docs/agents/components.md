@@ -20,9 +20,16 @@ How to build a component of the UI library, style it with a CSS module and the t
   Vite compiles them with Lightning CSS (`vite.config.ts`), which lowers nesting and modern CSS for the target browsers.
 - Style a state through React Aria's data attribute, such as `&[data-hovered]`, `&[data-pressed]`, `&[data-focus-visible]` or `&[data-disabled]`, which behaves the same for mouse, touch and keyboard.
   React Aria's page of each component lists its attributes.
+- A class is camelCase (`.iconOnly`), as `styles.iconOnly` reads it.
 - A variant is a class, such as `.primary`, that sets local custom properties (`--button-bg`), which the base class reads.
+  A module names its own properties after itself and never sets a token.
 - Every color, space, size, radius, font and duration is a token (`var(--space-2)`); add one to `src/styles/tokens.css` when none fits.
+  Only `em` (an icon's size) and `%` stay literal.
+- A property is logical, such as `inline-size`, `padding-inline` or `margin-block-end`, so that it follows the writing mode.
+- The properties follow a grouped order (position, box, text, look, motion), which `task ui:lint:fix` sorts.
 - TypeScript types a module's classes as any string, so a mistyped class is `undefined` at runtime: check the stories after renaming one.
+
+`stylelint.config.ts` checks these rules, the breakpoints below, and that a module styles only its own classes (no `:root`, `body` or `--color-canvas`); `task ui:lint` runs it.
 
 ## Tokens and global styles
 

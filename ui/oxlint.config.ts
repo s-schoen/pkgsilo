@@ -156,7 +156,13 @@ export default defineConfig({
   },
   overrides: [
     {
-      files: ["oxlint.config.ts", "orval.config.ts", "vite.config.ts", "vitest.config.ts"],
+      files: [
+        "oxlint.config.ts",
+        "orval.config.ts",
+        "stylelint.config.ts",
+        "vite.config.ts",
+        "vitest.config.ts",
+      ],
       env: {
         node: true,
       },

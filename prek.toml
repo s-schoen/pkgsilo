@@ -86,7 +86,7 @@ pass_filenames = false
 
 [[repos.hooks]]
 id = "oxlint"
-name = "oxlint (ui)"
+name = "oxlint and stylelint (ui)"
 language = "system"
 entry = "task ui:lint"
 # The API client is generated from the OpenAPI document, so a change of the API can break the UI.

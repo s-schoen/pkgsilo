@@ -176,7 +176,7 @@ tasks:
       - pnpm run test:watch {{.CLI_ARGS}}
 
   "ui:lint":
-    desc: Lint the web UI with oxlint, type-aware and with the TypeScript type check
+    desc: Lint the web UI with oxlint, type-aware and with the TypeScript type check, then its CSS with stylelint
     dir: ui
     deps:
       - ui:gen:api
@@ -184,6 +184,7 @@ tasks:
       - ui:routes
     cmds:
       - pnpm run lint {{.CLI_ARGS}}
+      - pnpm run lint:css
 
   "ui:lint:fix":
     dir: ui
@@ -193,6 +194,7 @@ tasks:
       - ui:routes
     cmds:
       - pnpm run lint:fix {{.CLI_ARGS}}
+      - pnpm run lint:css:fix
 
   "ui:fmt":
     desc: Format the web UI with oxfmt
