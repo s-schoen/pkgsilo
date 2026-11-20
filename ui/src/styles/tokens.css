@@ -2,10 +2,11 @@
    sizes and fonts from these, never as literal values. The values follow Plane's design (its
    @makeplane/propel tokens), expressed in this project's names.
 
-   A color is light-dark(<light>, <dark>) and follows the operating system's color scheme. The
-   data-color-scheme attribute on <html> forces one: Storybook's toolbar sets it, and a setting of
-   the user could. Lightning CSS lowers light-dark() to variables that it switches on :root, so the
-   scheme applies to the whole page, not to a part of it. */
+   A color is light-dark(<light>, <dark>), or a single value that both schemes share, and follows
+   the operating system's color scheme. The data-color-scheme attribute on <html> forces one:
+   Storybook's toolbar sets it, and a setting of the user could. Lightning CSS lowers light-dark()
+   to variables that it switches on :root, so the scheme applies to the whole page, not to a part
+   of it. */
 :root {
   color-scheme: light dark;
 
@@ -68,17 +69,19 @@
   --color-accent-subtle-pressed: light-dark(oklch(90.1% 0.0587 232), oklch(40.9% 0.0777 237));
   --color-on-accent: light-dark(oklch(100% 0 0), oklch(16.9% 0.0021 286));
 
-  /* An action that destroys data, and an error. Dark mode keeps the fill dark enough for white
-     text, where Plane's lighter one falls below the contrast minimum. */
-  --color-danger: light-dark(oklch(52.8% 0.185 29), oklch(52.8% 0.185 29));
-  --color-danger-hovered: light-dark(oklch(47.5% 0.1647 29), oklch(47.5% 0.1647 29));
-  --color-danger-pressed: light-dark(oklch(42.1% 0.1438 29), oklch(42.1% 0.1438 29));
+  /* An action that destroys data, and an error. The fill is the same in both schemes: dark mode
+     keeps it dark enough for white text, where Plane's lighter one falls below the contrast
+     minimum. */
+  --color-danger: oklch(52.8% 0.185 29);
+  --color-danger-hovered: oklch(47.5% 0.1647 29);
+  --color-danger-pressed: oklch(42.1% 0.1438 29);
   --color-danger-subtle: light-dark(oklch(95% 0.0186 22), oklch(24.4% 0.0729 28));
   --color-danger-subtle-hovered: light-dark(oklch(92.1% 0.0289 23), oklch(28.6% 0.0905 28));
   --color-danger-subtle-pressed: light-dark(oklch(88.5% 0.042 23), oklch(34.5% 0.1141 29));
   --color-on-danger: light-dark(oklch(100% 0 0), oklch(98.5% 0 0));
 
-  --color-focus-ring: light-dark(oklch(48% 0.1158 243), oklch(63.1% 0.1263 238));
+  /* The ring of the keyboard's focus, in the accent. */
+  --color-focus-ring: var(--color-accent);
 
   /* Shadows, soft and cool: raised lifts a control off its layer, overlay a popup off the page. */
   --shadow-raised: 0 1px 6px -1px rgb(41 47 61 / 3%), 0 1px 4px 0 rgb(41 47 61 / 4%);
