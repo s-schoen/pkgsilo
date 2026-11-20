@@ -6,6 +6,7 @@ import optimizeLocales from "@react-aria/optimize-locales-plugin";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
+import { msw } from "msw/vite";
 import { defineConfig } from "vite";
 
 // The locales of the UI, from the project of the messages.
@@ -18,11 +19,15 @@ const { locales } = JSON.parse(
 const app = !process.env["STORYBOOK"] && !process.env["VITEST"];
 
 // The build goes to dist/, which the Go binary embeds with -tags webui (embed.go). The dev server
-// proxies the API and MCP to the server of `task run`. vitest.config.ts adds the tests.
-export default defineConfig({
+// proxies the API and MCP to the server of `task run`, or, in mock mode (`task ui:dev:mock`), the
+// browser answers the API (src/mocks/). vitest.config.ts adds the tests.
+export default defineConfig(({ mode }) => ({
   plugins: [
     // TanStack Devtools (src/main.tsx) for the dev server only: it strips them from the build.
     app && devtools(),
+    // Mock mode: serves the service worker of MSW, which src/mocks/browser.ts registers. The mode is
+    // the dev server's (`vite --mode mock`), so a build never gets the worker or the mocks.
+    app && mode === "mock" && msw({ mode: "worker-only" }),
     // Generates src/app/routeTree.gen.ts from src/app/routes/ for the dev server, the build and the
     // tests, and splits each route's component into its own chunk. It reads tsr.config.json, as the
     // routes script in package.json does. It must come before react().
@@ -73,4 +78,4 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
-});
+}));

@@ -109,6 +109,15 @@ tasks:
     cmds:
       - pnpm run dev
 
+  "ui:dev:mock":
+    desc: Run the Vite dev server of the web UI with a mocked API, signed in, so that it needs no `task run`
+    interactive: true
+    dir: ui
+    deps:
+      - ui:gen:api
+    cmds:
+      - pnpm run dev:mock
+
   "ui:storybook":
     desc: Run Storybook on :6006, with the stories of the web UI and its MCP server at /mcp
     interactive: true
