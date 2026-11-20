@@ -60,7 +60,21 @@ export const PickedWithKeyboard = meta.story({
     await userEvent.tab();
     await userEvent.keyboard("{ArrowDown}");
     await screen.findByRole("listbox");
-    await userEvent.keyboard("{ArrowDown}{Enter}");
+    // Each key waits for the one before it to have moved the focus.
+    await waitFor(async () => {
+      await expect(input).toHaveAttribute(
+        "aria-activedescendant",
+        screen.getByRole("option", { name: "alice" }).id,
+      );
+    });
+    await userEvent.keyboard("{ArrowDown}");
+    await waitFor(async () => {
+      await expect(input).toHaveAttribute(
+        "aria-activedescendant",
+        screen.getByRole("option", { name: "bob" }).id,
+      );
+    });
+    await userEvent.keyboard("{Enter}");
 
     await expect(input).toHaveValue("bob");
     await expect(input).toHaveFocus();
