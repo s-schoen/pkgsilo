@@ -1,7 +1,7 @@
-import { Outlet, createRootRouteWithContext } from "@tanstack/react-router";
+import { createRootRouteWithContext } from "@tanstack/react-router";
 
+import { RootLayout } from "@/app/root-layout.tsx";
 import { NotFound } from "@/components/errors/not-found.tsx";
-import { AppLayout } from "@/components/layouts/app-layout.tsx";
 
 import type { DbClient } from "@tanstack/react-db";
 import type { QueryClient } from "@tanstack/react-query";
@@ -15,10 +15,6 @@ export type RouterContext = {
 };
 
 export const Route = createRootRouteWithContext<RouterContext>()({
-  component: () => (
-    <AppLayout>
-      <Outlet />
-    </AppLayout>
-  ),
+  component: RootLayout,
   notFoundComponent: NotFound,
 });

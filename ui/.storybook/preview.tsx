@@ -95,8 +95,11 @@ export default definePreview({
   // A docs page for every component, from its first story and its props.
   tags: ["autodocs"],
   parameters: {
-    // An accessibility violation fails the story's test, not only the panel.
-    a11y: { test: "error" },
+    // An accessibility violation fails the story's test, not only the panel. axe skips React Aria's
+    // live announcer, which lives in <body> outside the story: its messages are short-lived, and the
+    // one that a pending Button announces is labelled by the button, which may be gone by then (a
+    // dialog that closes once its action is done).
+    a11y: { test: "error", context: { exclude: ["[data-live-announcer]"] } },
     docs: { page: DocsPage },
   },
   globalTypes: {
@@ -125,6 +128,7 @@ export default definePreview({
     locale: baseLocale,
     colorScheme: import.meta.env["STORY_COLOR_SCHEME"] === "dark" ? "dark" : "light",
   },
-  // The last one wraps the others: the clients are outermost.
-  decorators: [withColorScheme, withLocale, withClients],
+  // The last one wraps the others: the locale is outermost, so that it's set before AppProviders
+  // reads it for React Aria's I18nProvider.
+  decorators: [withColorScheme, withClients, withLocale],
 });
