@@ -7,12 +7,13 @@ import { m } from "@/paraglide/messages.js";
 
 const meta = preview.meta({
   component: ColorSchemeMenu,
-  // Each story starts from no stored preference, and leaves none behind. The toolbar's scheme
+  // Each story starts from no stored preference, and leaves none behind; it removes only its own
+  // key, since Storybook's manager keeps its state in the same storage. The toolbar's scheme
   // decorator sets <html>'s attribute again for the next story.
   beforeEach: () => {
-    localStorage.clear();
+    writeColorScheme("system");
     return () => {
-      localStorage.clear();
+      writeColorScheme("system");
     };
   },
 });
