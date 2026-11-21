@@ -8,7 +8,8 @@
   display: flex;
   gap: var(--space-1);
   max-inline-size: 100%;
-  overflow-inline: auto;
+  /* stylelint-disable-next-line property-layout-mappings -- Vite's target browsers lack overflow-inline */
+  overflow-x: auto;
 }
 
 /* A label over a bar: the label has a fill while hovered or selected, and the bar shows in the
