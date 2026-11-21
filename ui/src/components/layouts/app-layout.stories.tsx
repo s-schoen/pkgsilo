@@ -109,6 +109,43 @@ export const WithAccount = meta.story({
   },
 });
 
+// A navigation taller than the window scrolls on its own, above the account, which covers none of it.
+export const WithLongNavigation = meta.story({
+  args: {
+    navigation: () => (
+      <NavList aria-label={text.navigation}>
+        {Array.from({ length: 40 }, (_, index) => {
+          const label = `${text.groups} ${index + 1}`;
+          return (
+            <NavItem key={label} href="/" icon={IconUsers}>
+              {label}
+            </NavItem>
+          );
+        })}
+      </NavList>
+    ),
+    account: <button type="button">{text.account}</button>,
+  },
+  play: async ({ canvas, canvasElement }) => {
+    const view = canvasElement.ownerDocument.documentElement.clientHeight;
+    const account = canvas.getByRole("button", { name: text.account });
+    const scroller = canvas.getByRole("navigation", { name: text.navigation }).parentElement;
+    if (scroller === null) {
+      throw new Error("The navigation has no container.");
+    }
+    await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+    await expect(account.getBoundingClientRect().bottom).toBeLessThanOrEqual(view);
+    await expect(account.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      scroller.getBoundingClientRect().bottom,
+    );
+
+    // Scrolled to its end, the last link shows above the account.
+    scroller.scrollTop = scroller.scrollHeight;
+    const last = canvas.getByRole("link", { name: `${text.groups} 40` }).getBoundingClientRect();
+    await expect(last.bottom).toBeLessThanOrEqual(account.getBoundingClientRect().top);
+  },
+});
+
 // On a small screen, the drawer shows the account below the navigation.
 export const MobileWithAccount = meta.story({
   args: {

@@ -18,7 +18,8 @@ type AppLayoutProps = {
   // The controls at the end of the header, such as the color scheme's menu.
   actions?: ReactNode;
   // Who is signed in, such as the account's menu: at the bottom of the side menu and of the drawer,
-  // below the navigation.
+  // below the navigation. Its row in the side menu is as tall as a large control, so that the
+  // navigation above it knows the room it has.
   account?: ReactNode;
   // The page.
   children: ReactNode;

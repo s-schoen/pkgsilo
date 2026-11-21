@@ -63,6 +63,11 @@
 /* The side menu fills its row, so that the account sits at its bottom: the navigation sticks to the
    top of the window and the account to its bottom while the page scrolls. */
 .sidebar {
+  /* The account's row: a large control, with the padding and the line around it. */
+  --app-layout-account-size: calc(
+    var(--control-height-lg) + 2 * var(--space-2) + var(--border-width)
+  );
+
   display: none;
 
   @media (--md) {
@@ -72,15 +77,22 @@
   }
 }
 
+/* As tall as the window leaves room for, below the header and above the account, even while the
+   header shows: a longer navigation scrolls on its own, and the account never covers it. */
 .sidebarNavigation {
   position: sticky;
   inset-block-start: 0;
+  max-block-size: calc(100dvh - var(--size-header) - var(--app-layout-account-size));
   padding-block: var(--space-2) var(--space-4);
+  /* stylelint-disable-next-line property-layout-mappings -- Vite's target browsers lack overflow-block */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sidebarAccount {
   position: sticky;
   inset-block-end: 0;
+  block-size: var(--app-layout-account-size);
   padding-block: var(--space-2);
   margin-block-start: auto;
   border-block-start: var(--border-width) solid var(--color-border-subtle);
