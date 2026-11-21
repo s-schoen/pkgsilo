@@ -63,7 +63,7 @@ func assertUnauthorized(t *testing.T, resp *apitest.Response) {
 // TestSessions_LogInAndOut takes ada through a login, a request, her current session and a logout:
 //
 //  1. Log in as ada: 201 with the session and the cookie __Host-session, Secure, HttpOnly, SameSite=Strict,
-//     with neither Max-Age nor Expires.
+//     which expires with the session, so that it outlasts a restart of the browser.
 //  2. With the cookie alone, get ada: 200, so the session authenticates as her.
 //  3. Get the current session: the session of the login.
 //  4. Log out: 204, and the cookie expires.
@@ -82,7 +82,12 @@ func TestSessions_LogInAndOut(t *testing.T) {
 	assert.Equal(t, created.CreatedAt.Value.Add(24*time.Hour), created.ExpiresAt.Value)
 	setCookies := resp.Header().Values("Set-Cookie")
 	require.Len(t, setCookies, 1)
-	assert.Regexp(t, `^__Host-session=pss_[A-Z2-7]{52}; Path=/; HttpOnly; Secure; SameSite=Strict$`, setCookies[0])
+	assert.Regexp(t, `^__Host-session=pss_[A-Z2-7]{52}; Path=/; Expires=[^;]+ GMT; HttpOnly; Secure; SameSite=Strict$`,
+		setCookies[0])
+	cookies := resp.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, created.ExpiresAt.Value.Truncate(time.Second), cookies[0].Expires,
+		"the cookie must expire with the session, to the second")
 	asAda := api.Anonymous().WithHeader("Cookie", apptest.SessionCookie(t, resp))
 
 	// 2. Get ada.
