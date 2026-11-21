@@ -29,4 +29,16 @@ describe("useColorScheme", () => {
     expect(document.documentElement.dataset["colorScheme"]).toBe("dark");
     expect(renderHook(() => useColorScheme()).result.current[0]).toBe("dark");
   });
+
+  it("follows a preference that another tab stores", () => {
+    const { result } = renderHook(() => useColorScheme());
+
+    act(() => {
+      localStorage.setItem("pkgsilo.colorScheme", "light");
+      window.dispatchEvent(new StorageEvent("storage", { key: "pkgsilo.colorScheme" }));
+    });
+
+    expect(result.current[0]).toBe("light");
+    expect(document.documentElement.dataset["colorScheme"]).toBe("light");
+  });
 });
