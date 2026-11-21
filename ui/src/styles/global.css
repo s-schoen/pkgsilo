@@ -25,6 +25,15 @@ body {
   text-rendering: optimizelegibility;
 }
 
+/* A page's title: its one <h1>, which names it for a screen reader's list of headings
+   (ui/docs/agents/design.md). */
+h1 {
+  margin-block: 0 var(--space-4);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
 /* Controls take the font of the page instead of the browser's own. */
 button,
 input,

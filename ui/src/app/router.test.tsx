@@ -11,7 +11,7 @@ describe("router", () => {
   it("shows the start page at /", async () => {
     renderRoute("/");
 
-    expect(await screen.findByText(m.welcome())).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: m.welcome() })).toBeInTheDocument();
   });
 
   it("links to the start page from the product name in the header of every page", async () => {
@@ -44,7 +44,9 @@ describe("router", () => {
   it("shows that a page doesn't exist for a path that no route takes", async () => {
     renderRoute("/does-not-exist");
 
-    expect(await screen.findByText(m.notFound())).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: m.notFound() }),
+    ).toBeInTheDocument();
   });
 
   it("goes to the start page from the page that doesn't exist", async () => {

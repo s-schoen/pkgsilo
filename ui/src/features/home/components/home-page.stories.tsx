@@ -8,10 +8,13 @@ const meta = preview.meta({
   component: HomePage,
 });
 
+// The page's title is its heading.
 export const English = meta.story({
   globals: { locale: "en" },
   play: async ({ canvas }) => {
-    await expect(canvas.getByText(m.welcome({}, { locale: "en" }))).toBeVisible();
+    await expect(
+      canvas.getByRole("heading", { level: 1, name: m.welcome({}, { locale: "en" }) }),
+    ).toBeVisible();
   },
 });
 

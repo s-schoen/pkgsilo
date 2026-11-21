@@ -5,7 +5,7 @@ import { m } from "@/paraglide/messages.js";
 export function NotFound() {
   return (
     <>
-      <p>{m.notFound()}</p>
+      <h1>{m.notFound()}</h1>
       <Link href="/">{m.goHome()}</Link>
     </>
   );

@@ -41,6 +41,8 @@ The tokens in `src/styles/tokens.css` hold Plane's values; `ui/docs/agents/compo
 | Control         | `--font-size-sm` | `--font-weight-medium`   | as the variant sets     |
 | Metadata        | `--font-size-xs` | `--font-weight-normal`   | `--color-text-tertiary` |
 
+Every page has one page title, its `<h1>`, which `global.css` styles, so that a screen reader's list of headings names the page.
+
 The font is Inter Variable from `@fontsource-variable/inter`, which `global.css` loads from the UI's own files.
 
 ## Sizes and motion
