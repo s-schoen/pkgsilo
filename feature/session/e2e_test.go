@@ -82,12 +82,8 @@ func TestSessions_LogInAndOut(t *testing.T) {
 	assert.Equal(t, created.CreatedAt.Value.Add(24*time.Hour), created.ExpiresAt.Value)
 	setCookies := resp.Header().Values("Set-Cookie")
 	require.Len(t, setCookies, 1)
-	assert.Regexp(t, `^__Host-session=pss_[A-Z2-7]{52}; Path=/; Expires=[^;]+ GMT; HttpOnly; Secure; SameSite=Strict$`,
-		setCookies[0])
-	cookies := resp.Result().Cookies()
-	require.Len(t, cookies, 1)
-	assert.Equal(t, created.ExpiresAt.Value.Truncate(time.Second), cookies[0].Expires,
-		"the cookie must expire with the session, to the second")
+	assert.Regexp(t, `^__Host-session=pss_[A-Z2-7]{52}; Path=/; Max-Age=86400; HttpOnly; Secure; SameSite=Strict$`,
+		setCookies[0], "the cookie must last as long as the session at most, counted by the browser's clock")
 	asAda := api.Anonymous().WithHeader("Cookie", apptest.SessionCookie(t, resp))
 
 	// 2. Get ada.

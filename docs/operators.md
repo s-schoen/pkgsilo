@@ -47,7 +47,8 @@ Afterwards, create an API key of your own and delete the bootstrap key.
 
 ## Sessions
 
-- A browser logs in with `POST /api/v1/sessions`, taking `{username, password}`, and gets the cookie `__Host-session` (Secure, HttpOnly, SameSite=Strict, without an expiry, so that it ends with the browser).
+- A browser logs in with `POST /api/v1/sessions`, taking `{username, password}`, and gets the cookie `__Host-session` (Secure, HttpOnly, SameSite=Strict), which lasts `SESSION_MAX_AGE` (a `Max-Age`), so that it outlasts a restart of the browser.
+  Closing the browser doesn't log out: on a shared machine, log out in the web UI.
   The cookie authenticates the routes under `/api/v1`, never `/mcp`.
   An API key wins when a request carries both.
 - `GET /api/v1/sessions/current` returns the caller's session, and `DELETE` on the same path logs out.
