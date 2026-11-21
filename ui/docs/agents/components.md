@@ -55,7 +55,8 @@ How to build a component of the UI library, style it with a CSS module and the t
 - Every color, space, size, radius, font and duration is a token (`var(--space-2)`); add one to `src/styles/tokens.css` when none fits.
   Only `em` (an icon's size) and `%` stay literal.
 - A property is logical, such as `inline-size`, `padding-inline` or `margin-block-end`, so that it follows the writing mode.
-- Place a grid's items by its lines (`grid-column: 1 / -1`) or their order, not by named areas: Lightning CSS renames a module's `grid-area` names, but not the names in the `grid-template` shorthand, so the two no longer match.
+  Scrolling is the exception: Vite's target browsers lack `overflow-block` and `overflow-inline` (Chrome 135, Safari 26), so a module writes `overflow-y` or `overflow-x` and disables `property-layout-mappings` for that line.
+- Name a grid's areas in `grid-template-areas`, and set its sizes in `grid-template-rows` and `grid-template-columns`, not all in the `grid-template` shorthand: Lightning CSS renames a module's area names, but leaves a value with `var()` as it is, so the names of a shorthand with a token among its sizes no longer match the renamed `grid-area`.
 - The properties follow a grouped order (position, box, text, look, motion), which `task ui:lint:fix` sorts.
 - TypeScript types a module's classes as any string, so a mistyped class is `undefined` at runtime: check the stories after renaming one.
 
@@ -120,6 +121,8 @@ React Aria formats dates and numbers, and has strings of its own (a ComboBox's b
 
 React Aria's links (`Link`, a `MenuItem`'s or a `Tab`'s `href`) navigate through TanStack Router: `src/app/root-layout.tsx` wraps the routes in React Aria's `RouterProvider`, and types `href` as a route, which the type check checks as it checks `<Link to>`.
 Outside a router, as in a story, a link is a plain `<a>`.
+
+Unlike TanStack's `<Link>`, a React Aria link doesn't preload its route on the user's intent by itself: spread `useRoutePreload(href)` (`src/hooks/use-route-preload.ts`) onto it, as `NavItem` and the layout's brand link do, and the router preloads it once the pointer rests on it, it's focused, or a touch starts on it.
 
 ## Overlays
 

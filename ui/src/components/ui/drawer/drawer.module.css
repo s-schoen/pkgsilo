@@ -64,6 +64,7 @@
   min-block-size: 0;
   padding-block: var(--space-2) var(--space-4);
   padding-inline: var(--space-3);
-  overflow-block: auto;
+  /* stylelint-disable-next-line property-layout-mappings -- Vite's target browsers lack overflow-block */
+  overflow-y: auto;
   overscroll-behavior: contain;
 }
