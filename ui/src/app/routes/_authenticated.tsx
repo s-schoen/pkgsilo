@@ -8,11 +8,15 @@ import { isUnauthorized } from "@/features/session/utils/unauthorized.ts";
 // The pages that need a session, in the app's frame: every route below routes/_authenticated/.
 // Without a session, a page leads to the sign-in page, with its own URL as the redirect, so that a
 // sign-in leads back to it. A session ending later on a page leads there too
-// (redirectOnUnauthorized in router.tsx).
+// (redirectOnUnauthorized in router.tsx). The check doesn't retry an error, which would keep the
+// page blank for seconds before the error shows.
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ context, location }) => {
     try {
-      const session = await context.queryClient.ensureQueryData(getGetCurrentSessionQueryOptions());
+      const session = await context.queryClient.ensureQueryData({
+        ...getGetCurrentSessionQueryOptions(),
+        retry: false,
+      });
       return { identityId: session.data.data.identityId };
     } catch (error) {
       if (isUnauthorized(error)) {

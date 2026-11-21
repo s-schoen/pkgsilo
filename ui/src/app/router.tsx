@@ -25,7 +25,7 @@ export function createAppRouter({ queryClient, dbClient, history }: AppRouterOpt
     defaultPreloadStaleTime: 0,
     scrollRestoration: true,
   });
-  redirectOnUnauthorized(queryClient, router);
+  redirectOnUnauthorized({ queryClient, dbClient }, router);
   return router;
 }
 

@@ -8,11 +8,13 @@ TanStack Router routes by the files in `src/app/routes/`: `__root.tsx` is the la
 
 - A page that needs a session, which is every page but the sign-in page, lives below `routes/_authenticated/`.
   Its `beforeLoad` loads the current session, and without one leads to `/signin?redirect=<the page's URL>`, so that a sign-in leads back; `safeRedirectTarget` (`features/session/utils/redirect-target.ts`) drops a redirect that isn't a path of the app.
-- Once a query or a mutation fails with 401 on a page, as when the session ends, `redirectOnUnauthorized`, which `createAppRouter` starts, leads to the sign-in page the same way and removes every cached response.
+- Once a query or a mutation fails with 401 on a page, as when the session ends, `redirectOnUnauthorized`, which `createAppRouter` starts, leads to the sign-in page the same way and removes what the clients hold of the session (`clearSessionData`: every collection and cached response).
+  The sign-in page replaces the page in the history, as after a sign-out, so that Back doesn't lead to the page and its 401 back again.
   A failed sign-in's 401 is the form's to show.
 - The session's cookie lasts until the session ends at the latest, so a sign-in outlasts a restart of the browser.
   `useSessionExpiry` checks the session once that time comes; a session that ends earlier, since it was idle, is noticed by the next request, such as the check when the tab gets the focus.
 - A query doesn't retry a 4xx response (`createClients`), so that a 401 leads on at once.
+  It retries any other error three times, over seconds, and `fetchQuery` and `ensureQueryData` do too: a check that a page waits for before it shows anything, such as the session's, passes `retry: false`.
 - A route file is thin: it maps its URL to a page that a feature exports, with the route's loader and search validation, and has no UI of its own.
 - The router generates `src/app/routeTree.gen.ts` from the route files.
   The Vite plugin does so for `task ui:dev`, `task ui:build` and `task ui:test`, and `task ui:routes` (`tsr generate`) for the type check of the build and the lint, which depend on that task.
