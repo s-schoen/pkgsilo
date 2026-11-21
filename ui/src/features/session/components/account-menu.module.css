@@ -1,0 +1,67 @@
+/* A ghost row as the navigation's items, with the avatar at its start and the menu's indicator at
+   its end. */
+.trigger {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: center;
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: var(--control-height-lg);
+  padding-inline: var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-secondary);
+  text-align: start;
+  cursor: pointer;
+  outline: none;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  transition:
+    background var(--duration-normal) var(--ease-out),
+    color var(--duration-normal) var(--ease-out);
+
+  &[data-hovered] {
+    color: var(--color-text);
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  &[data-pressed] {
+    background: var(--color-layer-transparent-pressed);
+  }
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+}
+
+/* The identity's initials in a circle, the accent's subtle fill. */
+.avatar {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  inline-size: 1.8em;
+  block-size: 1.8em;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-accent);
+  background: var(--color-accent-subtle);
+  border-radius: var(--radius-full);
+}
+
+.icon {
+  flex-shrink: 0;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+}
+
+.name {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

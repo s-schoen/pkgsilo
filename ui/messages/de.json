@@ -15,5 +15,18 @@
   "colorScheme": "Farbschema",
   "colorSchemeSystem": "System",
   "colorSchemeLight": "Hell",
-  "colorSchemeDark": "Dunkel"
+  "colorSchemeDark": "Dunkel",
+  "signIn": "Anmelden",
+  "signInTitle": "Bei pkgsilo anmelden",
+  "username": "Benutzername",
+  "password": "Passwort",
+  "invalidCredentials": "Benutzername oder Passwort ist falsch.",
+  "signInFailed": "Die Anmeldung ist fehlgeschlagen. Versuche es gleich noch einmal.",
+  "signOut": "Abmelden",
+  "account": "Konto",
+  "signedIn": "Angemeldet",
+  "signOutFailed": "Die Abmeldung ist fehlgeschlagen. Versuche es gleich noch einmal.",
+  "usernameRequired": "Gib deinen Benutzernamen ein.",
+  "passwordRequired": "Gib dein Passwort ein.",
+  "signedInAs": "Angemeldet als {username}"
 }

@@ -17,6 +17,7 @@ const text = {
   groups: "Groups",
   page: "The content of the page.",
   action: "Action",
+  account: "Ada Lovelace",
 };
 
 // The router that React Aria's links navigate through, and its preloadRoute, as root-layout.tsx
@@ -85,6 +86,42 @@ export const WithActions = meta.story({
   },
   play: async ({ canvas }) => {
     await expect(canvas.getByRole("button", { name: text.action })).toBeVisible();
+  },
+});
+
+// The account at the bottom of the side menu, below the navigation, however short the page.
+export const WithAccount = meta.story({
+  args: {
+    account: <button type="button">{text.account}</button>,
+  },
+  play: async ({ canvas, canvasElement }) => {
+    const account = canvas.getByRole("button", { name: text.account });
+    await expect(account).toBeVisible();
+    const navigation = canvas
+      .getByRole("navigation", { name: text.navigation })
+      .getBoundingClientRect();
+    const bounds = account.getBoundingClientRect();
+    await expect(bounds.top).toBeGreaterThan(navigation.bottom);
+    // It sits at the bottom of the window.
+    const view = canvasElement.ownerDocument.documentElement.clientHeight;
+    await expect(bounds.bottom).toBeGreaterThan(view - 64);
+    await expect(bounds.bottom).toBeLessThanOrEqual(view);
+  },
+});
+
+// On a small screen, the drawer shows the account below the navigation.
+export const MobileWithAccount = meta.story({
+  args: {
+    account: <button type="button">{text.account}</button>,
+  },
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+  play: async ({ canvas, userEvent }) => {
+    await expect(canvas.queryByRole("button", { name: text.account })).not.toBeInTheDocument();
+
+    await userEvent.click(canvas.getByRole("button", { name: m.openNavigation() }));
+
+    const drawer = await screen.findByRole("dialog", { name: m.navigation() });
+    await expect(drawer).toContainElement(screen.getByRole("button", { name: text.account }));
   },
 });
 

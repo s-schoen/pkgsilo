@@ -36,6 +36,7 @@ How to build a component of the UI library, style it with a CSS module and the t
 | A panel from the edge, as the small screen's menu | `drawer`                                                      |
 | A question before an action that can't be undone  | `confirm-dialog`                                              |
 | The outcome of an action                          | `toast` (`showToast()`; the root route renders the `Toaster`) |
+| A failure on the page itself, as a form's         | `alert`                                                       |
 | Loading                                           | `spinner`                                                     |
 | A status                                          | `badge`                                                       |
 | A line between content                            | `separator`                                                   |

@@ -7,6 +7,9 @@ type TextFieldProps = {
   description?: string;
   placeholder?: string;
   type?: "text" | "email" | "password" | "search" | "url" | "tel";
+  // What the browser and a password manager may fill in, as HTML's autocomplete: "username" and
+  // "current-password" for a login.
+  autoComplete?: string;
 };
 
 // The TextField of the UI library, bound to a string field of useAppForm: render it with
