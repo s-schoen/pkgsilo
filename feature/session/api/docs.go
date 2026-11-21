@@ -30,7 +30,8 @@ func Docs() openapi.Section {
 			{
 				Method: http.MethodPost, Pattern: "/", ID: "createSession", Summary: "Log in", Public: true,
 				Description: "Logs in with a username and password, and sets the session cookie " + cookieName +
-					" (Secure, HttpOnly, SameSite=Strict, ending with the browser). The response never holds the " +
+					" (Secure, HttpOnly, SameSite=Strict), which expires when the session ends at the latest, so " +
+					"that a login outlasts a restart of the browser. The response never holds the " +
 					"session's token. A session cookie that the request already carries ends. A wrong password, an " +
 					"unknown username and an identity without a password all get the same 401.",
 				Body:      openapi.JSONBody[LoginRequest]("The credentials."),

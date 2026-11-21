@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 	"uuid"
 
 	"pkgsilo/core/authn"
@@ -11,12 +12,14 @@ import (
 // with the path / and without a domain, so that no subdomain or plain-HTTP page can set or overwrite it.
 const cookieName = "__Host-session"
 
-// setSessionCookie sets the session cookie to token. It has neither Max-Age nor Expires, so that it ends when
-// the browser closes, and the session ends on the server long before that if it's idle. Browsers treat
-// http://localhost as secure, so the cookie works there too.
-func setSessionCookie(w http.ResponseWriter, token string) {
+// setSessionCookie sets the session cookie to token, until expiresAt, when its session ends at the latest, so
+// that a login outlasts a restart of the browser. The session ends on the server earlier if it's idle, and the
+// next request with the cookie then answers 401. Expires is absolute rather than a Max-Age, so that it ends
+// with the session to the second. Browsers treat http://localhost as secure, so the cookie works there too.
+func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
 	http.SetCookie(w, &http.Cookie{
-		Name: cookieName, Value: token, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode,
+		Name: cookieName, Value: token, Path: "/", Expires: expiresAt, Secure: true, HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
 	})
 }
 

@@ -89,7 +89,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		// A warning: the login succeeded, and the next one tries again.
 		h.logger.WarnContext(r.Context(), "password rehash failed", "error", created.RehashErr)
 	}
-	setSessionCookie(w, created.Token)
+	setSessionCookie(w, created.Token, created.ExpiresAt)
 	envelope.WriteCreated(w, path.Join(r.URL.Path, currentPattern), toSessionResponse(created.Session))
 }
 

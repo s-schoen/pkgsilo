@@ -33,8 +33,10 @@ const (
 	currentPath  = "/sessions/current"
 	loginBody    = `{"username":"ada","password":"correct horse"}`
 	newToken     = "pss_NEWTOKEN"
-	// sessionCookieHeader is the Set-Cookie header of a login that creates the session of newToken.
-	sessionCookieHeader = "__Host-session=pss_NEWTOKEN; Path=/; HttpOnly; Secure; SameSite=Strict"
+	// sessionCookieHeader is the Set-Cookie header of a login that creates adaSession with newToken: it expires
+	// with the session.
+	sessionCookieHeader = "__Host-session=pss_NEWTOKEN; Path=/; Expires=Wed, 18 Nov 2026 12:00:00 GMT; " +
+		"HttpOnly; Secure; SameSite=Strict"
 	// expiredCookieHeader is the Set-Cookie header of a logout.
 	expiredCookieHeader = "__Host-session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict"
 )
