@@ -76,6 +76,20 @@
   white-space: nowrap;
 }
 
+/* The check of a selected option, at the end of the row; it keeps its place while hidden, so that
+   the labels of the options line up. */
+.check {
+  visibility: hidden;
+  flex-shrink: 0;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+  color: var(--color-text-secondary);
+
+  .item[data-selected] & {
+    visibility: visible;
+  }
+}
+
 /* Across the menu's padding, from edge to edge. */
 .separator {
   margin-block: var(--space-1);

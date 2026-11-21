@@ -1,0 +1,69 @@
+/* The backdrop dims the page and fades; the panel slides in from the start of the screen. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  background: var(--color-backdrop);
+  transition: opacity var(--duration-normal) var(--ease-out);
+
+  &[data-entering],
+  &[data-exiting] {
+    opacity: 0;
+  }
+}
+
+.drawer {
+  display: flex;
+  flex-direction: column;
+  inline-size: var(--size-drawer);
+  max-inline-size: 85%;
+  block-size: 100%;
+  overflow: hidden;
+  background: var(--color-surface-1);
+  border-inline-end: var(--border-width) solid var(--color-border-subtle);
+  box-shadow: var(--shadow-overlay-strong);
+  transition: translate var(--duration-slow) var(--ease-out);
+
+  &[data-entering],
+  &[data-exiting] {
+    translate: -100% 0;
+  }
+
+  &[data-exiting] {
+    transition-timing-function: var(--ease-in);
+  }
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
+  outline: none;
+}
+
+.header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  block-size: var(--size-header);
+  padding-inline: var(--space-4) var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+
+.body {
+  flex: 1;
+  min-block-size: 0;
+  padding-block: var(--space-2) var(--space-4);
+  padding-inline: var(--space-3);
+  overflow-block: auto;
+  overscroll-behavior: contain;
+}
