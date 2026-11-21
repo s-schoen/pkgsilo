@@ -47,7 +47,7 @@
     background: var(--color-layer-transparent-pressed);
   }
 
-  &[aria-current="page"] {
+  &[data-current] {
     color: var(--color-text);
     background: var(--color-layer-transparent-selected);
   }

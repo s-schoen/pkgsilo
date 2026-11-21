@@ -7,6 +7,7 @@ import { expect, fn } from "storybook/test";
 
 import preview from "#.storybook/preview";
 import { NavItem, NavList } from "@/components/ui/nav-list";
+import { RoutePreloadContext } from "@/hooks/use-route-preload.ts";
 
 // The texts of the navigation, where the app passes messages. The stories have no router, so every
 // item links to the one route there is, and is an <a>.
@@ -105,5 +106,64 @@ export const Followed = meta.story({
 
     await expect(navigate).toHaveBeenCalledOnce();
     await expect(args.onNavigate).toHaveBeenCalledOnce();
+  },
+});
+
+// A click with a modifier key leaves the item to the browser, which opens it in a new tab: the
+// router doesn't navigate, and the NavList doesn't call onNavigate, so a drawer stays open.
+export const OpenedInNewTab = meta.story({
+  args: { onNavigate: fn() },
+  beforeEach: () => {
+    navigate.mockClear();
+    // React Aria opens the tab with a click of its own, whose default action the story cancels
+    // before any listener of the link runs, since React Aria stops the click's propagation.
+    function keepInFrame(event: MouseEvent) {
+      event.preventDefault();
+    }
+    window.addEventListener("click", keepInFrame, { capture: true });
+    return () => {
+      window.removeEventListener("click", keepInFrame, { capture: true });
+    };
+  },
+  decorators: [
+    (Story) => (
+      <RouterProvider navigate={navigate}>
+        <Story />
+      </RouterProvider>
+    ),
+  ],
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.keyboard("{Control>}");
+    await userEvent.click(canvas.getByRole("link", { name: text.groups }));
+    await userEvent.keyboard("{/Control}");
+
+    await expect(navigate).not.toHaveBeenCalled();
+    await expect(args.onNavigate).not.toHaveBeenCalled();
+  },
+});
+
+// The router's preloadRoute, as root-layout.tsx provides it.
+const preload = fn();
+
+// An item preloads its route once the keyboard focuses it, as it does once the pointer rests on it
+// (src/hooks/use-route-preload.test.tsx). The story doesn't hover: its hover is synthetic, and
+// Chromium's real pointer, which rests elsewhere, would end it.
+export const Preloaded = meta.story({
+  beforeEach: () => {
+    preload.mockClear();
+  },
+  decorators: [
+    (Story) => (
+      <RoutePreloadContext value={preload}>
+        <Story />
+      </RoutePreloadContext>
+    ),
+  ],
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.tab();
+
+    await expect(canvas.getByRole("link", { name: text.home })).toHaveFocus();
+    await expect(preload).toHaveBeenCalledOnce();
+    await expect(preload).toHaveBeenCalledWith("/");
   },
 });
