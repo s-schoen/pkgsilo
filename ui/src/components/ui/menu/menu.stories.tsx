@@ -121,3 +121,55 @@ export const WithSection = meta.story({
     await expect(screen.getAllByRole("menuitem")).toHaveLength(2);
   },
 });
+
+// The options of a menu with one of them selected.
+const schemes = { system: "System", light: "Light", dark: "Dark" };
+
+const selectionChanged = fn();
+
+// A menu whose items are options, of which the selected one shows a check: Enter on another one
+// selects it instead. The menu leaves its popover when it closes, so a view keeps the selection in
+// selectedKeys.
+export const SingleSelection = meta.story({
+  args: {
+    selectionMode: "single",
+    defaultSelectedKeys: ["system"],
+    onSelectionChange: selectionChanged,
+  },
+  beforeEach: () => {
+    selectionChanged.mockClear();
+  },
+  render: (args) => (
+    <MenuTrigger>
+      <Button variant="ghost" icon={IconDots} aria-label={text.trigger} />
+      <Menu {...args}>
+        <MenuItem id="system">{schemes.system}</MenuItem>
+        <MenuItem id="light">{schemes.light}</MenuItem>
+        <MenuItem id="dark">{schemes.dark}</MenuItem>
+      </Menu>
+    </MenuTrigger>
+  ),
+  play: async ({ userEvent }) => {
+    // Enter opens the menu on its first item.
+    await userEvent.tab();
+    await userEvent.keyboard("{Enter}");
+    const system = await screen.findByRole("menuitemradio", { name: schemes.system });
+    await expect(system).toHaveAttribute("aria-checked", "true");
+    await expect(screen.getByRole("menuitemradio", { name: schemes.dark })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    await waitFor(async () => {
+      await expect(system).toHaveFocus();
+    });
+
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+
+    // React Aria's Selection, a Set of the selected ids.
+    await expect(selectionChanged).toHaveBeenCalledOnce();
+    await expect([...(selectionChanged.mock.calls[0]?.[0] ?? [])]).toEqual(["dark"]);
+    await waitFor(async () => {
+      await expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+  },
+});

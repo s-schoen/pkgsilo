@@ -137,8 +137,11 @@
   /* The inline padding of a field (an input, a select's trigger), a little less than a button's. */
   --control-inset-md: 0.5rem;
 
-  /* The height of the app's header. */
+  /* The height of the app's header, the width of its side menu, and the width of a drawer, which a
+     narrow screen caps. */
   --size-header: 3.25rem;
+  --size-sidebar: 15rem;
+  --size-drawer: 17.5rem;
 
   /* The box of a checkbox, and the track and thumb of a switch. */
   --size-checkbox: 1rem;

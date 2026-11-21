@@ -13,6 +13,7 @@ import { createRoot } from "react-dom/client";
 import { AppProviders } from "@/app/app-providers.tsx";
 import { createClients } from "@/app/clients.ts";
 import { createAppRouter } from "@/app/router.tsx";
+import { applyColorScheme, readColorScheme } from "@/features/appearance/utils/color-scheme.ts";
 import { configureZodLocale } from "@/lib/zod-locale.ts";
 import { getLocale } from "@/paraglide/runtime.js";
 
@@ -25,6 +26,9 @@ if (!root) {
 document.documentElement.lang = getLocale();
 // The validation errors of the forms, in the same language.
 configureZodLocale(getLocale());
+// The color scheme that the user picked in this browser, before the first render. The
+// Content-Security-Policy forbids an inline script in index.html that would apply it earlier.
+applyColorScheme(readColorScheme());
 
 // `task ui:dev:mock` (`vite --mode mock`): the browser answers the API. It starts before the first
 // render, so that no request escapes it. Vite replaces the mode of any other build with a constant,

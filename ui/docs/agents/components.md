@@ -20,24 +20,26 @@ How to build a component of the UI library, style it with a CSS module and the t
 
 ## The components
 
-| Need                                             | Component                                                     |
-| ------------------------------------------------ | ------------------------------------------------------------- |
-| An action                                        | `button` (`isPending` while it runs)                          |
-| Navigation                                       | `link`, `tabs` (a `Tab` with `href`)                          |
-| Text input                                       | `text-field` (`TextField`, `TextArea`)                        |
-| One of a few options                             | `select`                                                      |
-| One of many options, by typing                   | `combo-box`                                                   |
-| A yes or no that a form submits                  | `checkbox`                                                    |
-| A setting that applies at once                   | `switch`                                                      |
-| Actions of a row or a toolbar                    | `menu`                                                        |
-| The name of an icon-only button                  | `tooltip`                                                     |
-| A task that interrupts the page                  | `modal`                                                       |
-| A question before an action that can't be undone | `confirm-dialog`                                              |
-| The outcome of an action                         | `toast` (`showToast()`; the root route renders the `Toaster`) |
-| Loading                                          | `spinner`                                                     |
-| A status                                         | `badge`                                                       |
-| A line between content                           | `separator`                                                   |
-| Building blocks of the above                     | `field`, `popover`, `list-box`                                |
+| Need                                              | Component                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------- |
+| An action                                         | `button` (`isPending` while it runs)                          |
+| Navigation                                        | `link`, `tabs` (a `Tab` with `href`)                          |
+| The links between the app's pages                 | `nav-list` (`NavList`, `NavItem`)                             |
+| Text input                                        | `text-field` (`TextField`, `TextArea`)                        |
+| One of a few options                              | `select`                                                      |
+| One of many options, by typing                    | `combo-box`                                                   |
+| A yes or no that a form submits                   | `checkbox`                                                    |
+| A setting that applies at once                    | `switch`                                                      |
+| Actions of a row or a toolbar                     | `menu`                                                        |
+| The name of an icon-only button                   | `tooltip`                                                     |
+| A task that interrupts the page                   | `modal`                                                       |
+| A panel from the edge, as the small screen's menu | `drawer`                                                      |
+| A question before an action that can't be undone  | `confirm-dialog`                                              |
+| The outcome of an action                          | `toast` (`showToast()`; the root route renders the `Toaster`) |
+| Loading                                           | `spinner`                                                     |
+| A status                                          | `badge`                                                       |
+| A line between content                            | `separator`                                                   |
+| Building blocks of the above                      | `field`, `popover`, `list-box`                                |
 
 `toast/` builds on React Aria's `UNSTABLE_` toasts: only that folder names them, so that a change of their API stays there.
 
@@ -53,6 +55,7 @@ How to build a component of the UI library, style it with a CSS module and the t
 - Every color, space, size, radius, font and duration is a token (`var(--space-2)`); add one to `src/styles/tokens.css` when none fits.
   Only `em` (an icon's size) and `%` stay literal.
 - A property is logical, such as `inline-size`, `padding-inline` or `margin-block-end`, so that it follows the writing mode.
+- Place a grid's items by its lines (`grid-column: 1 / -1`) or their order, not by named areas: Lightning CSS renames a module's `grid-area` names, but not the names in the `grid-template` shorthand, so the two no longer match.
 - The properties follow a grouped order (position, box, text, look, motion), which `task ui:lint:fix` sorts.
 - TypeScript types a module's classes as any string, so a mistyped class is `undefined` at runtime: check the stories after renaming one.
 
