@@ -7,5 +7,13 @@
   "noResults": "No results",
   "close": "Close",
   "dismiss": "Dismiss",
-  "cancel": "Cancel"
+  "cancel": "Cancel",
+  "home": "Home",
+  "mainNavigation": "Main",
+  "openNavigation": "Open the menu",
+  "navigation": "Menu",
+  "colorScheme": "Color scheme",
+  "colorSchemeSystem": "System",
+  "colorSchemeLight": "Light",
+  "colorSchemeDark": "Dark"
 }

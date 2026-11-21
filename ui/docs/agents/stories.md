@@ -15,7 +15,8 @@ It builds the stories with `vite.config.ts`, as the app, without the app's devto
 - A text prop that the caller passes, such as a field's `label`, is an arg with sample text (`args: { label: "Name" }`), where the app passes a message.
   A play function finds that text through `args.label`, and the text that the component renders itself through its message.
 - `preview.tsx` wraps each story in its own clients, as `renderWithClient` does a test, so a component that uses the API's hooks or a collection renders.
-  No story has a router yet: a component with TanStack Router's `<Link>` needs a decorator with a memory history first; React Aria's `Link` renders as a plain `<a>` without one.
+  No story has a TanStack router: a component with TanStack Router's `<Link>` or hooks needs a decorator with a memory history first.
+  React Aria's `Link` renders as a plain `<a>` without one, and a click on it would load that page in the story's frame: a story that follows a link wraps itself in React Aria's `RouterProvider` with a spy as `navigate` (`app-layout.stories.tsx`).
 - A story lays out what it renders, such as a row of buttons, with React's `style` and the tokens (`style={{ display: "flex", gap: "var(--space-2)" }}`): a story imports no CSS module.
 - A story's texts follow `react/jsx-no-literals` too: put them in a constant (`const text = { open: "Create group" }`) and pass that.
 - A generic component (`Select`, `ComboBox`, `ListBox`) is typed by its items: the story renders it through a small wrapper over sample items (`function RoleSelect(props: Omit<ComponentProps<typeof Select<Role>>, "items" | "children">)`) and makes that the meta's `component`.

@@ -7,5 +7,13 @@
   "noResults": "Keine Ergebnisse",
   "close": "Schließen",
   "dismiss": "Ausblenden",
-  "cancel": "Abbrechen"
+  "cancel": "Abbrechen",
+  "home": "Startseite",
+  "mainNavigation": "Hauptnavigation",
+  "openNavigation": "Menü öffnen",
+  "navigation": "Menü",
+  "colorScheme": "Farbschema",
+  "colorSchemeSystem": "System",
+  "colorSchemeLight": "Hell",
+  "colorSchemeDark": "Dunkel"
 }

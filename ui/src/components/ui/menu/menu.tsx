@@ -1,3 +1,4 @@
+import IconCheck from "@tabler/icons-react/icons/IconCheck";
 import { Header } from "react-aria-components/Header";
 import {
   Menu as AriaMenu,
@@ -36,7 +37,8 @@ type MenuProps<T> = Omit<AriaMenuProps<T>, "className" | "style"> & {
 //     <MenuItem id="delete" variant="danger">{m.delete()}</MenuItem>
 //   </Menu>
 // </MenuTrigger>.
-// The arrow keys move through the items, Enter chooses one, and Escape closes the menu.
+// The arrow keys move through the items, Enter chooses one, and Escape closes the menu. With
+// selectionMode="single" and selectedKeys, its items are options of which one is checked.
 export function Menu<T extends object>({ placement = "bottom start", ...props }: MenuProps<T>) {
   return (
     <Popover placement={placement}>
@@ -54,7 +56,8 @@ type MenuItemProps = Omit<AriaMenuItemProps, "children" | "className" | "style">
   variant?: "neutral" | "danger";
 };
 
-// An action of a Menu. With href, it's a link that navigates through the router.
+// An action of a Menu. With href, it's a link that navigates through the router. In a Menu with
+// selectionMode, it's an option that shows a check while it's selected.
 export function MenuItem({ children, icon: Icon, variant = "neutral", ...props }: MenuItemProps) {
   return (
     <AriaMenuItem
@@ -62,8 +65,13 @@ export function MenuItem({ children, icon: Icon, variant = "neutral", ...props }
       textValue={props.textValue ?? children}
       className={`${styles.item} ${styles[variant]}`}
     >
-      {Icon && <Icon aria-hidden className={styles.icon} />}
-      <span className={styles.label}>{children}</span>
+      {({ selectionMode }) => (
+        <>
+          {Icon && <Icon aria-hidden className={styles.icon} />}
+          <span className={styles.label}>{children}</span>
+          {selectionMode !== "none" && <IconCheck aria-hidden className={styles.check} />}
+        </>
+      )}
     </AriaMenuItem>
   );
 }
