@@ -1,16 +1,38 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { http } from "msw";
+import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
 import {
   getCreateSessionMockHandler,
   getDeleteCurrentSessionMockHandler,
 } from "@/api/gen/client/sessions/sessions.msw.ts";
+import { createClients } from "@/app/clients.ts";
 import { m } from "@/paraglide/messages.js";
 import { renderRoute } from "@/test/render.tsx";
 import { server } from "@/test/server.ts";
 import { signedIn, signedOut, testIdentity, unauthorized } from "@/test/session.ts";
+
+// Answers the check of the session with 502, as a proxy does while the API is down, and counts the
+// requests.
+function apiDown() {
+  const requests = { count: 0 };
+  server.use(
+    http.get("/api/v1/sessions/current", () => {
+      requests.count++;
+      return HttpResponse.json(
+        { type: "about:blank", title: "Bad Gateway", status: 502 },
+        { status: 502, headers: { "Content-Type": "application/problem+json" } },
+      );
+    }),
+  );
+  return requests;
+}
+
+// The clients of the app, which retry an error, without the delay between the retries.
+function retryingClients() {
+  return createClients({ defaultOptions: { queries: { retryDelay: 0 } } });
+}
 
 // Signs in on the sign-in page that is shown, as a user would.
 async function signIn(user: ReturnType<typeof userEvent.setup>) {
@@ -31,6 +53,8 @@ describe("session", () => {
     expect(router.state.location.pathname).toBe("/signin");
     expect(router.state.location.search).toEqual({ redirect: "/does-not-exist?tab=1" });
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    // The sign-in page replaced the page, so that Back doesn't lead to the page and back here.
+    expect(router.history.length).toBe(1);
   });
 
   it("leads back to the redirect after a sign-in", async () => {
@@ -87,6 +111,26 @@ describe("session", () => {
     expect(router.state.location.pathname).toBe("/signin");
   });
 
+  it("shows the sign-in form at once when the API can't tell the session", async () => {
+    const requests = apiDown();
+    renderRoute("/signin", retryingClients());
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: m.signInTitle() }),
+    ).toBeInTheDocument();
+    expect(requests.count).toBe(1);
+  });
+
+  it("fails a page at once when the API can't tell the session", async () => {
+    const requests = apiDown();
+    const { router } = renderRoute("/", retryingClients());
+
+    await waitFor(() => {
+      expect(router.state.matches.some((match) => match.status === "error")).toBe(true);
+    });
+    expect(requests.count).toBe(1);
+  });
+
   it("leads a user who is signed in from the sign-in page to the redirect", async () => {
     server.use(...signedIn());
     const { router } = renderRoute("/signin?redirect=%2Fdoes-not-exist");
@@ -95,6 +139,15 @@ describe("session", () => {
       await screen.findByRole("heading", { level: 1, name: m.notFound() }),
     ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/does-not-exist");
+  });
+
+  it("leads a user who is signed in from the sign-in page to the start page for a redirect with a tab", async () => {
+    server.use(...signedIn());
+    // A URL's parser drops the tab, which would make it //evil.example.
+    const { router } = renderRoute("/signin?redirect=%2F%09%2Fevil.example");
+
+    expect(await screen.findByText(m.welcome())).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
   });
 
   it("shows the identity that is signed in", async () => {
@@ -131,6 +184,7 @@ describe("session", () => {
     ).toBeInTheDocument();
     expect(deleted).toBe(true);
     expect(router.state.location.pathname).toBe("/signin");
+    expect(router.history.length).toBe(1);
     await waitFor(() => {
       expect(router.options.context.queryClient.getQueryCache().getAll()).toEqual([]);
     });
@@ -149,5 +203,6 @@ describe("session", () => {
       await screen.findByRole("heading", { level: 1, name: m.signInTitle() }),
     ).toBeInTheDocument();
     expect(router.state.location.search).toEqual({ redirect: "/does-not-exist" });
+    expect(router.history.length).toBe(1);
   });
 });

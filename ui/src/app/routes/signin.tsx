@@ -9,12 +9,13 @@ import { safeRedirectTarget } from "@/features/session/utils/redirect-target.ts"
 const searchSchema = z.object({ redirect: z.string().optional().catch(undefined) });
 
 // The sign-in page. A user who is signed in already goes on to the redirect at once. It always asks
-// the API, not the cache: after a sign-out or an expiry, the cached session is the one that ended.
+// the API, not the cache: after a sign-out or an expiry, the cached session is the one that ended. It
+// asks once: a retry of an error would keep the page blank for seconds before the form shows.
 export const Route = createFileRoute("/signin")({
   validateSearch: searchSchema,
   beforeLoad: async ({ context, search }) => {
     try {
-      await context.queryClient.fetchQuery(getGetCurrentSessionQueryOptions());
+      await context.queryClient.fetchQuery({ ...getGetCurrentSessionQueryOptions(), retry: false });
     } catch {
       // Not signed in (401), or the API can't tell: the form shows, and a sign-in tells the rest.
       return;
