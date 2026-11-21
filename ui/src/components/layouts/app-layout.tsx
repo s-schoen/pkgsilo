@@ -17,6 +17,9 @@ type AppLayoutProps = {
   navigation: ComponentType<{ onNavigate?: () => void }>;
   // The controls at the end of the header, such as the color scheme's menu.
   actions?: ReactNode;
+  // Who is signed in, such as the account's menu: at the bottom of the side menu and of the drawer,
+  // below the navigation.
+  account?: ReactNode;
   // The page.
   children: ReactNode;
 };
@@ -25,9 +28,9 @@ type AppLayoutProps = {
 const sideMenuQuery = "(width >= 48rem)";
 
 // The frame of every page: the header across the top, the navigation in a side menu at its start,
-// and the page on its surface. On a small screen, a button in the header opens the navigation in a
-// drawer instead of the side menu.
-export function AppLayout({ navigation: Navigation, actions, children }: AppLayoutProps) {
+// with the account at its bottom, and the page on its surface. On a small screen, a button in the
+// header opens the navigation and the account in a drawer instead of the side menu.
+export function AppLayout({ navigation: Navigation, actions, account, children }: AppLayoutProps) {
   const [isDrawerOpen, setDrawerOpen] = useState(false);
   const brandPreloadProps = useRoutePreload("/");
 
@@ -53,11 +56,14 @@ export function AppLayout({ navigation: Navigation, actions, children }: AppLayo
           <DialogTrigger isOpen={isDrawerOpen} onOpenChange={setDrawerOpen}>
             <Button variant="ghost" icon={IconMenu2} aria-label={m.openNavigation()} />
             <Drawer title={m.navigation()}>
-              <Navigation
-                onNavigate={() => {
-                  setDrawerOpen(false);
-                }}
-              />
+              <div className={styles.drawerContent}>
+                <Navigation
+                  onNavigate={() => {
+                    setDrawerOpen(false);
+                  }}
+                />
+                {account && <div className={styles.drawerAccount}>{account}</div>}
+              </div>
             </Drawer>
           </DialogTrigger>
         </div>
@@ -67,7 +73,10 @@ export function AppLayout({ navigation: Navigation, actions, children }: AppLayo
         <div className={styles.actions}>{actions}</div>
       </header>
       <aside className={styles.sidebar}>
-        <Navigation />
+        <div className={styles.sidebarNavigation}>
+          <Navigation />
+        </div>
+        {account && <div className={styles.sidebarAccount}>{account}</div>}
       </aside>
       <main className={styles.main}>{children}</main>
     </div>

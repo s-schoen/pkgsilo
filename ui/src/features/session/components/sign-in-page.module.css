@@ -1,0 +1,31 @@
+/* A card on the canvas, in the middle of the window. */
+.page {
+  display: grid;
+  place-items: center;
+  min-block-size: 100dvh;
+  padding: var(--space-4);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  inline-size: 100%;
+  max-inline-size: var(--size-sign-in);
+  padding: var(--space-6);
+  background: var(--color-surface-1);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.brand {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+
+.title {
+  margin: 0;
+}

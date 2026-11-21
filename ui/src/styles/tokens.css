@@ -58,6 +58,8 @@
   --color-border-subtle: light-dark(oklch(94% 0.0017 248), oklch(25.9% 0.0033 231));
   --color-border-strong: light-dark(oklch(87.8% 0.0035 248), oklch(34.2% 0.0049 231));
   --color-border-danger: light-dark(oklch(52.8% 0.185 29), oklch(72% 0.124 25));
+  /* The frame of a danger status's subtle fill, as an alert's: Plane's red-200 in both schemes. */
+  --color-border-danger-subtle: var(--color-danger-subtle-pressed);
   /* The frame of a field (an input, a select's trigger), and of a tooltip. */
   --color-border-field: light-dark(oklch(91.2% 0.0017 248), oklch(30.1% 0.0041 231));
   /* The frame of a focused field. */
@@ -142,6 +144,8 @@
   --size-header: 3.25rem;
   --size-sidebar: 15rem;
   --size-drawer: 17.5rem;
+  /* The card of the sign-in page. */
+  --size-sign-in: 22rem;
 
   /* The box of a checkbox, and the track and thumb of a switch. */
   --size-checkbox: 1rem;

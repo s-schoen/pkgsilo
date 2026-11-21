@@ -1,3 +1,5 @@
+import { http, HttpResponse } from "msw";
+
 import { getApiKeysMock } from "@/api/gen/client/api-keys/api-keys.msw.ts";
 import { getGroupsMock } from "@/api/gen/client/groups/groups.msw.ts";
 import { getHealthMock } from "@/api/gen/client/health/health.msw.ts";
@@ -9,6 +11,9 @@ import {
   getSessionsMock,
 } from "@/api/gen/client/sessions/sessions.msw.ts";
 
+// The identity that the mock API is signed in as, with a fixed name for the account's menu.
+const identityId = "00000000-0000-4000-8000-000000000002";
+
 // The session that the mock API answers with: signed in from the first request, so that the UI
 // needs no login. A year from now, so that it never expires during a dev session.
 function currentSession() {
@@ -16,7 +21,7 @@ function currentSession() {
   return {
     data: {
       id: "00000000-0000-4000-8000-000000000001",
-      identityId: "00000000-0000-4000-8000-000000000002",
+      identityId,
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString(),
     },
@@ -30,6 +35,11 @@ function currentSession() {
 export function createHandlers() {
   return [
     getGetCurrentSessionMockHandler(() => currentSession()),
+    http.get(`*/api/v1/identities/${identityId}`, () =>
+      HttpResponse.json({
+        data: { id: identityId, username: "admin", displayName: "Administrator" },
+      }),
+    ),
     ...getSessionsMock(),
     ...getIdentitiesMock(),
     ...getGroupsMock(),

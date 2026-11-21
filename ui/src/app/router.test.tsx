@@ -2,12 +2,18 @@ import { DbClient } from "@tanstack/react-db";
 import { QueryClient } from "@tanstack/react-query";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { m } from "@/paraglide/messages.js";
 import { renderRoute } from "@/test/render.tsx";
+import { server } from "@/test/server.ts";
+import { signedIn } from "@/test/session.ts";
 
 describe("router", () => {
+  beforeEach(() => {
+    server.use(...signedIn());
+  });
+
   it("shows the start page at /", async () => {
     renderRoute("/");
 

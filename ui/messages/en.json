@@ -15,5 +15,18 @@
   "colorScheme": "Color scheme",
   "colorSchemeSystem": "System",
   "colorSchemeLight": "Light",
-  "colorSchemeDark": "Dark"
+  "colorSchemeDark": "Dark",
+  "signIn": "Sign in",
+  "signInTitle": "Sign in to pkgsilo",
+  "username": "Username",
+  "password": "Password",
+  "invalidCredentials": "The username or password is wrong.",
+  "signInFailed": "Signing in failed. Try again in a moment.",
+  "signOut": "Sign out",
+  "account": "Account",
+  "signedIn": "Signed in",
+  "signOutFailed": "Signing out failed. Try again in a moment.",
+  "usernameRequired": "Enter your username.",
+  "passwordRequired": "Enter your password.",
+  "signedInAs": "Signed in as {username}"
 }

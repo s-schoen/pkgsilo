@@ -1,0 +1,27 @@
+/* Plane's inline danger banner: the danger status's subtle fill and frame, with its text and an
+   icon at the start of the first line. */
+.alert {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-danger);
+  background: var(--color-danger-subtle);
+  border: var(--border-width) solid var(--color-border-danger-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.icon {
+  flex-shrink: 0;
+  inline-size: 1.25em;
+  block-size: 1lh;
+}
+
+.text {
+  min-inline-size: 0;
+  margin: 0;
+  overflow-wrap: break-word;
+}
