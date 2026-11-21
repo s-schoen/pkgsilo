@@ -11,6 +11,18 @@ import { server } from "@/test/server.ts";
 // scrollTo() only logs that it isn't implemented.
 window.scrollTo = () => {};
 
+// jsdom has no matchMedia either: no media query matches, and none ever changes.
+window.matchMedia = (media) => ({
+  matches: false,
+  media,
+  onchange: null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
+  dispatchEvent: () => false,
+});
+
 // zod's messages in English, as main.tsx sets them for jsdom's en-US. A test of another locale sets
 // it back after itself, since the setting is global.
 configureZodLocale("en");

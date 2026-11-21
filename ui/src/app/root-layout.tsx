@@ -6,6 +6,7 @@ import { AppNavigation } from "@/app/app-navigation.tsx";
 import { AppLayout } from "@/components/layouts/app-layout.tsx";
 import { Toaster } from "@/components/ui/toast";
 import { ColorSchemeMenu } from "@/features/appearance/components/color-scheme-menu.tsx";
+import { RoutePreloadContext } from "@/hooks/use-route-preload.ts";
 
 import type { NavigateOptions, ToOptions } from "@tanstack/react-router";
 
@@ -20,7 +21,8 @@ declare module "react-aria-components" {
 
 // The component of the root route: the frame of every page, with the app's navigation and the color
 // scheme's menu, in which React Aria's links navigate through the router, without reloading the
-// page, and the toasts of showToast().
+// page, and the toasts of showToast(). A link that useRoutePreload() wires preloads its route
+// through the router as well.
 export function RootLayout() {
   const router = useRouter();
 
@@ -31,10 +33,16 @@ export function RootLayout() {
       }}
       useHref={(to) => router.buildLocation({ to }).href}
     >
-      <AppLayout navigation={(props) => <AppNavigation {...props} />} actions={<ColorSchemeMenu />}>
-        <Outlet />
-      </AppLayout>
-      <Toaster />
+      <RoutePreloadContext
+        value={(href) => {
+          void router.preloadRoute({ to: href });
+        }}
+      >
+        <AppLayout navigation={AppNavigation} actions={<ColorSchemeMenu />}>
+          <Outlet />
+        </AppLayout>
+        <Toaster />
+      </RoutePreloadContext>
     </RouterProvider>
   );
 }
