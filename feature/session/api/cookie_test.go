@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
@@ -14,6 +15,32 @@ import (
 	"pkgsilo/test/apitest"
 	"pkgsilo/test/loggertest"
 )
+
+// TestSetSessionCookie checks that the session cookie lasts its session's lifetime in whole seconds, and at least
+// one, since Max-Age=0 would delete it.
+func TestSetSessionCookie(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		lifetime time.Duration
+		want     string
+	}{
+		{name: "a day", lifetime: 24 * time.Hour, want: "Max-Age=86400"},
+		{name: "a fraction of a second", lifetime: 90*time.Second + 500*time.Millisecond, want: "Max-Age=90"},
+		{name: "under a second", lifetime: 500 * time.Millisecond, want: "Max-Age=1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rec := httptest.NewRecorder()
+
+			setSessionCookie(rec, "pss_TOKEN", tt.lifetime)
+
+			assert.Equal(t, []string{"__Host-session=pss_TOKEN; Path=/; " + tt.want + "; HttpOnly; Secure; SameSite=Strict"},
+				rec.Header().Values("Set-Cookie"))
+		})
+	}
+}
 
 // TestExpireCookieOf checks that the session cookie is deleted only for a request that's authenticated with a
 // session of the identity whose sessions ended.
