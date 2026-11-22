@@ -3,6 +3,7 @@ import { useTanStackTableDevtools } from "@tanstack/react-table-devtools";
 import { useMemo, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { withVariantFilterFns } from "@/components/ui/data-table/filter-fns.ts";
 import {
   EMPTY_FILTER_STATE,
   filterVariants,
@@ -68,7 +69,8 @@ export type DataTableProps<TData extends RowData> = {
   // The name of the list, as a screen reader announces it: a message.
   label: string;
   // The columns, which place their cells in the row (meta.placement) and filter, sort or hide.
-  // Keep them stable, as a constant of the module.
+  // Keep them stable, as a constant of the module. A column with meta.filterVariant and no
+  // filterFn filters by its variant's function (filter-fns.ts).
   columns: Array<DataTableColumnDef<TData>>;
   // Every row, as useLiveQuery returns them: the table filters and sorts them itself.
   rows: Array<TData>;
@@ -95,7 +97,8 @@ export type DataTableProps<TData extends RowData> = {
   // The filters the page opens with, when they define what it lists: rows that none of them match
   // show emptyState, and Clear filters goes back to them.
   defaultFilterState?: DataTableFilterState;
-  // The columns that the Display popover's Group by offers, besides None.
+  // The columns that the Display popover's Group by offers, besides None. An option whose id
+  // names no column of the table isn't offered.
   groupingOptions?: Array<DataTableGroupingOption>;
   // The id of the grouping option the rows are grouped by, or none. With onGroupingChange, it
   // controls the grouping; without, it's the grouping the table starts with. An id that isn't
@@ -105,7 +108,8 @@ export type DataTableProps<TData extends RowData> = {
   // What the table shows without rows; a line with an icon by default.
   emptyState?: ReactNode;
   // Actions on the selected rows, such as revoking API keys. Rows are selectable only when there's
-  // something to do with them: bulkActions or onDelete.
+  // something to do with them: bulkActions or onDelete. While one runs, its button is pending, and
+  // no other action or delete starts.
   bulkActions?: Array<DataTableBulkAction<TData>>;
   // Deletes the selected rows once the user confirms it, the last of the selection's actions. It
   // reports its outcome itself, such as with a toast; while its promise runs, the dialog waits,
@@ -159,15 +163,21 @@ export function DataTable<TData extends RowData>({
   // The groups the user collapsed, by their row's id, which holds the column and the value: a
   // group that comes later starts expanded.
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  // The label of the bulk action that runs, from the selection bar or a row's menu.
+  const [runningAction, setRunningAction] = useState<string>();
 
   const sorting = controlledSorting ?? localSorting;
-  const groupingOption = groupingOptions.find(
-    (option) => option.id === (onGroupingChange ? groupingProp : localGrouping),
+  const groupingId = onGroupingChange ? groupingProp : localGrouping;
+  const grouping = useMemo(
+    () =>
+      groupingId !== undefined && groupingOptions.some((option) => option.id === groupingId)
+        ? [groupingId]
+        : [],
+    [groupingOptions, groupingId],
   );
-  const grouping = useMemo(() => (groupingOption ? [groupingOption.id] : []), [groupingOption]);
   const filterState = controlledFilterState ?? localFilterState;
-  const variants = useMemo(() => filterVariants(columns), [columns]);
   const columnFilters = useMemo(() => toColumnFilters(filterState), [filterState]);
+  const resolvedColumns = useMemo(() => withVariantFilterFns(columns), [columns]);
 
   const changeFilterState = (next: DataTableFilterState) => {
     if (controlledFilterState === undefined) {
@@ -180,7 +190,7 @@ export function DataTable<TData extends RowData>({
     key: label,
     features: dataTableFeatures,
     data: rows,
-    columns,
+    columns: resolvedColumns,
     getRowId: (row) => getRowId(row),
     // The grouped column stays in its place in the rows, instead of moving to the front.
     groupedColumnMode: false,
@@ -206,14 +216,27 @@ export function DataTable<TData extends RowData>({
       const next: unknown = functionalUpdate(updater, filterState.globalFilter);
       changeFilterState({ ...filterState, globalFilter: typeof next === "string" ? next : "" });
     },
+    // The filters by the ids that TanStack gave the columns, which the changes name.
     onColumnFiltersChange: (updater) => {
       changeFilterState(
-        fromColumnFilters(filterState, functionalUpdate(updater, columnFilters), variants),
+        fromColumnFilters(
+          filterState,
+          functionalUpdate(updater, columnFilters),
+          filterVariants(table.getAllLeafColumns()),
+        ),
       );
     },
     globalFilterFn: "includesString",
   });
   useTanStackTableDevtools(table);
+
+  // The grouping options whose column the table has, by the id TanStack gave it: TanStack ignores
+  // a grouping by any other id, and leaves the rows as they are.
+  const columnsById = table.getAllFlatColumnsById();
+  const availableGroupingOptions = groupingOptions.filter((option) =>
+    Object.hasOwn(columnsById, option.id),
+  );
+  const groupingOption = availableGroupingOptions.find((option) => option.id === groupingId);
 
   // Without grouping, the rows in their order. With it, the groups, whose rows the grouped row
   // model holds, sorted in their order too: the table shows them in its own Tree, so it doesn't
@@ -256,6 +279,22 @@ export function DataTable<TData extends RowData>({
   const clearSelection = () => {
     table.resetRowSelection();
     rowsRef.current?.focus();
+  };
+
+  // Runs a bulk action, unless one runs already. A rejection leaves the rows selected: onAction has
+  // reported it, as ConfirmDialog's onConfirm does.
+  const runAction = async (action: DataTableBulkAction<TData>, targets: Array<TData>) => {
+    if (runningAction !== undefined) {
+      return;
+    }
+    setRunningAction(action.label());
+    try {
+      await action.onAction(targets);
+    } catch {
+      // onAction has reported the error, such as with a toast; the user can try again.
+    } finally {
+      setRunningAction(undefined);
+    }
   };
 
   const askDelete = (targets: Array<TData>) => {
@@ -384,7 +423,7 @@ export function DataTable<TData extends RowData>({
     <div className={styles.dataTable}>
       <Toolbar
         table={table}
-        groupingOptions={groupingOptions}
+        groupingOptions={availableGroupingOptions}
         grouping={groupingOption?.id}
         onGroupingChange={changeGrouping}
         selectionBar={
@@ -392,6 +431,8 @@ export function DataTable<TData extends RowData>({
             <SelectionBar<TData>
               rows={selectedRows.map((row) => row.original)}
               bulkActions={bulkActions}
+              runningAction={runningAction}
+              onAction={runAction}
               onDelete={onDelete && askDelete}
               onClear={clearSelection}
             />
@@ -412,6 +453,7 @@ export function DataTable<TData extends RowData>({
           label={menu.label}
           rows={menu.rows}
           items={menu.items}
+          onAction={runAction}
           onDelete={askDelete}
         />
       )}

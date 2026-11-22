@@ -15,6 +15,11 @@ type SelectionBarProps<TData extends RowData> = {
   // The selected rows, of which there's one at least.
   rows: Array<TData>;
   bulkActions: Array<DataTableBulkAction<TData>>;
+  // The label of the bulk action that runs, whose button is pending; while one runs, the other
+  // actions and delete are disabled.
+  runningAction: string | undefined;
+  // Runs an action on the rows it applies to.
+  onAction: (action: DataTableBulkAction<TData>, rows: Array<TData>) => Promise<void>;
   // Asks before it deletes the rows; missing when the page deletes nothing.
   onDelete: ((rows: Array<TData>) => void) | undefined;
   onClear: () => void;
@@ -25,9 +30,13 @@ type SelectionBarProps<TData extends RowData> = {
 export function SelectionBar<TData extends RowData>({
   rows,
   bulkActions,
+  runningAction,
+  onAction,
   onDelete,
   onClear,
 }: SelectionBarProps<TData>) {
+  const isRunning = runningAction !== undefined;
+
   return (
     <div className={styles.selectionBar}>
       <span className={styles.selectionCount}>{m.dataTableSelected({ count: rows.length })}</span>
@@ -40,22 +49,28 @@ export function SelectionBar<TData extends RowData>({
         />
         <Tooltip>{m.dataTableClearSelection()}</Tooltip>
       </TooltipTrigger>
-      {applicableActions(bulkActions, rows).map(({ action, rows: applicable }) => (
-        <Button
-          key={action.label()}
-          variant="tertiary"
-          icon={action.icon}
-          onPress={() => {
-            void action.onAction(applicable);
-          }}
-        >
-          {action.label()}
-        </Button>
-      ))}
+      {applicableActions(bulkActions, rows).map(({ action, rows: applicable }) => {
+        const label = action.label();
+        return (
+          <Button
+            key={label}
+            variant="tertiary"
+            icon={action.icon}
+            isPending={runningAction === label}
+            isDisabled={isRunning && runningAction !== label}
+            onPress={() => {
+              void onAction(action, applicable);
+            }}
+          >
+            {label}
+          </Button>
+        );
+      })}
       {onDelete && (
         <Button
           variant="danger-outline"
           icon={IconTrash}
+          isDisabled={isRunning}
           onPress={() => {
             onDelete(rows);
           }}

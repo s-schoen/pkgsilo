@@ -1,5 +1,5 @@
 import type {
-  DataTableColumnDef,
+  DataTableColumn,
   DataTableFilterState,
   FilterVariant,
 } from "@/components/ui/data-table/types.ts";
@@ -13,27 +13,17 @@ export const EMPTY_FILTER_STATE: DataTableFilterState = {
   numberFilters: {},
 };
 
-// The id that TanStack gives a column: its id, else its accessor key.
-function columnId<TData extends RowData>(column: DataTableColumnDef<TData>): string | undefined {
-  if (column.id) {
-    return column.id;
-  }
-  if ("accessorKey" in column && typeof column.accessorKey === "string" && column.accessorKey) {
-    return column.accessorKey;
-  }
-  return undefined;
-}
-
-// The filter variant of each column that has one, by the column's id.
+// The filter variant of each column that has one, by the id that TanStack gave the column: a nested
+// accessor key such as "owner.name" becomes "owner_name", and a column without an id or accessor
+// key takes its header's text.
 export function filterVariants<TData extends RowData>(
-  columns: Array<DataTableColumnDef<TData>>,
+  columns: Array<DataTableColumn<TData>>,
 ): Map<string, FilterVariant> {
   const variants = new Map<string, FilterVariant>();
   for (const column of columns) {
-    const id = columnId(column);
-    const variant = column.meta?.filterVariant;
-    if (id && variant) {
-      variants.set(id, variant);
+    const variant = column.columnDef.meta?.filterVariant;
+    if (variant) {
+      variants.set(column.id, variant);
     }
   }
   return variants;

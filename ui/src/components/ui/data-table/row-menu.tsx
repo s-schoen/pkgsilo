@@ -6,6 +6,7 @@ import { ContextMenu, MenuItem, MenuSection, MenuSeparator } from "@/components/
 import { m } from "@/paraglide/messages.js";
 
 import type { RowMenuItems } from "@/components/ui/data-table/row-menu-items.ts";
+import type { DataTableBulkAction } from "@/components/ui/data-table/types.ts";
 import type { ContextMenuPoint } from "@/components/ui/menu";
 import type { RowData } from "@tanstack/react-table";
 import type { ReactNode, RefObject } from "react";
@@ -20,6 +21,8 @@ type RowMenuProps<TData extends RowData> = {
   label: string;
   rows: Array<TData>;
   items: RowMenuItems<TData>;
+  // Runs an action on the rows it applies to, unless one runs already.
+  onAction: (action: DataTableBulkAction<TData>, rows: Array<TData>) => Promise<void>;
   // Asks before it deletes the rows.
   onDelete: (rows: Array<TData>) => void;
 };
@@ -35,6 +38,7 @@ export function RowMenu<TData extends RowData>({
   label,
   rows,
   items,
+  onAction,
   onDelete,
 }: RowMenuProps<TData>) {
   const groups: Array<ReactNode> = [];
@@ -75,7 +79,7 @@ export function RowMenu<TData extends RowData>({
           id={`action-${action.label()}`}
           icon={action.icon}
           onAction={() => {
-            void action.onAction(applicable);
+            void onAction(action, applicable);
           }}
         >
           {action.label()}
