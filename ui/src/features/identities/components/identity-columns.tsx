@@ -36,6 +36,21 @@ function referenceName(id: string, byId: IdentitiesById): string {
   return identity === undefined ? m.identityUnknown() : identityName(identity);
 }
 
+// The creator that the list groups an identity by: pkgsilo's or a readable identity's id, or
+// undefined for a creator that the actor can't know, whether it can't read the creator or the
+// identity's createdBy. Those form a single group, "Unknown identity".
+function creatorGroup(identity: IdentityResponse, byId: IdentitiesById): string | undefined {
+  const { createdBy } = identity;
+  return createdBy !== undefined && (createdBy === PKGSILO_ID || byId.has(createdBy))
+    ? createdBy
+    : undefined;
+}
+
+// The name of a creator's group: undefined is the unknown one's.
+function creatorGroupName(value: unknown, byId: IdentitiesById): string {
+  return typeof value === "string" ? referenceName(value, byId) : m.identityUnknown();
+}
+
 // Orders names in the locale's collation, ignoring case and accents.
 function compareNames(left: string, right: string): number {
   return left.localeCompare(right, getLocale(), { sensitivity: "base" });
@@ -91,6 +106,7 @@ export function identityColumns({
       // The value is an id, which neither the search nor the order makes sense of.
       enableGlobalFilter: false,
       enableSorting: false,
+      getGroupingValue: (identity) => creatorGroup(identity, byId),
       cell: ({ row }) => {
         const id = row.original.createdBy;
         return (
@@ -175,11 +191,10 @@ export function identityGroupingOptions(byId: IdentitiesById): Array<DataTableGr
     {
       id: "createdBy",
       label: m.identityCreatedBy,
-      formatValue: (value) => (typeof value === "string" ? referenceName(value, byId) : ""),
-      renderIcon: (value) =>
-        typeof value === "string" && (
-          <IdentityAvatar name={referenceName(value, byId)} isPkgsilo={value === PKGSILO_ID} />
-        ),
+      formatValue: (value) => creatorGroupName(value, byId),
+      renderIcon: (value) => (
+        <IdentityAvatar name={creatorGroupName(value, byId)} isPkgsilo={value === PKGSILO_ID} />
+      ),
     },
   ];
 }
