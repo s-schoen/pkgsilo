@@ -15,7 +15,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: docker-${{ github.event_name }}-${{ github.ref }}
+  # One group per ref, whichever event started the run, so that a push and a manual run on master
+  # queue instead of racing for edge.
+  group: docker-${{ github.ref }}
   # A master run isn't cancelled, so every commit that starts publishing gets its tags. A pull request
   # cancels its superseded builds.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -56,9 +58,7 @@ jobs:
           target: distroless
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
-          tags: |
-            ghcr.io/${{ github.repository }}:edge
-            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.short }}
+          tags: ghcr.io/${{ github.repository }}:${{ steps.version.outputs.short }}
           build-args: |
             VERSION=${{ steps.version.outputs.short }}
             REVISION=${{ github.sha }}
@@ -71,11 +71,25 @@ jobs:
           target: trixie
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
-          tags: |
-            ghcr.io/${{ github.repository }}:edge-trixie
-            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.short }}-trixie
+          tags: ghcr.io/${{ github.repository }}:${{ steps.version.outputs.short }}-trixie
           build-args: |
             VERSION=${{ steps.version.outputs.short }}
             REVISION=${{ github.sha }}
           cache-from: type=gha,scope=trixie
           cache-to: type=gha,mode=max,scope=trixie
+      # edge and edge-trixie move together, once both images are pushed, and only while the commit is
+      # still master's tip: a newer commit's run waits in the concurrency group and moves them after
+      # this one, and a re-run of an older commit republishes only its commit tags.
+      - if: ${{ !env.ACT && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ghcr.io/${{ github.repository }}
+          SHORT: ${{ steps.version.outputs.short }}
+        run: |
+          tip=$(gh api "repos/${GITHUB_REPOSITORY}/commits/master" --jq .sha)
+          if [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::notice::master is at $tip now, so edge stays where it is."
+            exit 0
+          fi
+          docker buildx imagetools create --tag "$IMAGE:edge" "$IMAGE:$SHORT"
+          docker buildx imagetools create --tag "$IMAGE:edge-trixie" "$IMAGE:$SHORT-trixie"
