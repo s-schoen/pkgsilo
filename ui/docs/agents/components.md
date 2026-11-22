@@ -11,7 +11,7 @@ How to build a component of the UI library, style it with a CSS module and the t
   Storybook titles the stories `components/ui/<name>`: it drops a file name that repeats its folder's.
 - A component wraps one of React Aria Components, imported from its subpath (`react-aria-components/Button`), which brings the behavior, the keyboard and the ARIA.
   The wrapper adds the look and the props of the project, such as `variant`.
-  The data table (`data-table/`) is the one exception: it composes several (a `GridList` for the rows, a `Tree` for the rows in groups, a `Dialog` in each popover of its toolbar, and the library's components), since TanStack Table holds its state and React Aria only renders it.
+  The data table (`data-table/`) is the one exception: it composes several (a `GridList` for the rows, a `Tree` for the rows in groups, a `Dialog` in each popover of its toolbar, and the library's components, as the `ContextMenu` of its rows), since TanStack Table holds its state and React Aria only renders it.
   Its parts live in its folder, and `index.ts` exports only `DataTable` and its types.
 - A component styles itself and takes no `className` or `style`: its parent lays it out in its own CSS module, with `gap` or a grid.
 - `button/` is the reference component.
@@ -38,6 +38,7 @@ How to build a component of the UI library, style it with a CSS module and the t
 | A page's list of items, to search, filter, order  | `data-table` (`DataTable`, `DataTableColumnDef`)              |
 | Chips that the user removes, as active filters    | `tag-group` (`TagGroup`, `Tag`)                               |
 | Actions of a row or a toolbar                     | `menu`                                                        |
+| Actions at the pointer, on a right-click          | `menu` (`ContextMenu`)                                        |
 | The name of an icon-only button                   | `tooltip`                                                     |
 | A task that interrupts the page                   | `modal`                                                       |
 | A panel from the edge, as the small screen's menu | `drawer`                                                      |

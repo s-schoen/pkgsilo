@@ -71,5 +71,8 @@
       }
     }
   ],
-  "dataTableDeleteDescription": "This can't be undone."
+  "dataTableDeleteDescription": "This can't be undone.",
+  "dataTableOpen": "Open",
+  "dataTableOpenInNewTab": "Open in new tab",
+  "dataTableRowActions": "Actions for {name}"
 }

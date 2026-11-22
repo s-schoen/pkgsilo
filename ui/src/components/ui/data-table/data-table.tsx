@@ -12,6 +12,9 @@ import {
   toColumnFilters,
 } from "@/components/ui/data-table/filter-state.ts";
 import { orderGroups } from "@/components/ui/data-table/grouping.ts";
+import { rowMenuItems } from "@/components/ui/data-table/row-menu-items.ts";
+import { RowMenu } from "@/components/ui/data-table/row-menu.tsx";
+import { rowText } from "@/components/ui/data-table/row-text.ts";
 import { GroupedRows, Rows } from "@/components/ui/data-table/rows.tsx";
 import { SelectionBar } from "@/components/ui/data-table/selection-bar.tsx";
 import { LoadingRows, NoMatches, NothingYet } from "@/components/ui/data-table/states.tsx";
@@ -20,6 +23,7 @@ import { dataTableFeatures } from "@/components/ui/data-table/types.ts";
 import { m } from "@/paraglide/messages.js";
 import { getLocale } from "@/paraglide/runtime.js";
 
+import type { RowMenuItems } from "@/components/ui/data-table/row-menu-items.ts";
 import type { Href } from "@/components/ui/data-table/rows.tsx";
 import type {
   DataTableBulkAction,
@@ -28,13 +32,14 @@ import type {
   DataTableFilterState,
   DataTableGroupingOption,
 } from "@/components/ui/data-table/types.ts";
+import type { ContextMenuPoint } from "@/components/ui/menu";
 import type {
   ColumnVisibilityState,
   RowData,
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import type { Selection } from "react-aria-components/GridList";
 
 import styles from "@/components/ui/data-table/data-table.module.css";
@@ -44,6 +49,20 @@ const allVisible: ColumnVisibilityState = {};
 const noBulkActions: Array<never> = [];
 const noSelection: RowSelectionState = {};
 const noGroupingOptions: Array<never> = [];
+
+// A row's context menu: the rows it acts on, its name and its items, which it keeps while it
+// closes.
+type OpenMenu<TData extends RowData> = {
+  rows: Array<TData>;
+  label: string;
+  items: RowMenuItems<TData>;
+  point: ContextMenuPoint | undefined;
+};
+
+// Shift+F10 or the context-menu key, which open the focused row's menu.
+function isContextMenuKey(event: KeyboardEvent) {
+  return (event.shiftKey && event.key === "F10") || event.key === "ContextMenu";
+}
 
 export type DataTableProps<TData extends RowData> = {
   // The name of the list, as a screen reader announces it: a message.
@@ -129,6 +148,10 @@ export function DataTable<TData extends RowData>({
   const [deleting, setDeleting] = useState<Array<TData>>([]);
   const [isDeleteOpen, setDeleteOpen] = useState(false);
   const rowsRef = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<OpenMenu<TData>>();
+  const [isMenuOpen, setMenuOpen] = useState(false);
+  // The row that the menu opened on, which has the focus and gets it back.
+  const menuRowRef = useRef<HTMLElement>(null);
   const isSelectable = Boolean(onDelete) || bulkActions.length > 0;
   const [localFilterState, setLocalFilterState] = useState(defaultFilterState);
   const [columnVisibility, setColumnVisibility] = useState(initialColumnVisibility);
@@ -235,6 +258,74 @@ export function DataTable<TData extends RowData>({
     rowsRef.current?.focus();
   };
 
+  const askDelete = (targets: Array<TData>) => {
+    setDeleting(targets);
+    setDeleteOpen(true);
+  };
+
+  // Opens the context menu of the row that holds target, unless it isn't a row (a group) or there's
+  // nothing to do with it. On a selected row, the menu acts on the selection; on another one, it
+  // selects only that row (while rows are selectable) and acts on it alone.
+  const openRowMenu = (target: EventTarget, point?: ContextMenuPoint) => {
+    const element = target instanceof Element ? target.closest<HTMLElement>("[data-row-id]") : null;
+    const row = filteredRows.find((candidate) => candidate.id === element?.dataset.rowId);
+    if (!element || !row) {
+      return false;
+    }
+    const isSelected = isSelectable && Object.hasOwn(rowSelection, row.id);
+    const targets = isSelected ? selectedRows : [row];
+    const items = rowMenuItems(
+      targets.map((selected) => selected.original),
+      { getRowHref, onRowAction, bulkActions, canDelete: Boolean(onDelete) },
+    );
+    if (!items) {
+      return false;
+    }
+    if (isSelectable && !isSelected) {
+      changeSelection(new Set([row.id]));
+    }
+    // The menu gives the focus back to the element that had it: the row, or its link.
+    if (!element.contains(document.activeElement)) {
+      element.focus();
+    }
+    menuRowRef.current = element;
+    setMenu({
+      rows: targets.map((selected) => selected.original),
+      label:
+        targets.length > 1
+          ? m.dataTableSelected({ count: targets.length })
+          : m.dataTableRowActions({ name: rowText(row) }),
+      items,
+      point,
+    });
+    setMenuOpen(true);
+    return true;
+  };
+
+  // A right-click opens the menu at the pointer. A contextmenu event of the keyboard, which some
+  // browsers send with a point outside the row, opens it at the row.
+  const onContextMenu = (event: MouseEvent) => {
+    const row = event.target instanceof Element ? event.target.closest("[data-row-id]") : null;
+    const rect = row?.getBoundingClientRect();
+    const isInRow =
+      rect !== undefined &&
+      event.clientX >= rect.left &&
+      event.clientX <= rect.right &&
+      event.clientY >= rect.top &&
+      event.clientY <= rect.bottom;
+    if (openRowMenu(event.target, isInRow ? { x: event.clientX, y: event.clientY } : undefined)) {
+      event.preventDefault();
+    }
+  };
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (isContextMenuKey(event) && openRowMenu(event.target)) {
+      // Keeps the browser from sending its own contextmenu event, and its menu.
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+
   function body() {
     if (isLoading) {
       return <LoadingRows label={label} />;
@@ -301,19 +392,29 @@ export function DataTable<TData extends RowData>({
             <SelectionBar<TData>
               rows={selectedRows.map((row) => row.original)}
               bulkActions={bulkActions}
-              onDelete={
-                onDelete &&
-                ((targets) => {
-                  setDeleting(targets);
-                  setDeleteOpen(true);
-                })
-              }
+              onDelete={onDelete && askDelete}
               onClear={clearSelection}
             />
           )
         }
       />
-      {body()}
+      {/* Catches the context menu's pointer and keys of the rows inside, which name themselves
+          with data-row-id; the rows' grid stays the element that takes the focus. */}
+      <div className={styles.body} onContextMenu={onContextMenu} onKeyDownCapture={onKeyDown}>
+        {body()}
+      </div>
+      {menu && (
+        <RowMenu
+          isOpen={isMenuOpen}
+          onOpenChange={setMenuOpen}
+          triggerRef={menuRowRef}
+          point={menu.point}
+          label={menu.label}
+          rows={menu.rows}
+          items={menu.items}
+          onDelete={askDelete}
+        />
+      )}
       {onDelete && (
         <ConfirmDialog
           isOpen={isDeleteOpen}
