@@ -7,6 +7,7 @@ import { formDevtoolsPlugin } from "@tanstack/react-form-devtools";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import { RouterProvider } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import { tableDevtoolsPlugin } from "@tanstack/react-table-devtools";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -49,6 +50,8 @@ createRoot(root).render(
           { name: "TanStack Query", render: <ReactQueryDevtoolsPanel /> },
           { name: "TanStack Router", render: <TanStackRouterDevtoolsPanel router={router} /> },
           formDevtoolsPlugin(),
+          // Shows the tables that call useTanStackTableDevtools with a key.
+          tableDevtoolsPlugin(),
         ]}
       />
     </AppProviders>
