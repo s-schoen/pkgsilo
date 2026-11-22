@@ -1,0 +1,76 @@
+/* An md control on layer-2 with a subtle border and faint text: hovered, its border turns strong
+   and its text secondary; pressed (selected), its fill turns layer-2's selected shade and its text
+   the main one. A disabled toggle loses its fill, as Plane's. */
+.toggleButton {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--control-gap-md);
+  align-items: center;
+  justify-content: center;
+  max-inline-size: var(--size-toggle-button-max);
+  block-size: var(--control-height-md);
+  padding-block: 0;
+  padding-inline: var(--control-padding-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-placeholder);
+  white-space: nowrap;
+  cursor: pointer;
+  /* Only the keyboard's focus shows the ring, below. */
+  outline: none;
+  background: var(--color-layer-2);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color, border-color, color;
+
+  &[data-hovered] {
+    color: var(--color-text-secondary);
+    background: var(--color-layer-2-hovered);
+    border-color: var(--color-border-strong);
+  }
+
+  &[data-pressed] {
+    color: var(--color-text-secondary);
+    background: var(--color-layer-2-pressed);
+    border-color: var(--color-border-strong);
+  }
+
+  &[data-selected] {
+    color: var(--color-text);
+    background: var(--color-layer-2-selected);
+    border-color: var(--color-border-strong);
+  }
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+    background: transparent;
+    border-color: var(--color-border-subtle);
+  }
+}
+
+.icon {
+  flex-shrink: 0;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+}
+
+.label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

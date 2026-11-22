@@ -158,6 +158,10 @@
   --size-popup-min: 12.75rem;
   --size-popup-max: 25rem;
   --size-tooltip-max: 20rem;
+  /* A toggle button's text is cut beyond this, as Plane's. */
+  --size-toggle-button-max: 7.5rem;
+  /* A filter list scrolls its options beyond this, below its search. */
+  --size-filter-list-max: 20rem;
 
   /* The widths of a dialog, an alert dialog and a toast. */
   --size-dialog-sm: 36rem;
