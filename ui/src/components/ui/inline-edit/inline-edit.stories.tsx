@@ -69,8 +69,9 @@ export const Hovered = meta.story({
     await userEvent.unhover(view);
     await userEvent.hover(view);
 
-    // CI runs many browsers at once, so the hover can take longer than the default second.
-    await waitFor(() => expect(view).toHaveAttribute("data-hovered"), { timeout: 3000 });
+    // CI runs many browsers at once, so the hover can take well over the default second, and the
+    // 3 seconds that the story first waited were not enough there.
+    await waitFor(() => expect(view).toHaveAttribute("data-hovered"), { timeout: 10000 });
   },
 });
 
