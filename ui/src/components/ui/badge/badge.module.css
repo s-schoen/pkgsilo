@@ -1,5 +1,9 @@
 /* A subtle fill with the text of its status, which the variant's class sets. */
 .badge {
+  /* Only the property chip has a frame and normal text: the other variants keep these. */
+  --badge-border: transparent;
+  --badge-font-weight: var(--font-weight-medium);
+
   display: inline-flex;
   flex-shrink: 0;
   gap: var(--control-gap-sm);
@@ -8,12 +12,13 @@
   block-size: var(--control-height-sm);
   padding-inline: var(--control-padding-sm);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--badge-font-weight);
   line-height: var(--line-height-tight);
   vertical-align: middle;
   color: var(--badge-text);
   white-space: nowrap;
   background: var(--badge-bg);
+  border: var(--border-width) solid var(--badge-border);
   border-radius: var(--radius-sm);
 }
 
@@ -46,4 +51,12 @@
 .danger {
   --badge-bg: var(--color-danger-subtle);
   --badge-text: var(--color-text-danger);
+}
+
+/* A property of a row, as Plane's list shows it: a frame on the row's own fill, in quiet text. */
+.property {
+  --badge-bg: transparent;
+  --badge-text: var(--color-text-secondary);
+  --badge-border: var(--color-border-strong);
+  --badge-font-weight: var(--font-weight-normal);
 }

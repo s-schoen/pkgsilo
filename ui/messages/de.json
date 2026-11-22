@@ -29,5 +29,22 @@
   "signOutFailed": "Die Abmeldung ist fehlgeschlagen. Versuche es gleich noch einmal.",
   "usernameRequired": "Gib deinen Benutzernamen ein.",
   "passwordRequired": "Gib dein Passwort ein.",
-  "signedInAs": "Angemeldet als {username}"
+  "signedInAs": "Angemeldet als {username}",
+  "dataTableSearch": "Suchen",
+  "dataTableSearchPlaceholder": "Suchen …",
+  "dataTableActiveFilters": "Aktive Filter",
+  "dataTableFilters": "Filter",
+  "dataTableFiltersCount": "Filter · {count}",
+  "dataTableFilterOptions": "Filteroptionen",
+  "dataTableSearchFilters": "Filteroptionen durchsuchen",
+  "dataTableFilterBy": "Filtern nach …",
+  "dataTableDisplay": "Anzeige",
+  "dataTableOrderBy": "Sortieren nach",
+  "dataTableOrderDefault": "Standard",
+  "dataTableAscending": "Aufsteigend",
+  "dataTableDescending": "Absteigend",
+  "dataTableProperties": "Eigenschaften",
+  "dataTableEmpty": "Hier ist noch nichts",
+  "dataTableNoMatches": "Keine Ergebnisse für diese Filter",
+  "dataTableClearFilters": "Filter zurücksetzen"
 }

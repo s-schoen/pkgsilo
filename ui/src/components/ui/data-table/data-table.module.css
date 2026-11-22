@@ -1,0 +1,234 @@
+/* A page's list, as Plane's: the toolbar, then full-width rows split by lines. It reaches the edges
+   of AppLayout's page frame, whose padding --app-layout-page-inset holds (none outside the frame),
+   so that the rows' lines span the page and their text lines up with the page's title. */
+.dataTable {
+  display: flex;
+  flex-direction: column;
+  margin-inline: calc(-1 * var(--app-layout-page-inset, 0));
+}
+
+/* The toolbar sticks to the top of the window, which scrolls the page, over the rows that pass
+   below it: it's positioned, and they aren't. */
+.toolbar {
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: var(--size-data-table-row);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-5);
+  background: var(--color-surface-1);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+}
+
+.search {
+  inline-size: var(--size-data-table-search);
+  max-inline-size: 100%;
+}
+
+.chips {
+  display: flex;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+/* The Filters popover: the filter list, then a field for each text or number column. */
+.filtersDialog {
+  display: flex;
+  flex-direction: column;
+  inline-size: var(--size-data-table-filters);
+  max-inline-size: 100%;
+  outline: none;
+}
+
+.scalarFilters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  margin-block-start: var(--space-1);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+
+  &:first-child {
+    margin-block-start: 0;
+    border-block-start: none;
+  }
+}
+
+/* The Display popover: the order, then the properties below a line. */
+.displayDialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  inline-size: var(--size-data-table-display);
+  max-inline-size: 100%;
+  padding: var(--space-2);
+  outline: none;
+}
+
+/* The column's select, and the direction's button beside its trigger. */
+.orderBy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-1);
+  align-items: end;
+}
+
+.displaySection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+
+  &:not(:first-child) {
+    padding-block-start: var(--space-3);
+    border-block-start: var(--border-width) solid var(--color-border-subtle);
+  }
+}
+
+.displayHeading {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+/* A row: its leading cells, its title and its properties on one line, as long as they fit. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: var(--size-data-table-row);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-5);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  cursor: default;
+  outline: none;
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color;
+
+  &[data-actionable] {
+    cursor: pointer;
+  }
+
+  &[data-hovered] {
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  /* The row that's open, as the one of a peek. */
+  &[data-active] {
+    background: var(--color-accent-subtle);
+  }
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+}
+
+.leading {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  color: var(--color-text-tertiary);
+
+  /* A Tabler icon follows the row's text, as the icons of the library do. */
+  & svg {
+    inline-size: 1.25em;
+    block-size: 1.25em;
+  }
+}
+
+/* The title takes the room that's left; below its minimum, the properties wrap below it. */
+.title {
+  flex: 1 1 var(--size-data-table-title-min);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.titleLink {
+  color: inherit;
+  text-decoration: none;
+  outline: none;
+  border-radius: var(--radius-sm);
+
+  &[data-hovered] {
+    text-decoration: underline;
+  }
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+}
+
+.properties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: flex-end;
+  min-inline-size: 0;
+  margin-inline-start: auto;
+}
+
+.property {
+  display: flex;
+  align-items: center;
+}
+
+/* A placeholder row while the rows load: a bar in the title's place. */
+.skeletonRow {
+  cursor: progress;
+}
+
+.skeleton {
+  inline-size: 40%;
+  block-size: var(--font-size-sm);
+  background: var(--color-layer-3);
+  border-radius: var(--radius-sm);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+  padding-block: var(--space-8);
+  padding-inline: var(--space-5);
+  text-align: center;
+}
+
+.emptyIcon {
+  inline-size: 2em;
+  block-size: 2em;
+  color: var(--color-text-tertiary);
+}
+
+.emptyMessage {
+  margin: 0;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+}

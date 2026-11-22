@@ -38,6 +38,11 @@ export const Danger = meta.story({
   args: { variant: "danger", children: "Expired" },
 });
 
+// A property of a row in a data table, such as the key's owner.
+export const Property = meta.story({
+  args: { variant: "property", children: "ci-bot" },
+});
+
 // The icon is decorative: the text alone names the status.
 export const WithIcon = meta.story({
   args: { variant: "success", children: "Active", icon: IconCheck },

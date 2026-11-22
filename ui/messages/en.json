@@ -29,5 +29,22 @@
   "signOutFailed": "Signing out failed. Try again in a moment.",
   "usernameRequired": "Enter your username.",
   "passwordRequired": "Enter your password.",
-  "signedInAs": "Signed in as {username}"
+  "signedInAs": "Signed in as {username}",
+  "dataTableSearch": "Search",
+  "dataTableSearchPlaceholder": "Search…",
+  "dataTableActiveFilters": "Active filters",
+  "dataTableFilters": "Filters",
+  "dataTableFiltersCount": "Filters · {count}",
+  "dataTableFilterOptions": "Filter options",
+  "dataTableSearchFilters": "Search filter options",
+  "dataTableFilterBy": "Filter by…",
+  "dataTableDisplay": "Display",
+  "dataTableOrderBy": "Order by",
+  "dataTableOrderDefault": "Default",
+  "dataTableAscending": "Ascending",
+  "dataTableDescending": "Descending",
+  "dataTableProperties": "Properties",
+  "dataTableEmpty": "Nothing here yet",
+  "dataTableNoMatches": "No results match these filters",
+  "dataTableClearFilters": "Clear filters"
 }

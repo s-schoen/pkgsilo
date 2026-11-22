@@ -6,8 +6,9 @@ type BadgeProps = {
   // What the badge says, such as a status: a message.
   children: string;
   // The color of a status: neutral for a plain label, accent for what's selected or new, success,
-  // warning and danger for what works, needs attention or failed.
-  variant?: "neutral" | "accent" | "success" | "warning" | "danger";
+  // warning and danger for what works, needs attention or failed. property is a quiet chip with a
+  // frame, for a property of a row in a data table, as its owner or its expiry.
+  variant?: "neutral" | "accent" | "success" | "warning" | "danger" | "property";
   // An icon of @tabler/icons-react before the text, decorative.
   icon?: TablerIcon;
 };
