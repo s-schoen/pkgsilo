@@ -114,7 +114,8 @@ describe("/identities", () => {
       grace.id,
     ]);
     expect(screen.getByText(hidden.id)).toBeInTheDocument();
-    expect(screen.getByText("grace")).toBeInTheDocument();
+    // grace shows by its username, both as the name and in the chip.
+    expect(screen.getAllByText("grace")).toHaveLength(2);
   });
 
   it("shows the properties as chips, and the badge on the signed-in identity", async () => {
@@ -129,7 +130,7 @@ describe("/identities", () => {
     expect(within(adaRow).getByText(m.identityYou())).toBeInTheDocument();
     expect(within(graceRow).queryByText(m.identityYou())).not.toBeInTheDocument();
 
-    expect(within(adaRow).getByText(`@${testIdentity.username}`)).toBeInTheDocument();
+    expect(within(adaRow).getByText(testIdentity.username)).toBeInTheDocument();
     expect(within(adaRow).getByText("pkgsilo")).toBeInTheDocument();
     expect(within(adaRow).getByText("3 hours ago")).toBeInTheDocument();
     expect(within(graceRow).getByText(testIdentity.displayName)).toBeInTheDocument();

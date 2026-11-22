@@ -8,7 +8,7 @@ import { formatDateTime, formatRelativeTime } from "@/components/ui/relative-tim
 import { IdentityAvatar } from "@/features/identities/components/identity-avatar.tsx";
 import { IdentityCard } from "@/features/identities/components/identity-card.tsx";
 import { IdentityTitle } from "@/features/identities/components/identity-title.tsx";
-import { PKGSILO_ID, handle, identityName } from "@/features/identities/utils/identity-name.ts";
+import { PKGSILO_ID, identityName } from "@/features/identities/utils/identity-name.ts";
 import { m } from "@/paraglide/messages.js";
 import { getLocale } from "@/paraglide/runtime.js";
 import { routeHref } from "@/utils/route-href.ts";
@@ -75,7 +75,7 @@ export function identityColumns({
       cell: ({ row }) =>
         row.original.username !== undefined && (
           <Badge variant="property" icon={IconAt}>
-            {handle(row.original.username)}
+            {row.original.username}
           </Badge>
         ),
     },
