@@ -28,6 +28,7 @@ const form = useAppForm({
   `Select` and `ComboBox` take `items` and render each as a `ListBoxItem` (`@/components/ui/list-box`), as the UI library's do.
 - `InlineTextField` edits a string in place, as a details page's title or a sidebar's value: the form holds the value while the user edits it, and is never submitted, since the field saves itself through its `onSave`.
   `onSave` rejects with `InlineEditError` (`@/components/ui/inline-edit`) to show a message on the field, such as a taken username; any other rejection reverts the value, so show its toast before rejecting.
+  A value that can change while the page shows it, such as a resource of a collection, reaches the form's field only outside the edit mode: track it with `onEditingChange` and set the field to the latest value once the edit mode ends (`features/identities/components/identity-text-field.tsx`).
 - Validate with the generated zod schema of the request (`CreateGroupBody` from `src/api/gen/zod/<tag>/<tag>.zod.ts`), extended with `.extend()` or `.refine()` for the rules that the schema doesn't state.
   The schemas check the types and the required members, not the rules that only a `jsonschema` description states.
 - Submit with a mutation of the API's hooks (`ui/docs/agents/api-client.md`), or with an insert or update of a collection (`ui/docs/agents/client-store.md`).

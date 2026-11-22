@@ -87,5 +87,11 @@
   "identityUpdatedBy": "Aktualisiert von",
   "propertyEmpty": "Keine Angabe",
   "inlineEditLabel": "{label} bearbeiten",
-  "inlineEditSaving": "Wird gespeichert"
+  "inlineEditSaving": "Wird gespeichert",
+  "identityUsernameInvalid": "Verwende 3 bis 64 Kleinbuchstaben und Ziffern, optional getrennt durch einzelne „.“, „_“ oder „-“.",
+  "identityUsernameTaken": "Dieser Benutzername ist vergeben.",
+  "identityDisplayNameRequired": "Gib einen Anzeigenamen ein.",
+  "identityDisplayNameInvalid": "Verwende höchstens 128 Zeichen, ohne Zeilenumbrüche.",
+  "identitySaveFailed": "Die Änderung konnte nicht gespeichert werden. Versuche es gleich noch einmal.",
+  "identitySaveForbidden": "Du darfst diese Änderung nicht vornehmen."
 }

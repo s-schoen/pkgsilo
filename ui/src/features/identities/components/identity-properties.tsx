@@ -7,24 +7,34 @@ import IconUserPlus from "@tabler/icons-react/icons/IconUserPlus";
 import { PropertyItem, PropertyList } from "@/components/ui/property-list";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { IdentityReference } from "@/features/identities/components/identity-reference.tsx";
+import { IdentityTextField } from "@/features/identities/components/identity-text-field.tsx";
+import { usernameSchema } from "@/features/identities/utils/identity-schema.ts";
 import { m } from "@/paraglide/messages.js";
 
 import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
 
 type IdentityPropertiesProps = {
   identity: IdentityResponse;
+  // Saves a changed username, which the user edits in place.
+  onSaveUsername: (username: string) => Promise<void>;
 };
 
-// An identity's properties in its page's sidebar: its username, who created and last changed it,
-// and when. A field that the actor can't read is absent, and its row with it.
-export function IdentityProperties({ identity }: IdentityPropertiesProps) {
+// An identity's properties in its page's sidebar: its username, which the user edits in place, who
+// created and last changed it, and when. A field that the actor can't read is absent, and its row
+// with it.
+export function IdentityProperties({ identity, onSaveUsername }: IdentityPropertiesProps) {
   const { username, createdBy, createdAt, updatedBy, updatedAt } = identity;
 
   return (
     <PropertyList>
       {username !== undefined && (
         <PropertyItem icon={IconAt} label={m.username()}>
-          {username}
+          <IdentityTextField
+            value={username}
+            schema={usernameSchema}
+            label={m.username()}
+            onSave={onSaveUsername}
+          />
         </PropertyItem>
       )}
       {createdBy !== undefined && (

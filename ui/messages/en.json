@@ -87,5 +87,11 @@
   "identityUpdatedBy": "Updated by",
   "propertyEmpty": "None",
   "inlineEditLabel": "Edit {label}",
-  "inlineEditSaving": "Saving"
+  "inlineEditSaving": "Saving",
+  "identityUsernameInvalid": "Use 3 to 64 lowercase letters and digits, optionally separated by single “.”, “_” or “-”.",
+  "identityUsernameTaken": "This username is taken.",
+  "identityDisplayNameRequired": "Enter a display name.",
+  "identityDisplayNameInvalid": "Use at most 128 characters, without line breaks.",
+  "identitySaveFailed": "Saving the change failed. Try again in a moment.",
+  "identitySaveForbidden": "You may not make this change."
 }
