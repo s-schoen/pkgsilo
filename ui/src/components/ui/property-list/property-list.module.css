@@ -1,0 +1,54 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+/* A row as tall as a control, so that a value that's a control (an inline edit) keeps the row's
+   height: the label's column is fixed, the value takes the rest. */
+.item {
+  display: grid;
+  grid-template-columns: var(--size-property-label) minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: var(--control-height-md);
+}
+
+.label {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: center;
+  min-inline-size: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-tertiary);
+}
+
+.icon {
+  flex-shrink: 0;
+  inline-size: 1.15em;
+  block-size: 1.15em;
+}
+
+.labelText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: center;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  color: var(--color-text-placeholder);
+}

@@ -12,6 +12,7 @@ import {
   identityGroupingOptions,
 } from "@/features/identities/components/identity-columns.tsx";
 import { m } from "@/paraglide/messages.js";
+import { routeHref } from "@/utils/route-href.ts";
 
 import type { DataTableSearchDefaults } from "@/components/ui/data-table";
 
@@ -47,6 +48,7 @@ export function IdentitiesPage() {
         rows={identities}
         isLoading={isLoading}
         getRowId={(identity) => identity.id}
+        getRowHref={(identity) => routeHref("/identities/$id", { id: identity.id })}
         groupingOptions={groupingOptions}
         {...search}
       />

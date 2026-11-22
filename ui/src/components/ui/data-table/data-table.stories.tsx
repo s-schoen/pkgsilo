@@ -15,6 +15,7 @@ import { AppLayout } from "@/components/layouts/app-layout.tsx";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { m } from "@/paraglide/messages.js";
+import { routeHref } from "@/utils/route-href.ts";
 
 import type {
   DataTableBulkAction,
@@ -188,12 +189,12 @@ const columns: Array<DataTableColumnDef<ApiKey>> = [
         {row.original.owner}
       </Badge>
     ),
-    // The owner's card shows their identity, and a click on the chip opens it.
+    // The owner's card shows their identity, and a click on the chip opens it: not bob's, who
+    // stands for an owner that the actor can't read, whose chip opens the row.
     preview: {
       content: (key) => <OwnerCard username={key.owner} />,
-      // No route shows an identity yet: the cast stands in for a route such as
-      // /identities/$username.
-      href: (key) => `/identities/${key.owner}` as Href,
+      href: (key) =>
+        key.owner === "bob" ? undefined : routeHref("/identities/$id", { id: key.owner }),
     },
   },
   {
@@ -478,6 +479,21 @@ export const PropertyPreviewWithContent = meta.story({
 
     await expect(navigate).toHaveBeenCalledWith("/identities/ci-bot", undefined);
     await expect(args.onRowAction).not.toHaveBeenCalled();
+  },
+});
+
+// A chip whose row has no link of its own, as bob's, opens the row, as a click beside it does.
+export const PropertyPreviewWithoutLink = meta.story({
+  args: { onRowAction: fn() },
+  play: async ({ args, canvas, userEvent }) => {
+    const row = canvas.getByRole("row", { name: "backup-mirror" });
+    await expect(
+      within(row).queryByRole("link", { name: `${text.owner}: bob` }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(within(row).getByRole("button", { name: `${text.owner}: bob` }));
+
+    await expect(args.onRowAction).toHaveBeenCalledWith(expect.objectContaining({ id: "k3" }));
   },
 });
 

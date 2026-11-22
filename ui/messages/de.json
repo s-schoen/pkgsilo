@@ -83,5 +83,7 @@
   "identityCreatedAt": "Erstellt",
   "identityUpdatedAt": "Aktualisiert",
   "identityYou": "Du",
-  "identityUnknown": "Unbekannte Identität"
+  "identityUnknown": "Unbekannte Identität",
+  "identityUpdatedBy": "Aktualisiert von",
+  "propertyEmpty": "Keine Angabe"
 }

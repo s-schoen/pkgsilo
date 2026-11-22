@@ -11,6 +11,7 @@ import { IdentityTitle } from "@/features/identities/components/identity-title.t
 import { PKGSILO_ID, handle, identityName } from "@/features/identities/utils/identity-name.ts";
 import { m } from "@/paraglide/messages.js";
 import { getLocale } from "@/paraglide/runtime.js";
+import { routeHref } from "@/utils/route-href.ts";
 
 import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
 import type {
@@ -105,6 +106,12 @@ export function identityColumns({
           createdBy !== undefined && (
             <IdentityCard identity={byId.get(createdBy)} isPkgsilo={createdBy === PKGSILO_ID} />
           ),
+        // To the creator's page: not for pkgsilo or a creator the actor can't read, whose chip
+        // opens the row instead.
+        href: ({ createdBy }) =>
+          createdBy !== undefined && byId.has(createdBy)
+            ? routeHref("/identities/$id", { id: createdBy })
+            : undefined,
       },
     },
     {
