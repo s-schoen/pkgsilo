@@ -109,6 +109,23 @@ export type DataTableRow<TData extends RowData> = Row<DataTableFeatures, TData>;
 
 export type DataTableTable<TData extends RowData> = ReactTable<DataTableFeatures, TData>;
 
+// A column that the Display popover's Group by offers. The table groups by the column's value, or
+// by its getGroupingValue when that differs from what the cell shows (two assets of the same name,
+// say): the groups stay apart even when their labels are equal.
+export type DataTableGroupingOption = {
+  // The column's id.
+  id: string;
+  // The column's name in the Display popover: a message.
+  label: Message;
+  // A group's label from its value; the value as text when it's missing.
+  formatValue?: (value: unknown) => string;
+  // A group's icon from its value, such as the status's icon.
+  renderIcon?: (value: unknown) => ReactNode;
+  // Orders the groups by their values; else they're ordered by their labels, in the locale's
+  // collation.
+  compareValues?: (left: unknown, right: unknown) => number;
+};
+
 // An action on the selected rows, besides delete, such as revoking API keys: the toolbar offers it
 // while one of the selected rows qualifies.
 export type DataTableBulkAction<TData extends RowData> = {

@@ -158,6 +158,93 @@
     outline: var(--focus-ring-width) solid var(--color-focus-ring);
     outline-offset: calc(-1 * var(--focus-ring-width));
   }
+
+  /* A group's rows fade in as it expands. */
+  &[data-level="2"] {
+    transition-property: background-color, opacity;
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
+}
+
+/* A group, as Plane's: a row on the next layer with its chevron, its icon, its label and the
+   count of its rows, which collapses the rows below it. */
+.group {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: var(--control-height-xl);
+  padding-inline: var(--space-5);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  cursor: pointer;
+  outline: none;
+  background: var(--color-layer-1);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color;
+
+  &[data-hovered] {
+    background: var(--color-layer-1-hovered);
+  }
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+}
+
+/* The chevron points at the label while the group is collapsed, and down while it's expanded. */
+.groupChevron {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: transform;
+
+  .group[data-expanded] & {
+    transform: rotate(90deg);
+  }
+
+  & svg {
+    inline-size: 1em;
+    block-size: 1em;
+  }
+}
+
+.groupIcon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+
+  & svg {
+    inline-size: 1.25em;
+    block-size: 1.25em;
+  }
+}
+
+.groupLabel {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupCount {
+  font-weight: var(--font-weight-normal);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
 }
 
 /* The row's selection box, which shows on hover, on focus, and while any row is selected: until

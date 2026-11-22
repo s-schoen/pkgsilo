@@ -5,6 +5,7 @@ import { Dialog, DialogTrigger } from "react-aria-components/Dialog";
 
 import { Button } from "@/components/ui/button";
 import { columnLabel } from "@/components/ui/data-table/labels.tsx";
+import { NO_GROUPING } from "@/components/ui/data-table/search.ts";
 import { ListBoxItem } from "@/components/ui/list-box";
 import { Popover } from "@/components/ui/popover";
 import { Select } from "@/components/ui/select";
@@ -12,18 +13,26 @@ import { ToggleButton, ToggleButtonGroup } from "@/components/ui/toggle-button";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { m } from "@/paraglide/messages.js";
 
-import type { DataTableTable } from "@/components/ui/data-table/types.ts";
+import type { DataTableGroupingOption, DataTableTable } from "@/components/ui/data-table/types.ts";
 import type { RowData } from "@tanstack/react-table";
 
 import styles from "@/components/ui/data-table/data-table.module.css";
 
 type DisplayPopoverProps<TData extends RowData> = {
   table: DataTableTable<TData>;
+  groupingOptions: Array<DataTableGroupingOption>;
+  grouping: string | undefined;
+  onGroupingChange: (grouping: string | undefined) => void;
 };
 
-// Plane's Display menu: the order of the rows (a column and its direction), and toggles for the
-// properties that a row shows. Group by comes with grouping.
-export function DisplayPopover<TData extends RowData>({ table }: DisplayPopoverProps<TData>) {
+// Plane's Display menu: the grouping of the rows (a column, or none), their order (a column and
+// its direction), and toggles for the properties that a row shows.
+export function DisplayPopover<TData extends RowData>({
+  table,
+  groupingOptions,
+  grouping,
+  onGroupingChange,
+}: DisplayPopoverProps<TData>) {
   const columns = table.getAllColumns();
   const sortColumns = columns
     .filter((column) => column.getCanSort() && column.columnDef.meta?.label)
@@ -31,6 +40,10 @@ export function DisplayPopover<TData extends RowData>({ table }: DisplayPopoverP
   const propertyColumns = columns.filter(
     (column) => column.columnDef.meta?.placement === "property" && column.getCanHide(),
   );
+  const groupByItems = [
+    { id: NO_GROUPING, label: m.dataTableGroupNone() },
+    ...groupingOptions.map((option) => ({ id: option.id, label: option.label() })),
+  ];
   const sort = table.state.sorting.at(0);
   const direction = sort?.desc ? m.dataTableDescending() : m.dataTableAscending();
 
@@ -41,6 +54,18 @@ export function DisplayPopover<TData extends RowData>({ table }: DisplayPopoverP
       </Button>
       <Popover placement="bottom end">
         <Dialog aria-label={m.dataTableDisplay()} className={styles.displayDialog}>
+          {groupingOptions.length > 0 && (
+            <Select
+              label={m.dataTableGroupBy()}
+              items={groupByItems}
+              value={grouping ?? NO_GROUPING}
+              onChange={(id) => {
+                onGroupingChange(id === null || id === NO_GROUPING ? undefined : String(id));
+              }}
+            >
+              {(item) => <ListBoxItem id={item.id}>{item.label}</ListBoxItem>}
+            </Select>
+          )}
           {sortColumns.length > 0 && (
             <div className={styles.orderBy}>
               <Select
