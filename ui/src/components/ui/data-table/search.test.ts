@@ -66,6 +66,10 @@ describe("dataTableSearchSchema", () => {
   it("ignores the params of other filters", () => {
     expect(parse("?kind=x")).toEqual({});
   });
+
+  it.each(["q", "group", "sort"])("rejects a filter named %s, a param of the table", (id) => {
+    expect(() => dataTableSearchSchema({ filters: [id] })).toThrow(`"${id}"`);
+  });
 });
 
 describe("the filter state", () => {
