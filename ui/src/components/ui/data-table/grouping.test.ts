@@ -1,9 +1,18 @@
+import { useTable } from "@tanstack/react-table";
+import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { orderGroups } from "@/components/ui/data-table/grouping.ts";
+import { dataTableFeatures } from "@/components/ui/data-table/types.ts";
 
-function groupRow(id: string, groupingValue: unknown, subRows: Array<string> = [id]) {
-  return { id, groupingValue, subRows };
+import type { DataTableColumnDef } from "@/components/ui/data-table/types.ts";
+
+// A group of the grouped row model, whose rows all give `value`.
+function groupRow(id: string, value: unknown, rowIds: Array<string> = [id]) {
+  return {
+    id,
+    subRows: rowIds.map((rowId) => ({ id: rowId, getGroupingValue: () => value })),
+  };
 }
 
 describe("orderGroups", () => {
@@ -60,7 +69,9 @@ describe("orderGroups", () => {
       "en",
     );
 
-    expect(groups).toEqual([
+    expect(
+      groups.map(({ rows, ...group }) => ({ ...group, rows: rows.map((row) => row.id) })),
+    ).toEqual([
       { id: "a", value: "id-1", label: "server", rows: ["x"] },
       { id: "b", value: "id-2", label: "server", rows: ["y", "z"] },
     ]);
@@ -70,5 +81,60 @@ describe("orderGroups", () => {
     const groups = orderGroups([groupRow("a", undefined)], { id: "x", label: () => "X" }, "en");
 
     expect(groups[0]?.label).toBe("");
+  });
+
+  it("gives the values as the column gives them, not as TanStack's text keys", () => {
+    type Key = { id: string; owner: string | null; isAdmin: boolean; created: Date };
+    const columns: Array<DataTableColumnDef<Key>> = [
+      { accessorKey: "owner" },
+      { accessorKey: "isAdmin" },
+      { accessorKey: "created" },
+    ];
+    const keys: Array<Key> = [
+      { id: "1", owner: null, isAdmin: false, created: new Date("2026-01-02") },
+      { id: "2", owner: "alice", isAdmin: true, created: new Date("2026-01-01") },
+    ];
+    // The groups of the table, grouped by the column.
+    const groupsBy = (columnId: string) => {
+      const { result } = renderHook(() =>
+        useTable({
+          features: dataTableFeatures,
+          columns,
+          data: keys,
+          getRowId: (key) => key.id,
+          state: { grouping: [columnId] },
+        }),
+      );
+      return result.current.getPreExpandedRowModel().rows;
+    };
+
+    const owners = orderGroups(
+      groupsBy("owner"),
+      {
+        id: "owner",
+        label: () => "Owner",
+        formatValue: (value) => (typeof value === "string" ? value : "nobody"),
+      },
+      "en",
+    );
+    expect(owners.map((group) => group.label)).toEqual(["alice", "nobody"]);
+
+    const admins = orderGroups(
+      groupsBy("isAdmin"),
+      { id: "isAdmin", label: () => "Admin", formatValue: (value) => (value ? "yes" : "no") },
+      "en",
+    );
+    expect(admins.map((group) => group.label)).toEqual(["no", "yes"]);
+
+    const created = orderGroups(
+      groupsBy("created"),
+      {
+        id: "created",
+        label: () => "Created",
+        compareValues: (left, right) => (left as Date).getTime() - (right as Date).getTime(),
+      },
+      "en",
+    );
+    expect(created.map((group) => group.rows.map((row) => row.id))).toEqual([["2"], ["1"]]);
   });
 });

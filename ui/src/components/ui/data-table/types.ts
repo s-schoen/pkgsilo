@@ -32,6 +32,9 @@ export type Href = NonNullable<LinkProps["href"]>;
 export type Message = () => string;
 
 // How the Filters popover filters a column: by a choice of its options, by text or by a number.
+// Without a filterFn of its own, the column keeps a row whose value is one of the checked options
+// (compared as text; a list value when one of its items is), contains the text (ignoring case), or
+// equals the number.
 export type FilterVariant = "select" | "text" | "number";
 
 // Where a row shows a column's cell: before the title (an icon), as the title, or as a property
@@ -131,9 +134,11 @@ export type DataTableTable<TData extends RowData> = ReactTable<DataTableFeatures
 
 // A column that the Display popover's Group by offers. The table groups by the column's value, or
 // by its getGroupingValue when that differs from what the cell shows (two assets of the same name,
-// say): the groups stay apart even when their labels are equal.
+// say): the groups stay apart even when their labels are equal. The functions below get that value
+// as the column gives it, a Date or null as well as text.
 export type DataTableGroupingOption = {
-  // The column's id.
+  // The column's id, as TanStack gives it: its id, else its accessor key with "_" for each "."
+  // ("owner.name" is "owner_name").
   id: string;
   // The column's name in the Display popover: a message.
   label: Message;
@@ -155,6 +160,7 @@ export type DataTableBulkAction<TData extends RowData> = {
   // The rows the action can change; every row when it's missing.
   appliesTo?: (row: TData) => boolean;
   // Runs on the selected rows that the action applies to, and on no other. It reports its outcome
-  // itself, such as with a toast.
+  // itself, such as with a toast; while its promise runs, its button is pending, and if it rejects,
+  // the rows stay selected.
   onAction: (rows: Array<TData>) => Promise<void> | void;
 };

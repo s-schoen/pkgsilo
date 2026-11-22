@@ -143,11 +143,6 @@ function OwnerCard({ username }: { username: string }) {
   );
 }
 
-// Keeps a row whose value is one of the checked options.
-function includesValue(values: Array<string>, value: unknown) {
-  return values.includes(String(value));
-}
-
 const columns: Array<DataTableColumnDef<ApiKey>> = [
   {
     id: "icon",
@@ -170,8 +165,6 @@ const columns: Array<DataTableColumnDef<ApiKey>> = [
         icon: statusBadges[status].icon,
       })),
     },
-    filterFn: (row, columnId, values: Array<string>) =>
-      includesValue(values, row.getValue(columnId)),
     cell: ({ row }) => {
       const badge = statusBadges[row.original.status];
       return (
@@ -189,8 +182,6 @@ const columns: Array<DataTableColumnDef<ApiKey>> = [
       filterVariant: "select",
       options: ["alice", "bob", "ci-bot"].map((owner) => ({ value: owner, label: owner })),
     },
-    filterFn: (row, columnId, values: Array<string>) =>
-      includesValue(values, row.getValue(columnId)),
     cell: ({ row }) => (
       <Badge variant="property" icon={IconUser}>
         {row.original.owner}
@@ -827,6 +818,67 @@ export const BulkAction = meta.story({
   },
 });
 
+// A revoke of a slow API, which the story ends: with an error, as a failed request would.
+let finishRevoke: (error?: Error) => void = () => {};
+const slowRevoke = fn(
+  () =>
+    new Promise<void>((resolve, reject) => {
+      finishRevoke = (error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      };
+    }),
+);
+
+// While a bulk action runs, its button is pending, and no action starts again, from the toolbar or
+// a row's menu, nor delete. If it fails, which it reports itself, the rows stay selected, and it can
+// run again.
+export const BulkActionRunning = meta.story({
+  args: {
+    onDelete: fn(),
+    bulkActions: [
+      {
+        label: () => text.revoke,
+        icon: IconBan,
+        appliesTo: (key) => key.status === "active",
+        onAction: slowRevoke,
+      },
+    ],
+  },
+  beforeEach: () => {
+    slowRevoke.mockClear();
+  },
+  play: async ({ canvas, userEvent }) => {
+    const row = canvas.getByRole("row", { name: "ci-publish" });
+    await userEvent.click(selectionBox(row));
+    const revokeButton = canvas.getByRole("button", { name: text.revoke });
+    await userEvent.click(revokeButton);
+
+    await expect(
+      within(revokeButton).getByRole("progressbar", { name: m.loading() }),
+    ).toBeVisible();
+    await expect(canvas.getByRole("button", { name: m.dataTableDelete() })).toBeDisabled();
+    await userEvent.click(revokeButton);
+    const menu = await rightClick(userEvent, row);
+    await userEvent.click(within(menu).getByRole("menuitem", { name: text.revoke }));
+    await waitForMenuToClose();
+    await expect(slowRevoke).toHaveBeenCalledOnce();
+
+    finishRevoke(new Error("The API is down."));
+
+    await waitFor(async () => {
+      await expect(canvas.getByRole("button", { name: m.dataTableDelete() })).toBeEnabled();
+    });
+    await expect(canvas.getByText(selectedCount(1))).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: text.revoke }));
+    await expect(slowRevoke).toHaveBeenCalledTimes(2);
+    finishRevoke();
+  },
+});
+
 // Delete asks first, naming how many rows it deletes; confirming deletes them and ends the
 // selection.
 export const DeleteConfirmed = meta.story({
@@ -1079,6 +1131,40 @@ export const CollapseWithKeyboard = meta.story({
   },
 });
 
+// The keyboard collapses the groups that show, and the groups that the search hides keep their
+// state.
+export const CollapseKeepsHiddenGroups = meta.story({
+  args: { groupingOptions, grouping: "status" },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(within(groupRow(canvas, text.revoked)).getByRole("button"));
+    const search = canvas.getByRole("searchbox", { name: m.dataTableSearch() });
+    await userEvent.type(search, "ci-publish");
+    await expect(groupNames(canvas)).toEqual([text.active]);
+
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    await expect(groupRow(canvas, text.active)).toHaveFocus();
+    await userEvent.keyboard("{ArrowLeft}");
+    await userEvent.clear(search);
+
+    await expect(groupNames(canvas)).toEqual([text.active, text.expired, text.revoked]);
+    const tree = within(treeGrid(canvas));
+    await expect(tree.getByRole("row", { name: text.active })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    await expect(tree.getByRole("row", { name: text.expired })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await expect(tree.getByRole("row", { name: text.revoked })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  },
+});
+
 // With onRowAction, Enter on a group still toggles it, and on a row opens the row.
 export const GroupsWithRowAction = meta.story({
   args: { groupingOptions, grouping: "status", onRowAction: fn() },
@@ -1092,6 +1178,30 @@ export const GroupsWithRowAction = meta.story({
 
     await userEvent.keyboard("{ArrowDown}{Enter}");
     await expect(args.onRowAction).toHaveBeenCalledWith(keys[2]);
+  },
+});
+
+// An option whose id names no column, as "owner.name" for the column that TanStack names
+// "owner_name", isn't offered, and grouping by it leaves the rows as they are.
+export const UnknownGroupingOption = meta.story({
+  args: {
+    groupingOptions: [...groupingOptions, { id: "owner.name", label: () => "Owner name" }],
+    grouping: "owner.name",
+  },
+  play: async ({ canvas, userEvent }) => {
+    await expect(rowNames(canvas.getByRole("grid", { name: text.label }))).toEqual(
+      keys.map((key) => key.name),
+    );
+
+    await userEvent.click(canvas.getByRole("button", { name: m.dataTableDisplay() }));
+    const dialog = await screen.findByRole("dialog", { name: m.dataTableDisplay() });
+    const groupBy = within(dialog).getByRole("button", { name: new RegExp(m.dataTableGroupBy()) });
+    await expect(groupBy).toHaveTextContent(m.dataTableGroupNone());
+    await userEvent.click(groupBy);
+
+    await expect(await screen.findByRole("option", { name: text.owner })).toBeInTheDocument();
+    await expect(screen.queryByRole("option", { name: "Owner name" })).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}{Escape}");
   },
 });
 

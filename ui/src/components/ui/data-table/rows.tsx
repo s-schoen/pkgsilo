@@ -139,8 +139,17 @@ export function GroupedRows<TData extends RowData>({
       disabledKeys={groupIds}
       disabledBehavior="selection"
       expandedKeys={groupIds.filter((id) => !collapsedGroups.has(id))}
+      // The tree knows only the groups it shows: the groups that the filters hide keep their state.
       onExpandedChange={(expanded) => {
-        onCollapsedGroupsChange(new Set(groupIds.filter((id) => !expanded.has(id))));
+        const next = new Set(collapsedGroups);
+        for (const id of groupIds) {
+          if (expanded.has(id)) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+        }
+        onCollapsedGroupsChange(next);
       }}
       data-selecting={selectedKeys.size > 0 || undefined}
       // Enter or a click on a group toggles it; on a row, it opens the row. Without a row action,

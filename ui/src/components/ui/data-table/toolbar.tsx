@@ -38,7 +38,7 @@ export function Toolbar<TData extends RowData>({
 }: ToolbarProps<TData>) {
   const searchRef = useRef<HTMLInputElement>(null);
   const filterColumns = table
-    .getAllColumns()
+    .getAllLeafColumns()
     .filter((column) => column.getCanFilter() && column.columnDef.meta?.filterVariant);
 
   return (

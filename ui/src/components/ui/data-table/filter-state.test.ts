@@ -2,6 +2,7 @@ import { useTable } from "@tanstack/react-table";
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { withVariantFilterFns } from "@/components/ui/data-table/filter-fns.ts";
 import {
   EMPTY_FILTER_STATE,
   filterVariants,
@@ -18,38 +19,46 @@ function filters(overrides: Partial<DataTableFilterState>): DataTableFilterState
   return { ...EMPTY_FILTER_STATE, ...overrides };
 }
 
-type Item = { id: string; name: string; status: string; size: number };
+type Item = { id: string; name: string; status: string; size: number; owner: { name: string } };
 
 const columns: Array<DataTableColumnDef<Item>> = [
   { accessorKey: "name", meta: { placement: "title", filterVariant: "text" } },
-  {
-    id: "status",
-    accessorFn: (item) => item.status,
-    meta: { filterVariant: "select" },
-    filterFn: (row, columnId, values: Array<string>) => values.includes(row.getValue(columnId)),
-  },
+  { id: "status", accessorFn: (item) => item.status, meta: { filterVariant: "select" } },
   { accessorKey: "size", meta: { filterVariant: "number" } },
+  { accessorKey: "owner.name", meta: { filterVariant: "select" } },
+  { header: "Kind", accessorFn: (item) => item.status, meta: { filterVariant: "text" } },
   { accessorKey: "id" },
 ];
 
+// The columns as TanStack builds them, with the ids it gives them.
+function tableColumns(definitions: Array<DataTableColumnDef<Item>>) {
+  const { result } = renderHook(() =>
+    useTable({ features: dataTableFeatures, columns: definitions, data: [] }),
+  );
+  return result.current.getAllLeafColumns();
+}
+
 describe("filterVariants", () => {
-  it("maps the columns with a variant by their id or accessor key", () => {
-    expect(filterVariants(columns)).toEqual(
+  it("maps the columns with a variant by the ids that TanStack gives them", () => {
+    expect(filterVariants(tableColumns(columns))).toEqual(
       new Map([
         ["name", "text"],
         ["status", "select"],
         ["size", "number"],
+        // A nested accessor key's dots become underscores, and a column without an id or accessor
+        // key takes its header's text.
+        ["owner_name", "select"],
+        ["Kind", "text"],
       ]),
     );
   });
 
-  it("skips a column without an id", () => {
-    const anonymous: DataTableColumnDef<Item> = {
-      header: "Size",
-      meta: { filterVariant: "number" },
-    };
+  it("takes the columns of a group", () => {
+    const grouped: Array<DataTableColumnDef<Item>> = [
+      { id: "details", columns: [{ accessorKey: "size", meta: { filterVariant: "number" } }] },
+    ];
 
-    expect(filterVariants([anonymous])).toEqual(new Map());
+    expect(filterVariants(tableColumns(grouped))).toEqual(new Map([["size", "number"]]));
   });
 });
 
@@ -87,11 +96,11 @@ describe("toColumnFilters", () => {
     const { result } = renderHook(() =>
       useTable({
         features: dataTableFeatures,
-        columns,
+        columns: withVariantFilterFns(columns),
         data: [
-          { id: "1", name: "ci", status: "active", size: 1 },
-          { id: "2", name: "deploy", status: "revoked", size: 2 },
-          { id: "3", name: "backup", status: "expired", size: 3 },
+          { id: "1", name: "ci", status: "active", size: 1, owner: { name: "alice" } },
+          { id: "2", name: "deploy", status: "revoked", size: 2, owner: { name: "bob" } },
+          { id: "3", name: "backup", status: "expired", size: 3, owner: { name: "alice" } },
         ],
         getRowId: (item) => item.id,
         initialState: {
@@ -107,7 +116,7 @@ describe("toColumnFilters", () => {
 });
 
 describe("fromColumnFilters", () => {
-  const variants = filterVariants(columns);
+  const variants = filterVariants(tableColumns(columns));
 
   it("converts back what toColumnFilters gave, keeping the search", () => {
     const state = filters({
@@ -138,6 +147,12 @@ describe("fromColumnFilters", () => {
     ["a blank number filter", { id: "size", value: "" }],
   ])("drops %s", (_, filter) => {
     expect(fromColumnFilters(EMPTY_FILTER_STATE, [filter], variants)).toEqual(EMPTY_FILTER_STATE);
+  });
+
+  it("keeps the filter of a nested accessor key by the id that TanStack gave its column", () => {
+    expect(
+      fromColumnFilters(EMPTY_FILTER_STATE, [{ id: "owner_name", value: ["alice"] }], variants),
+    ).toEqual(filters({ selectFilters: { owner_name: ["alice"] } }));
   });
 
   it("turns select values into strings", () => {
