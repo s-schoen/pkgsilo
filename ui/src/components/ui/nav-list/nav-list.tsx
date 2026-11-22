@@ -1,4 +1,4 @@
-import { createContext, use } from "react";
+import { createContext, use, useId } from "react";
 import { Link as AriaLink } from "react-aria-components/Link";
 
 import { useRoutePreload } from "@/hooks/use-route-preload.ts";
@@ -12,7 +12,7 @@ import styles from "@/components/ui/nav-list/nav-list.module.css";
 type NavListProps = {
   // The name of the navigation landmark: a message.
   "aria-label": string;
-  // The NavItems.
+  // The NavItems and NavSections.
   children: ReactNode;
   // Called when the user follows any of the items on this page, as a drawer closes then; not for a
   // click with a modifier key, which opens the item elsewhere.
@@ -22,9 +22,11 @@ type NavListProps = {
 // The onNavigate of the NavList around an item.
 const NavigateContext = createContext<(() => void) | undefined>(undefined);
 
-// The links between the pages of the app, as a navigation landmark:
+// The links between the pages of the app, as a navigation landmark, whose NavItems may be grouped
+// in NavSections:
 // <NavList aria-label={m.mainNavigation()}>
 //   <NavItem href="/" icon={IconHome} isCurrent>{m.home()}</NavItem>
+//   <NavSection title={m.administration()}>…</NavSection>
 // </NavList>.
 export function NavList({ children, onNavigate, ...props }: NavListProps) {
   return (
@@ -33,6 +35,33 @@ export function NavList({ children, onNavigate, ...props }: NavListProps) {
         <ul className={styles.list}>{children}</ul>
       </NavigateContext>
     </nav>
+  );
+}
+
+type NavSectionProps = {
+  // The section's heading: a message.
+  title: string;
+  // The section's NavItems.
+  children: ReactNode;
+};
+
+// A group of a NavList's items under a heading, which names their list for a screen reader. It
+// doesn't collapse, so its items are always one Tab away:
+// <NavSection title={m.administration()}>
+//   <NavItem href="/identities" icon={IconUsers}>{m.identities()}</NavItem>
+// </NavSection>.
+export function NavSection({ title, children }: NavSectionProps) {
+  const headingId = useId();
+
+  return (
+    <li className={styles.section}>
+      <h2 id={headingId} className={styles.sectionHeading}>
+        {title}
+      </h2>
+      <ul aria-labelledby={headingId} className={styles.list}>
+        {children}
+      </ul>
+    </li>
   );
 }
 

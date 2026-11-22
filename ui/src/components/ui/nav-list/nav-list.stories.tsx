@@ -3,11 +3,12 @@ import IconKey from "@tabler/icons-react/icons/IconKey";
 import IconUsers from "@tabler/icons-react/icons/IconUsers";
 // Only the package root exports RouterProvider.
 import { RouterProvider } from "react-aria-components";
-import { expect, fn } from "storybook/test";
+import { expect, fn, within } from "storybook/test";
 
 import preview from "#.storybook/preview";
-import { NavItem, NavList } from "@/components/ui/nav-list";
+import { NavItem, NavList, NavSection } from "@/components/ui/nav-list";
 import { RoutePreloadContext } from "@/hooks/use-route-preload.ts";
+import { m } from "@/paraglide/messages.js";
 
 // The texts of the navigation, where the app passes messages. The stories have no router, so every
 // item links to the one route there is, and is an <a>.
@@ -165,5 +166,65 @@ export const Preloaded = meta.story({
     await expect(canvas.getByRole("link", { name: text.home })).toHaveFocus();
     await expect(preload).toHaveBeenCalledOnce();
     await expect(preload).toHaveBeenCalledWith("/");
+  },
+});
+
+// The app's menu, with its items grouped in a section under a heading, in the messages of the
+// toolbar's locale. The current page's item is in the section.
+function SectionedNavigation(args: { "aria-label": string }) {
+  return (
+    <div style={{ inlineSize: "var(--size-sidebar)" }}>
+      <NavList {...args}>
+        <NavItem href="/" icon={IconHome}>
+          {m.home()}
+        </NavItem>
+        <NavSection title={m.administration()}>
+          <NavItem href="/" icon={IconUsers} isCurrent>
+            {m.identities()}
+          </NavItem>
+          <NavItem href="/" icon={IconKey}>
+            {text.apiKeys}
+          </NavItem>
+        </NavSection>
+      </NavList>
+    </div>
+  );
+}
+
+// A section's heading names the list of its items, and its current item is marked as any other.
+export const WithSections = meta.story({
+  render: (args) => <SectionedNavigation {...args} />,
+  play: async ({ canvas }) => {
+    const section = canvas.getByRole("list", { name: m.administration() });
+    await expect(canvas.getByRole("heading", { name: m.administration() })).toBeVisible();
+    await expect(within(section).getByRole("link", { name: m.identities() })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(canvas.getByRole("link", { name: m.home() })).not.toHaveAttribute("aria-current");
+  },
+});
+
+// Tab moves from the items above a section into it, past its heading.
+export const SectionFocusedWithKeyboard = meta.story({
+  render: (args) => <SectionedNavigation {...args} />,
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.tab();
+    await userEvent.tab();
+    await expect(canvas.getByRole("link", { name: m.identities() })).toHaveFocus();
+  },
+});
+
+// The section in German.
+export const WithSectionsGerman = meta.story({
+  globals: { locale: "de" },
+  render: (args) => <SectionedNavigation {...args} />,
+  play: async ({ canvas }) => {
+    await expect(
+      canvas.getByRole("list", { name: m.administration({}, { locale: "de" }) }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("link", { name: m.identities({}, { locale: "de" }) }),
+    ).toBeVisible();
   },
 });

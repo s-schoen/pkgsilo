@@ -71,3 +71,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A section sets itself apart from the items above it by space, not a line, as Plane's menu. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-block-start: var(--space-3);
+}
+
+/* The section's heading: metadata, in the items' inset. */
+.sectionHeading {
+  padding-inline: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-tertiary);
+}
