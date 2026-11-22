@@ -1,0 +1,43 @@
+/* A raised card next to its trigger, which grows from it as it enters and shrinks back to it as it
+   leaves. React Aria sets its max-height to the room on the screen. */
+.card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: var(--size-popup-min);
+  max-inline-size: var(--size-popup-max);
+  padding: var(--space-3);
+  overflow: auto;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  outline: none;
+  background: var(--color-surface-1);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  transform-origin: var(--trigger-anchor-point);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-fast);
+  transition-property: opacity, transform;
+
+  &[data-entering],
+  &[data-exiting] {
+    opacity: 0;
+    transform: scale(var(--scale-overlay-start));
+  }
+}
+
+/* What the trigger is, as metadata above the card's content. */
+.heading {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}

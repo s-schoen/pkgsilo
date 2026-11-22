@@ -10,6 +10,7 @@ export type {
   DataTableGroupingOption,
   DataTableOption,
   DataTablePlacement,
+  DataTablePreview,
   DataTableRow,
   DataTableTable,
   FilterVariant,

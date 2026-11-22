@@ -6,20 +6,17 @@ import { Link } from "react-aria-components/Link";
 import { Tree, TreeItem, TreeItemContent } from "react-aria-components/Tree";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { PropertyPreview } from "@/components/ui/data-table/property-preview.tsx";
 import { rowText } from "@/components/ui/data-table/row-text.ts";
 import { useRoutePreload } from "@/hooks/use-route-preload.ts";
 
 import type { Group } from "@/components/ui/data-table/grouping.ts";
-import type { DataTableRow } from "@/components/ui/data-table/types.ts";
+import type { DataTableColumnDef, DataTableRow, Href } from "@/components/ui/data-table/types.ts";
 import type { RowData } from "@tanstack/react-table";
 import type { MouseEvent, ReactNode, Ref } from "react";
 import type { Key, Selection } from "react-aria-components/GridList";
-import type { LinkProps } from "react-aria-components/Link";
 
 import styles from "@/components/ui/data-table/data-table.module.css";
-
-// A route of the app, as React Aria's links take it in href.
-export type Href = NonNullable<LinkProps["href"]>;
 
 type RowsProps<TData extends RowData> = {
   label: string;
@@ -262,7 +259,10 @@ function TreeRow<TData extends RowData>(props: RowProps<TData>) {
 }
 
 // A row as Plane's list shows it: its selection box, the leading cells, the title, and the
-// property chips at the end, which wrap below the title when the row is too narrow for them.
+// property chips at the end, which wrap below the title when the row is too narrow for them. A
+// chip of a column with a label previews it on hover or focus (property-preview.tsx); Right and
+// Left move to it from the row, in the Tree's rows too, since a row without children of the tree
+// leaves those keys to its own focusable elements.
 function RowContent<TData extends RowData>({
   row,
   href,
@@ -301,11 +301,25 @@ function RowContent<TData extends RowData>({
       </span>
       {properties.length > 0 && (
         <span className={styles.properties}>
-          {properties.map((cell) => (
-            <span key={cell.id} className={styles.property}>
-              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-            </span>
-          ))}
+          {properties.map((cell) => {
+            const chip = flexRender(cell.column.columnDef.cell, cell.getContext());
+            const label = cell.column.columnDef.meta?.label;
+            return (
+              <span key={cell.id} className={styles.property}>
+                {label ? (
+                  <PropertyPreview
+                    label={label()}
+                    preview={(cell.column.columnDef as DataTableColumnDef<TData>).preview}
+                    row={row.original}
+                  >
+                    {chip}
+                  </PropertyPreview>
+                ) : (
+                  chip
+                )}
+              </span>
+            );
+          })}
         </span>
       )}
     </>

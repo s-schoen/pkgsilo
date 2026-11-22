@@ -22,6 +22,10 @@ import {
 import type { TablerIcon } from "@tabler/icons-react";
 import type { CellData, Column, ColumnDef, ReactTable, Row, RowData } from "@tanstack/react-table";
 import type { ReactNode } from "react";
+import type { LinkProps } from "react-aria-components/Link";
+
+// A route of the app, as React Aria's links take it in href.
+export type Href = NonNullable<LinkProps["href"]>;
 
 // A message of paraglide, such as m.status, which the table calls as it renders, so that a change
 // of locale renders the text anew.
@@ -93,11 +97,27 @@ export const dataTableFeatures = tableFeatures({
 
 export type DataTableFeatures = typeof dataTableFeatures;
 
-// A column of a data table: TanStack's ColumnDef with the table's features and meta.
+// What a property's preview card shows below the column's label, and what a click on its chip does.
+// Every property chip of a column with a label has a card that names the column; without
+// preview.href or preview.onAction, a click on the chip opens the row, as a click beside it does.
+export type DataTablePreview<TData extends RowData> = {
+  // More about the row's value, such as its owner's name and picture. It renders only while the
+  // card is open, so it may load what it shows.
+  content?: (row: TData) => ReactNode;
+  // A click or Enter on the chip follows this link instead of opening the row, such as to the
+  // owner's page; a modifier key opens it in a new tab.
+  href?: (row: TData) => Href;
+  // A click or Enter on the chip runs this instead of opening the row.
+  onAction?: (row: TData) => void;
+};
+
+// A column of a data table: TanStack's ColumnDef with the table's features and meta, and the
+// preview of its property chips. The preview sits beside meta, not in it, since TanStack's meta
+// doesn't know the row's type.
 export type DataTableColumnDef<
   TData extends RowData,
   TValue extends CellData = CellData,
-> = ColumnDef<DataTableFeatures, TData, TValue>;
+> = ColumnDef<DataTableFeatures, TData, TValue> & { preview?: DataTablePreview<TData> };
 
 export type DataTableColumn<TData extends RowData, TValue extends CellData = CellData> = Column<
   DataTableFeatures,
