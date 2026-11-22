@@ -12,3 +12,10 @@ export type {
   DataTableTable,
   FilterVariant,
 } from "@/components/ui/data-table/types.ts";
+export { dataTableSearchSchema } from "@/components/ui/data-table/search.ts";
+export type {
+  DataTableSearch,
+  DataTableSearchDefaults,
+} from "@/components/ui/data-table/search.ts";
+export { useDataTableSearch } from "@/components/ui/data-table/use-data-table-search.ts";
+export type { DataTableSearchProps } from "@/components/ui/data-table/use-data-table-search.ts";

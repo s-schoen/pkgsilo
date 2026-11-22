@@ -33,3 +33,41 @@ TanStack Router routes by the files in `src/app/routes/`: `__root.tsx` is the la
   A page below `_authenticated` needs a session first: `server.use(...signedIn())`, or `signedOut()`, from `@/test/session`.
   A route's component loads from its own chunk, so find it with a `findBy` query.
 - A test file in `src/app/routes/` isn't a route (`routeFileIgnorePattern` in `tsr.config.json`).
+
+## A list page's search params
+
+A page with a data table keeps its search, select filters, order and grouping in the URL, so that a link or a reload shows the same list.
+The route spreads `dataTableSearchSchema` into its `validateSearch`, and the page passes the props of `useDataTableSearch` to the table:
+
+```tsx
+// src/app/routes/_authenticated/keys.tsx
+const filters = ["status", "owner"] as const;
+
+export const Route = createFileRoute("/_authenticated/keys")({
+  validateSearch: dataTableSearchSchema({ filters }),
+  component: KeysPage,
+});
+
+// In the feature's page, which reaches the route through getRouteApi. The filters and defaults are
+// constants of the module, so that they keep their identity.
+const route = getRouteApi("/_authenticated/keys");
+const defaults = { filterState: { globalFilter: "", selectFilters: { status: ["active"] } } };
+const search = useDataTableSearch(route, { filters, defaults });
+return (
+  <DataTable
+    label={m.apiKeys()}
+    columns={columns}
+    rows={keys}
+    getRowId={(key) => key.id}
+    {...search}
+  />
+);
+```
+
+- The URL reads `?q=ci&status=active,expired&sort=-created&group=owner`: a select filter's values are comma-joined, so a value holds no comma; `sort` is a column's id, with `-` for descending.
+  A value that doesn't parse falls back to none instead of failing the route.
+- The defaults stay out of the URL: a param that's missing takes its default, and the hook leaves out each value that equals one.
+  An empty param (`?status=`, `?sort=`) or `group=none` turns a default off.
+- A change replaces the history entry (`replace: true`) and keeps the route's other params, so Back leaves the page.
+- Text and number filters stay out of the URL, in the page's state.
+- To add the page's own params, spread the schema's shape: `z.object({ ...dataTableSearchSchema({ filters }).shape, peek: … })`.
