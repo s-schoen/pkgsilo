@@ -1,6 +1,8 @@
 /* A page's list, as Plane's: the toolbar, then full-width rows split by lines. It reaches the edges
    of AppLayout's page frame, whose padding --app-layout-page-inset holds (none outside the frame),
-   so that the rows' lines span the page and their text lines up with the page's title. */
+   so that the rows' lines span the page and their text lines up with the page's title. Its parts
+   pad their text by the same inset, so that a page that changes it keeps them in line; outside the
+   frame, they pad it by --space-5. */
 .dataTable {
   display: flex;
   flex-direction: column;
@@ -23,7 +25,7 @@
   align-items: center;
   min-block-size: var(--size-data-table-row);
   padding-block: var(--space-2);
-  padding-inline: var(--space-5);
+  padding-inline: var(--app-layout-page-inset, var(--space-5));
   background: var(--color-surface-1);
   border-block-end: var(--border-width) solid var(--color-border-subtle);
 }
@@ -134,7 +136,7 @@
   align-items: center;
   min-block-size: var(--size-data-table-row);
   padding-block: var(--space-2);
-  padding-inline: var(--space-5);
+  padding-inline: var(--app-layout-page-inset, var(--space-5));
   font-size: var(--font-size-sm);
   line-height: var(--line-height-tight);
   color: var(--color-text);
@@ -181,7 +183,7 @@
   gap: var(--space-2);
   align-items: center;
   min-block-size: var(--control-height-xl);
-  padding-inline: var(--space-5);
+  padding-inline: var(--app-layout-page-inset, var(--space-5));
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-tight);
@@ -372,7 +374,7 @@
   gap: var(--space-3);
   align-items: center;
   padding-block: var(--space-8);
-  padding-inline: var(--space-5);
+  padding-inline: var(--app-layout-page-inset, var(--space-5));
   text-align: center;
 }
 
