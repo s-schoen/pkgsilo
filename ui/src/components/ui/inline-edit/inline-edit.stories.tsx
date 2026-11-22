@@ -65,13 +65,18 @@ export const Hovered = meta.story({
   play: async ({ args, canvas, userEvent }) => {
     const view = canvas.getByRole("button", { name: m.inlineEditLabel({ label: args.label }) });
 
-    // The pointer may rest where the view rendered, from a story before, which enters nothing.
-    await userEvent.unhover(view);
-    await userEvent.hover(view);
-
-    // CI runs many browsers at once, so the hover can take well over the default second, and the
-    // 3 seconds that the story first waited were not enough there.
-    await waitFor(() => expect(view).toHaveAttribute("data-hovered"), { timeout: 10000 });
+    // The pointer may rest where the view rendered, from a story before, which enters nothing: the
+    // pointer leaves the view first. On a busy machine, the browser also moves its own pointer
+    // while the page still lays out, as a late font or style does, and its events over another
+    // element end the hover. So the pointer enters again until the hover holds.
+    await waitFor(
+      async () => {
+        await userEvent.unhover(view);
+        await userEvent.hover(view);
+        await expect(view).toHaveAttribute("data-hovered");
+      },
+      { timeout: 10000 },
+    );
   },
 });
 
