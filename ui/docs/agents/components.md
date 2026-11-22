@@ -49,6 +49,7 @@ How to build a component of the UI library, style it with a CSS module and the t
 | Loading                                           | `spinner`                                                     |
 | A status, or a row's property                     | `badge` (`variant="property"` for a data table's chip)        |
 | An object's properties, in a details page         | `property-list` (`PropertyList`, `PropertyItem`)              |
+| A value that the user edits in place, as a title  | `inline-edit` (`InlineEdit`, `InlineTextField`)               |
 | A line between content                            | `separator`                                                   |
 | Building blocks of the above                      | `field`, `popover`, `list-box`                                |
 

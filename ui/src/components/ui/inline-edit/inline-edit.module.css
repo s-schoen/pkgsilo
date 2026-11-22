@@ -1,0 +1,143 @@
+/* The root of both modes. Its size comes from the variant (.title), which sets the local
+   properties: the view's text sits where the editor's text does, so nothing moves between them. */
+.inlineEdit {
+  --inline-edit-height: var(--control-height-md);
+  --inline-edit-font-size: var(--font-size-sm);
+  --inline-edit-font-weight: var(--font-weight-normal);
+  /* The input's inset and border, which the view's text keeps too. */
+  --inline-edit-inset: calc(var(--control-inset-md) + var(--border-width));
+
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.title {
+  --inline-edit-height: var(--control-height-xl);
+  --inline-edit-font-size: var(--font-size-xl);
+  --inline-edit-font-weight: var(--font-weight-semibold);
+}
+
+/* The view: the button and the value share one cell, the button under the value, which lets the
+   pointer through to it. */
+.view {
+  display: grid;
+  grid-template-areas: "view";
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Without a fill until hovered, as a ghost button, in the transparent layer's shades. */
+.trigger {
+  grid-area: view;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  /* Only the keyboard's focus shows the ring, below. */
+  outline: none;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-control);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color;
+
+  &[data-hovered] {
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  &[data-pressed] {
+    background: var(--color-layer-transparent-pressed);
+  }
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+}
+
+.value {
+  display: flex;
+  grid-area: view;
+  align-items: center;
+  min-inline-size: 0;
+  min-block-size: var(--inline-edit-height);
+  padding-inline: var(--inline-edit-inset);
+  font-size: var(--inline-edit-font-size);
+  font-weight: var(--inline-edit-font-weight);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+/* The title's heading takes the text of the variant, not the page title's margin. */
+.heading {
+  margin: 0;
+  font: inherit;
+}
+
+.placeholder {
+  color: var(--color-text-placeholder);
+}
+
+/* The editor: a field's box, as the text field's, in the variant's size. */
+.control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: var(--inline-edit-height);
+  padding-block: 0;
+  padding-inline: var(--control-inset-md);
+  margin: 0;
+  font-size: var(--inline-edit-font-size);
+  font-weight: var(--inline-edit-font-weight);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+  outline: var(--focus-ring-width) solid transparent;
+  outline-offset: 0;
+  background: var(--color-layer-2);
+  border: var(--border-width) solid var(--color-border-field);
+  border-radius: var(--radius-control);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color, border-color, outline-color;
+
+  &::placeholder {
+    color: var(--color-text-placeholder);
+  }
+
+  &[data-hovered] {
+    border-color: var(--color-border-strong);
+  }
+
+  &[data-focused] {
+    outline-color: var(--color-focus-ring-field);
+    border-color: var(--color-border-accent);
+  }
+
+  &[data-invalid] {
+    border-color: var(--color-border-danger);
+  }
+
+  &[data-invalid][data-focused] {
+    outline-color: var(--color-focus-ring-danger);
+  }
+}
+
+/* Room for the spinner at the end while the save runs. */
+.inputPending {
+  padding-inline-end: calc(var(--control-inset-md) * 2 + 1.2em);
+}
+
+.pending {
+  position: absolute;
+  inset-inline-end: var(--control-inset-md);
+  display: flex;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}

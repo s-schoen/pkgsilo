@@ -4,6 +4,7 @@ import { Checkbox } from "@/components/form/checkbox.tsx";
 import { ComboBox } from "@/components/form/combo-box.tsx";
 import { fieldContext, formContext } from "@/components/form/form-contexts.ts";
 import { Form } from "@/components/form/form.tsx";
+import { InlineTextField } from "@/components/form/inline-text-field.tsx";
 import { Select } from "@/components/form/select.tsx";
 import { SubmitButton } from "@/components/form/submit-button.tsx";
 import { Switch } from "@/components/form/switch.tsx";
@@ -16,6 +17,6 @@ import { TextField } from "@/components/form/text-field.tsx";
 export const { useAppForm, withForm } = createFormHook({
   fieldContext,
   formContext,
-  fieldComponents: { TextField, TextArea, Checkbox, Switch, Select, ComboBox },
+  fieldComponents: { TextField, TextArea, InlineTextField, Checkbox, Switch, Select, ComboBox },
   formComponents: { Form, SubmitButton },
 });
