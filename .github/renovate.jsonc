@@ -1,13 +1,16 @@
 // Keeps the Go modules, the web UI's pnpm dependencies, the MCP SDK of the compatibility test, the
-// mise.toml tools, the Dockerfiles' base images and the GitHub Actions up to date. Pull requests
-// for vulnerable dependencies are opened at once; everything else waits for the weekly schedule
-// and for its release to be 3 days old. Minor and patch updates of 1.0+ dependencies are merged
-// by Renovate once CI is green.
+// mise.toml tools, the Dockerfiles' base images and tool versions, and the GitHub Actions up to
+// date. A tool that the root Dockerfile builds with moves in one pull request with its pin in
+// mise.toml or go.mod. Pull requests for vulnerable dependencies are opened at once; everything
+// else waits for the weekly schedule and for its release to be 3 days old. Minor and patch updates
+// of 1.0+ dependencies are merged by Renovate once CI is green.
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    "helpers:pinGitHubActionDigestsToSemver"
+    "helpers:pinGitHubActionDigestsToSemver",
+    // Reads the `# renovate:` comments above the root Dockerfile's *_VERSION ARGs.
+    "customManagers:dockerfileVersions"
   ],
   // Not docker-compose: postgres:18-alpine is also pinned in test/databasetest, and a major upgrade
   // breaks existing dev volumes, so it's raised by hand.
@@ -19,6 +22,8 @@
     "mise",
     // The base images of the root Dockerfile and of app/testdata/mcpcompat's.
     "dockerfile",
+    // The customManagers:dockerfileVersions preset, which is off unless it's listed here.
+    "custom.regex",
     "github-actions"
   ],
   "timezone": "Europe/Berlin",
@@ -199,8 +204,7 @@
       "semanticCommitScope": "deps"
     },
     {
-      // Node and Go build the image, Debian and distroless run it. The migrate CLI's version is an
-      // ARG, which Renovate doesn't read; Dockerfile keeps it in step with mise.toml.
+      // Node and Go build the image, Debian and distroless run it.
       "matchManagers": [
         "dockerfile"
       ],
@@ -216,6 +220,58 @@
         "patch"
       ],
       "groupName": "Docker base images (non-major)"
+    },
+    // The root Dockerfile builds with the versions of the development tools, so each of its copies
+    // joins the pull request of the original, majors included, and the image never builds with other
+    // versions than CI. These rules override the groups above, so they must come after them.
+    // mcpcompat's Node is deliberately older and stays out.
+    {
+      "matchFileNames": [
+        "mise.toml",
+        "Dockerfile"
+      ],
+      "matchDepNames": [
+        "node"
+      ],
+      "groupName": "Node",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "matchFileNames": [
+        "mise.toml",
+        "Dockerfile"
+      ],
+      "matchDepNames": [
+        "pnpm"
+      ],
+      "groupName": "pnpm",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "matchFileNames": [
+        "mise.toml",
+        "Dockerfile"
+      ],
+      "matchDepNames": [
+        "gomigrate"
+      ],
+      "groupName": "golang-migrate",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    },
+    {
+      // Joins the toolchain line of go.mod, grouped above.
+      "matchFileNames": [
+        "Dockerfile"
+      ],
+      "matchDepNames": [
+        "golang"
+      ],
+      "groupName": "Go toolchain",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
     },
     {
       "matchManagers": [

@@ -4,13 +4,19 @@
 #
 # The build stages run on the build platform and the Go compiler cross-compiles to the target, so a
 # multi-platform build doesn't run Go or Node under QEMU. Only the Debian setup does.
+#
+# The build uses the development tools' versions, and Renovate moves each copy in the same pull request
+# as the original (.github/renovate.jsonc): node, pnpm and the migrate CLI with mise.toml, golang with
+# the toolchain line of go.mod.
 
 # The web UI, which the Go binary embeds. Mirrors the dependencies of `task ui:build` (gen:api, i18n
 # and routes) and its build.
 FROM --platform=$BUILDPLATFORM node:26.13.1 AS ui
 WORKDIR /src/ui
-# Node 26 doesn't bundle pnpm, and the version is the one pinned in mise.toml.
-RUN npm install --global --no-audit --no-fund pnpm@12.21.0
+# Node 26 doesn't bundle pnpm.
+# renovate: datasource=npm depName=pnpm
+ARG PNPM_VERSION=12.21.0
+RUN npm install --global --no-audit --no-fund pnpm@${PNPM_VERSION}
 COPY ui/package.json ui/pnpm-lock.yaml ui/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY ui/ ./
@@ -33,8 +39,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     -ldflags "-s -w -X main.version=${VERSION}" -o /out/pkgsilo ./cmd/
 
 # The migrate CLI for the schema, with only the Postgres driver: about 6 MB instead of 59 MB.
-# Keep MIGRATE_VERSION in step with gomigrate in mise.toml; Renovate doesn't update ARG values.
 FROM --platform=$BUILDPLATFORM golang:1.27.4 AS migrate
+# renovate: datasource=github-releases depName=gomigrate packageName=golang-migrate/migrate extractVersion=^v(?<version>.+)$
 ARG MIGRATE_VERSION=4.20.1
 ARG TARGETOS TARGETARCH
 # A temporary module builds the CLI with go build, which cross-compiles and writes the binary where the
