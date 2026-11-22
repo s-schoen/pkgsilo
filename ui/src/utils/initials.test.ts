@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { initials } from "@/features/session/utils/initials.ts";
+import { initials } from "@/utils/initials.ts";
 
 describe("initials", () => {
   it.each([
