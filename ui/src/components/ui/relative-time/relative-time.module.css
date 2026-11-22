@@ -1,0 +1,14 @@
+/* Text like its surroundings, with a dotted line below that hints at the tooltip. */
+.time {
+  text-decoration: underline dotted var(--color-text-tertiary);
+  text-underline-offset: 0.2em;
+  cursor: default;
+  outline: none;
+  border-radius: var(--radius-sm);
+
+  /* stylelint-disable-next-line selector-pseudo-class-disallowed-list -- React Aria's Focusable sets no data attribute of the focus */
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+}
