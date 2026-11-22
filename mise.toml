@@ -2,7 +2,8 @@
 [settings]
 idiomatic_version_file_enable_tools = ["go"]
 
-# Exact versions, so that Renovate can update them (.github/renovate.jsonc).
+# Exact versions, so that Renovate can update them (.github/renovate.jsonc). The Dockerfile repeats
+# node, pnpm and gomigrate, and Renovate moves both copies together.
 [tools]
 golangci-lint = "2.15.0"
 gomigrate = "4.20.1"
