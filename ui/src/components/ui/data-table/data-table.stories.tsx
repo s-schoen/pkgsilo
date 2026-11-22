@@ -19,6 +19,7 @@ import { m } from "@/paraglide/messages.js";
 import type {
   DataTableBulkAction,
   DataTableColumnDef,
+  DataTableGroupingOption,
   DataTableProps,
 } from "@/components/ui/data-table";
 
@@ -29,6 +30,8 @@ type ApiKey = {
   name: string;
   status: Status;
   owner: string;
+  // The owner's id, where two owners share a name.
+  ownerId?: string;
   scopes: number;
   created: string;
 };
@@ -772,5 +775,300 @@ export const German = meta.story({
     await expect(
       canvas.getByRole("button", { name: m.dataTableDisplay({}, { locale: "de" }) }),
     ).toBeVisible();
+  },
+});
+
+// The keys by status, a status's group with its icon, and by owner, by the owners' names.
+const groupingOptions: Array<DataTableGroupingOption> = [
+  {
+    id: "status",
+    label: () => text.status,
+    formatValue: (value) => statusBadges[value as Status].label,
+    renderIcon: (value) => {
+      const Icon = statusBadges[value as Status].icon;
+      return <Icon aria-hidden />;
+    },
+  },
+  { id: "owner", label: () => text.owner },
+];
+
+function treeGrid(canvas: { getByRole: typeof screen.getByRole }) {
+  return canvas.getByRole("treegrid", { name: text.label });
+}
+
+// The groups' rows, the first level of the tree.
+function groupRows(canvas: { getByRole: typeof screen.getByRole }) {
+  return within(treeGrid(canvas))
+    .getAllByRole("row")
+    .filter((row) => row.getAttribute("aria-level") === "1");
+}
+
+function groupNames(canvas: { getByRole: typeof screen.getByRole }) {
+  return groupRows(canvas).map((row) => row.getAttribute("aria-label"));
+}
+
+function groupRow(canvas: { getByRole: typeof screen.getByRole }, name: string) {
+  return within(treeGrid(canvas)).getByRole("row", { name, expanded: true });
+}
+
+// Grouped by owner: a row for each owner, in the locale's order of their names, with the count of
+// its keys, and its keys below it.
+export const Grouped = meta.story({
+  args: { groupingOptions, grouping: "owner" },
+  play: async ({ canvas }) => {
+    await expect(rowNames(treeGrid(canvas))).toEqual([
+      "alice",
+      "deploy-staging",
+      "release-signing",
+      "bob",
+      "backup-mirror",
+      "ci-bot",
+      "ci-publish",
+      "legacy-uploader",
+    ]);
+    const alice = groupRow(canvas, "alice");
+    await expect(alice).toHaveAttribute("aria-expanded", "true");
+    await expect(within(alice).getByText("2")).toBeVisible();
+    await expect(canvas.getByRole("row", { name: "ci-publish" })).toHaveAttribute(
+      "aria-level",
+      "2",
+    );
+  },
+});
+
+// Group by in the Display popover groups the rows by a column, None ungroups them again.
+export const GroupAndUngroup = meta.story({
+  args: { groupingOptions },
+  play: async ({ canvas, userEvent }) => {
+    await expect(canvas.getByRole("grid", { name: text.label })).toBeVisible();
+
+    await userEvent.click(canvas.getByRole("button", { name: m.dataTableDisplay() }));
+    const dialog = await screen.findByRole("dialog", { name: m.dataTableDisplay() });
+    const groupBy = within(dialog).getByRole("button", { name: new RegExp(m.dataTableGroupBy()) });
+    await expect(groupBy).toHaveTextContent(m.dataTableGroupNone());
+    await userEvent.click(groupBy);
+    await userEvent.click(await screen.findByRole("option", { name: text.status }));
+
+    // The statuses by their labels.
+    await expect(groupNames(canvas)).toEqual([text.active, text.expired, text.revoked]);
+    await expect(within(groupRow(canvas, text.active)).getByText("3")).toBeVisible();
+
+    await userEvent.click(groupBy);
+    await userEvent.click(await screen.findByRole("option", { name: m.dataTableGroupNone() }));
+
+    await expect(rowNames(canvas.getByRole("grid", { name: text.label }))).toEqual(
+      keys.map((key) => key.name),
+    );
+  },
+});
+
+// With onGroupingChange, the page controls the grouping: Group by reports the choice.
+export const ControlledGrouping = meta.story({
+  args: { groupingOptions, grouping: "owner", onGroupingChange: fn() },
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: m.dataTableDisplay() }));
+    const dialog = await screen.findByRole("dialog", { name: m.dataTableDisplay() });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: new RegExp(m.dataTableGroupBy()) }),
+    );
+    await userEvent.click(await screen.findByRole("option", { name: m.dataTableGroupNone() }));
+
+    await expect(args.onGroupingChange).toHaveBeenCalledWith(undefined);
+    await expect(groupRow(canvas, "alice")).toBeVisible();
+  },
+});
+
+// A group's chevron collapses its rows, and expands them again.
+export const CollapseWithPointer = meta.story({
+  args: { groupingOptions, grouping: "status" },
+  play: async ({ canvas, userEvent }) => {
+    const active = groupRow(canvas, text.active);
+    await userEvent.click(within(active).getByRole("button"));
+
+    await expect(active).toHaveAttribute("aria-expanded", "false");
+    await expect(canvas.queryByRole("row", { name: "ci-publish" })).not.toBeInTheDocument();
+    await expect(canvas.getByRole("row", { name: "backup-mirror" })).toBeVisible();
+
+    await userEvent.click(within(active).getByRole("button"));
+
+    await expect(active).toHaveAttribute("aria-expanded", "true");
+    // The group's rows fade in.
+    await waitFor(async () => {
+      await expect(canvas.getByRole("row", { name: "ci-publish" })).toBeVisible();
+    });
+  },
+});
+
+// The keyboard: Left collapses a group and Right expands it, Enter toggles it, Down skips the rows
+// of a collapsed group, and Left on a row moves to its group.
+export const CollapseWithKeyboard = meta.story({
+  args: { groupingOptions, grouping: "status" },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("searchbox", { name: m.dataTableSearch() }));
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    const active = groupRow(canvas, text.active);
+    await expect(active).toHaveFocus();
+
+    await userEvent.keyboard("{ArrowLeft}");
+    await expect(active).toHaveAttribute("aria-expanded", "false");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect(groupRow(canvas, text.expired)).toHaveFocus();
+
+    await userEvent.keyboard("{ArrowUp}{ArrowRight}");
+    await expect(active).toHaveAttribute("aria-expanded", "true");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect(canvas.getByRole("row", { name: "ci-publish" })).toHaveFocus();
+
+    await userEvent.keyboard("{ArrowLeft}");
+    await expect(active).toHaveFocus();
+
+    await userEvent.keyboard("{Enter}");
+    await expect(active).toHaveAttribute("aria-expanded", "false");
+    await userEvent.keyboard("{Enter}");
+    await expect(active).toHaveAttribute("aria-expanded", "true");
+    await expect(navigate).not.toHaveBeenCalled();
+  },
+});
+
+// With onRowAction, Enter on a group still toggles it, and on a row opens the row.
+export const GroupsWithRowAction = meta.story({
+  args: { groupingOptions, grouping: "status", onRowAction: fn() },
+  play: async ({ args, canvas, userEvent }) => {
+    const expired = groupRow(canvas, text.expired);
+    await userEvent.click(expired);
+    await expect(expired).toHaveAttribute("aria-expanded", "false");
+    await userEvent.keyboard("{Enter}");
+    await expect(expired).toHaveAttribute("aria-expanded", "true");
+    await expect(args.onRowAction).not.toHaveBeenCalled();
+
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    await expect(args.onRowAction).toHaveBeenCalledWith(keys[2]);
+  },
+});
+
+// Groups in the page's own order (compareValues): the statuses that need attention first.
+export const CustomGroupOrder = meta.story({
+  args: {
+    grouping: "status",
+    groupingOptions: groupingOptions.map((option) =>
+      option.id === "status"
+        ? {
+            ...option,
+            compareValues: (left: unknown, right: unknown) => {
+              const rank: Record<string, number> = { revoked: 0, expired: 1, active: 2 };
+              return (rank[String(left)] ?? 0) - (rank[String(right)] ?? 0);
+            },
+          }
+        : option,
+    ),
+  },
+  play: async ({ canvas }) => {
+    await expect(groupNames(canvas)).toEqual([text.revoked, text.expired, text.active]);
+  },
+});
+
+// Two owners of the same name: the owner column groups by the owner's id (getGroupingValue), so
+// each keeps a group of its own.
+const ownerNames: Record<string, string> = { u1: "alice", u2: "bob", u3: "ci-bot", u4: "alice" };
+const ownerIds: Record<string, string> = { alice: "u1", bob: "u2", "ci-bot": "u3" };
+
+export const SameLabelsApart = meta.story({
+  args: {
+    rows: [
+      ...keys.map((key) => ({ ...key, ownerId: ownerIds[key.owner] })),
+      {
+        id: "k6",
+        name: "docs-preview",
+        status: "active",
+        owner: "alice",
+        ownerId: "u4",
+        scopes: 1,
+        created: "2026-11-21",
+      },
+    ],
+    columns: columns.map((column) =>
+      column.id === "owner" || ("accessorKey" in column && column.accessorKey === "owner")
+        ? { ...column, getGroupingValue: (key: ApiKey) => key.ownerId }
+        : column,
+    ),
+    groupingOptions: [
+      { id: "owner", label: () => text.owner, formatValue: (id) => ownerNames[String(id)] ?? "" },
+    ],
+    grouping: "owner",
+  },
+  play: async ({ canvas }) => {
+    const alices = groupRows(canvas).filter((row) => row.getAttribute("aria-label") === "alice");
+    await expect(alices).toHaveLength(2);
+    await expect(within(alices[0]).getByText("2")).toBeVisible();
+    await expect(within(alices[1]).getByText("1")).toBeVisible();
+  },
+});
+
+// Selection spans the groups: Shift+click selects across them, and Ctrl/Cmd+A selects the rows
+// of a collapsed group too; the groups take no part in it.
+export const SelectAcrossGroups = meta.story({
+  args: { ...selectable, groupingOptions, grouping: "owner" },
+  play: async ({ canvas, userEvent }) => {
+    await expect(within(groupRow(canvas, "alice")).queryByRole("checkbox")).not.toBeInTheDocument();
+
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "deploy-staging" })));
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.click(canvas.getByRole("row", { name: "backup-mirror" }));
+    await userEvent.keyboard("{/Shift}");
+    await expect(canvas.getByText(selectedCount(3))).toBeVisible();
+
+    // Enter toggles a group, which takes no part in the selection.
+    const ciBot = groupRow(canvas, "ci-bot");
+    await userEvent.click(within(ciBot).getByRole("button"));
+    await expect(ciBot).toHaveAttribute("aria-expanded", "false");
+    await expect(ciBot).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await expect(ciBot).toHaveAttribute("aria-expanded", "true");
+    await userEvent.keyboard("{Enter}");
+    await expect(ciBot).toHaveAttribute("aria-expanded", "false");
+    await expect(canvas.getByText(selectedCount(3))).toBeVisible();
+    await userEvent.click(canvas.getByRole("row", { name: "deploy-staging" }));
+    await userEvent.keyboard("{Control>}a{/Control}");
+    await expect(canvas.getByText(selectedCount(keys.length))).toBeVisible();
+
+    await userEvent.click(canvas.getByRole("button", { name: m.dataTableDelete() }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: m.dataTableDeleteTitle({ count: keys.length }),
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: m.cancel() }));
+    await waitFor(async () => {
+      await expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+  },
+});
+
+// In German: Group by and its None are messages, and the groups are ordered in the locale's
+// collation.
+export const GroupedGerman = meta.story({
+  args: { groupingOptions, grouping: "owner" },
+  globals: { locale: "de" },
+  play: async ({ canvas, userEvent }) => {
+    await expect(groupRow(canvas, "alice")).toBeVisible();
+    await userEvent.click(
+      canvas.getByRole("button", { name: m.dataTableDisplay({}, { locale: "de" }) }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: m.dataTableDisplay({}, { locale: "de" }),
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", {
+        name: new RegExp(m.dataTableGroupBy({}, { locale: "de" })),
+      }),
+    );
+    // The options' popover fades in.
+    const none = await screen.findByRole("option", {
+      name: m.dataTableGroupNone({}, { locale: "de" }),
+    });
+    await waitFor(async () => {
+      await expect(none).toBeVisible();
+    });
+    await userEvent.keyboard("{Escape}");
   },
 });

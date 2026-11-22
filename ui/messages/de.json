@@ -39,6 +39,8 @@
   "dataTableSearchFilters": "Filteroptionen durchsuchen",
   "dataTableFilterBy": "Filtern nach …",
   "dataTableDisplay": "Anzeige",
+  "dataTableGroupBy": "Gruppieren nach",
+  "dataTableGroupNone": "Keine",
   "dataTableOrderBy": "Sortieren nach",
   "dataTableOrderDefault": "Standard",
   "dataTableAscending": "Aufsteigend",

@@ -1,10 +1,14 @@
+import IconChevronRight from "@tabler/icons-react/icons/IconChevronRight";
 import { flexRender } from "@tanstack/react-table";
+import { Button } from "react-aria-components/Button";
 import { GridList, GridListItem } from "react-aria-components/GridList";
 import { Link } from "react-aria-components/Link";
+import { Tree, TreeItem, TreeItemContent } from "react-aria-components/Tree";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { useRoutePreload } from "@/hooks/use-route-preload.ts";
 
+import type { Group } from "@/components/ui/data-table/grouping.ts";
 import type { DataTableRow } from "@/components/ui/data-table/types.ts";
 import type { RowData } from "@tanstack/react-table";
 import type { MouseEvent, ReactNode, Ref } from "react";
@@ -82,6 +86,121 @@ export function Rows<TData extends RowData>({
   );
 }
 
+type GroupedRowsProps<TData extends RowData> = Omit<RowsProps<TData>, "rows"> & {
+  groups: Array<Group<DataTableRow<TData>>>;
+  // A group's icon from its value.
+  renderIcon?: (value: unknown) => ReactNode;
+  // The ids of the groups that are collapsed.
+  collapsedGroups: ReadonlySet<string>;
+  onCollapsedGroupsChange: (collapsed: Set<string>) => void;
+};
+
+// The rows in their groups, in React Aria's Tree: a group is a row that expands to its rows. A
+// GridList's section header can't take the focus, so it couldn't hold a toggle that the keyboard
+// reaches; a tree's row can. The arrow keys move between the groups and the rows: Right expands a
+// group and Left collapses it (from one of its rows, it moves to the group first), as Enter and
+// the group's chevron toggle it. A collapsed group's rows leave the tree, so the focus never lands
+// in one. The groups take no part in the selection, which spans the groups: Shift+click selects
+// across them, and Ctrl/Cmd+A selects the rows of collapsed groups too.
+export function GroupedRows<TData extends RowData>({
+  label,
+  groups,
+  renderIcon,
+  collapsedGroups,
+  onCollapsedGroupsChange,
+  getRowHref,
+  onRowAction,
+  isRowActive,
+  isSelectable,
+  selectedKeys,
+  onSelectionChange,
+  ref,
+}: GroupedRowsProps<TData>) {
+  const groupIds = groups.map((group) => group.id);
+  const byId = new Map(groups.flatMap((group) => group.rows.map((row) => [row.id, row])));
+
+  const toggle = (id: string) => {
+    const next = new Set(collapsedGroups);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    onCollapsedGroupsChange(next);
+  };
+
+  return (
+    <Tree
+      ref={ref}
+      aria-label={label}
+      className={styles.rows}
+      selectionMode={isSelectable ? "multiple" : "none"}
+      selectedKeys={selectedKeys}
+      onSelectionChange={onSelectionChange}
+      // The groups can't be selected, yet still take the focus and expand.
+      disabledKeys={groupIds}
+      disabledBehavior="selection"
+      expandedKeys={groupIds.filter((id) => !collapsedGroups.has(id))}
+      onExpandedChange={(expanded) => {
+        onCollapsedGroupsChange(new Set(groupIds.filter((id) => !expanded.has(id))));
+      }}
+      data-selecting={selectedKeys.size > 0 || undefined}
+      // Enter or a click on a group toggles it; on a row, it opens the row. Without a row action,
+      // the tree has none, so that a click on a row selects it (or follows its link). React Aria
+      // then toggles a group itself as long as nothing is selectable; else the group's own action
+      // does. Never both, which would toggle it twice.
+      onAction={
+        onRowAction &&
+        ((key) => {
+          const id = String(key);
+          const row = byId.get(id);
+          if (row) {
+            onRowAction(row.original);
+          } else {
+            toggle(id);
+          }
+        })
+      }
+    >
+      {groups.map((group) => (
+        <TreeItem
+          key={group.id}
+          id={group.id}
+          textValue={group.label}
+          className={styles.group}
+          onAction={
+            isSelectable && !onRowAction
+              ? () => {
+                  toggle(group.id);
+                }
+              : undefined
+          }
+        >
+          <TreeItemContent>
+            {/* The chevron's name, Expand or Collapse, is React Aria's. */}
+            <Button slot="chevron" className={styles.groupChevron}>
+              <IconChevronRight aria-hidden />
+            </Button>
+            {renderIcon && <span className={styles.groupIcon}>{renderIcon(group.value)}</span>}
+            <span className={styles.groupLabel}>{group.label}</span>
+            <span className={styles.groupCount}>{group.rows.length}</span>
+          </TreeItemContent>
+          {group.rows.map((row) => (
+            <TreeRow
+              key={row.id}
+              row={row}
+              href={getRowHref?.(row.original)}
+              onRowAction={onRowAction}
+              isActive={isRowActive?.(row.original) ?? false}
+              isSelectable={isSelectable}
+            />
+          ))}
+        </TreeItem>
+      ))}
+    </Tree>
+  );
+}
+
 type RowProps<TData extends RowData> = {
   row: DataTableRow<TData>;
   href: Href | undefined;
@@ -90,13 +209,65 @@ type RowProps<TData extends RowData> = {
   isSelectable: boolean;
 };
 
+// What typeahead matches and a screen reader announces of a row: its title's value.
+function rowText<TData extends RowData>(row: DataTableRow<TData>): string {
+  const titleCell = row
+    .getVisibleCells()
+    .find((cell) => cell.column.columnDef.meta?.placement === "title");
+  const value = titleCell?.getValue();
+  return typeof value === "string" || typeof value === "number" ? String(value) : row.id;
+}
+
+// The attributes of a row's item that its styles read.
+function rowAttributes<TData extends RowData>({ isActive, href, onRowAction }: RowProps<TData>) {
+  return {
+    "data-active": isActive || undefined,
+    "data-actionable": Boolean(onRowAction ?? href) || undefined,
+  };
+}
+
+// A row in the GridList.
+function Row<TData extends RowData>(props: RowProps<TData>) {
+  const { row, href, onRowAction } = props;
+
+  return (
+    <GridListItem
+      id={row.id}
+      textValue={rowText(row)}
+      href={onRowAction ? undefined : href}
+      className={styles.row}
+      {...rowAttributes(props)}
+    >
+      <RowContent {...props} />
+    </GridListItem>
+  );
+}
+
+// A row in a group of the Tree.
+function TreeRow<TData extends RowData>(props: RowProps<TData>) {
+  const { row, href, onRowAction } = props;
+
+  return (
+    <TreeItem
+      id={row.id}
+      textValue={rowText(row)}
+      href={onRowAction ? undefined : href}
+      className={styles.row}
+      {...rowAttributes(props)}
+    >
+      <TreeItemContent>
+        <RowContent {...props} />
+      </TreeItemContent>
+    </TreeItem>
+  );
+}
+
 // A row as Plane's list shows it: its selection box, the leading cells, the title, and the
 // property chips at the end, which wrap below the title when the row is too narrow for them.
-function Row<TData extends RowData>({
+function RowContent<TData extends RowData>({
   row,
   href,
   onRowAction,
-  isActive,
   isSelectable,
 }: RowProps<TData>) {
   const cells = row.getVisibleCells();
@@ -106,23 +277,10 @@ function Row<TData extends RowData>({
   const title = titleCell
     ? flexRender(titleCell.column.columnDef.cell, titleCell.getContext())
     : null;
-  const titleValue = titleCell?.getValue();
   const properties = cellsAt("property");
 
   return (
-    <GridListItem
-      id={row.id}
-      // What typeahead matches and a screen reader announces: the title's value.
-      textValue={
-        typeof titleValue === "string" || typeof titleValue === "number"
-          ? String(titleValue)
-          : row.id
-      }
-      href={onRowAction ? undefined : href}
-      className={styles.row}
-      data-active={isActive || undefined}
-      data-actionable={Boolean(onRowAction ?? href) || undefined}
-    >
+    <>
       {isSelectable && (
         <span className={styles.selection}>
           <Checkbox slot="selection" />
@@ -151,7 +309,7 @@ function Row<TData extends RowData>({
           ))}
         </span>
       )}
-    </GridListItem>
+    </>
   );
 }
 

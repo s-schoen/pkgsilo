@@ -39,6 +39,8 @@
   "dataTableSearchFilters": "Search filter options",
   "dataTableFilterBy": "Filter by…",
   "dataTableDisplay": "Display",
+  "dataTableGroupBy": "Group by",
+  "dataTableGroupNone": "None",
   "dataTableOrderBy": "Order by",
   "dataTableOrderDefault": "Default",
   "dataTableAscending": "Ascending",

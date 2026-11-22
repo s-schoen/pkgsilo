@@ -7,6 +7,7 @@ export type {
   DataTableColumnDef,
   DataTableColumnMeta,
   DataTableFilterState,
+  DataTableGroupingOption,
   DataTableOption,
   DataTablePlacement,
   DataTableRow,

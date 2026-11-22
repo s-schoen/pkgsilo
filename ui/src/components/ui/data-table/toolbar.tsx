@@ -9,6 +9,7 @@ import { m } from "@/paraglide/messages.js";
 
 import type {
   DataTableColumn,
+  DataTableGroupingOption,
   DataTableOption,
   DataTableTable,
 } from "@/components/ui/data-table/types.ts";
@@ -21,11 +22,20 @@ type ToolbarProps<TData extends RowData> = {
   table: DataTableTable<TData>;
   // The part for the selected rows, while there are any.
   selectionBar?: ReactNode;
+  groupingOptions: Array<DataTableGroupingOption>;
+  grouping: string | undefined;
+  onGroupingChange: (grouping: string | undefined) => void;
 };
 
 // The bar above the rows, which sticks to the top of the window: the search, a chip for each
 // active filter, the selected rows' actions, and the Filters and Display popovers.
-export function Toolbar<TData extends RowData>({ table, selectionBar }: ToolbarProps<TData>) {
+export function Toolbar<TData extends RowData>({
+  table,
+  selectionBar,
+  groupingOptions,
+  grouping,
+  onGroupingChange,
+}: ToolbarProps<TData>) {
   const searchRef = useRef<HTMLInputElement>(null);
   const filterColumns = table
     .getAllColumns()
@@ -48,7 +58,12 @@ export function Toolbar<TData extends RowData>({ table, selectionBar }: ToolbarP
       <div className={styles.actions}>
         {selectionBar}
         {filterColumns.length > 0 && <FiltersPopover table={table} columns={filterColumns} />}
-        <DisplayPopover table={table} />
+        <DisplayPopover
+          table={table}
+          groupingOptions={groupingOptions}
+          grouping={grouping}
+          onGroupingChange={onGroupingChange}
+        />
       </div>
     </div>
   );
