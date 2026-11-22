@@ -268,7 +268,8 @@ function TreeRow<TData extends RowData>(props: RowProps<TData>) {
 }
 
 // A row as Plane's list shows it: its selection box, the leading cells, the title, and the
-// property chips at the end, which wrap below the title when the row is too narrow for them. A
+// property chips at the end, which wrap below the title when the row is too narrow for them, for
+// the properties that have a value. A
 // chip of a column with a label previews it on hover or focus (property-preview.tsx); Right and
 // Left move to it from the row, in the Tree's rows too, since a row without children of the tree
 // leaves those keys to its own focusable elements.
@@ -285,7 +286,11 @@ function RowContent<TData extends RowData>({
   const title = titleCell
     ? flexRender(titleCell.column.columnDef.cell, titleCell.getContext())
     : null;
-  const properties = cellsAt("property");
+  // A property whose value is missing, as a field that the API leaves out, shows no chip: an empty
+  // one would still take the focus. A column without an accessor renders what its cell says.
+  const properties = cellsAt("property").filter(
+    (cell) => cell.column.accessorFn === undefined || cell.getValue() != null,
+  );
 
   return (
     <>
