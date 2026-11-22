@@ -1,5 +1,5 @@
 // Keeps the Go modules, the web UI's pnpm dependencies, the MCP SDK of the compatibility test, the
-// mise.toml tools and the GitHub Actions up to date. Pull requests
+// mise.toml tools, the Dockerfiles' base images and the GitHub Actions up to date. Pull requests
 // for vulnerable dependencies are opened at once; everything else waits for the weekly schedule
 // and for its release to be 3 days old. Minor and patch updates of 1.0+ dependencies are merged
 // by Renovate once CI is green.
@@ -17,6 +17,8 @@
     // app/testdata/mcpcompat, whose package-lock.json it updates with npm.
     "npm",
     "mise",
+    // The base images of the root Dockerfile and of app/testdata/mcpcompat's.
+    "dockerfile",
     "github-actions"
   ],
   "timezone": "Europe/Berlin",
@@ -195,6 +197,25 @@
       ],
       "semanticCommitType": "chore",
       "semanticCommitScope": "deps"
+    },
+    {
+      // Node and Go build the image, Debian and distroless run it. The migrate CLI's version is an
+      // ARG, which Renovate doesn't read; Dockerfile keeps it in step with mise.toml.
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "semanticCommitType": "ci",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Docker base images (non-major)"
     },
     {
       "matchManagers": [

@@ -1,0 +1,24 @@
+# The context of the Dockerfile's Go stage is the repository, so keep it small and free of the host's
+# local and generated files. The UI stage generates src/api/gen, src/paraglide and routeTree.gen.ts
+# itself; ui/dist comes from the UI stage, not from the context.
+.git
+.github
+.actrc
+.claude
+.vscode
+.idea
+.scratch
+.env
+build
+docs
+test
+ui/node_modules
+ui/dist
+ui/build
+ui/.tanstack
+ui/src/api/gen
+ui/src/paraglide
+ui/src/app/routeTree.gen.ts
+.task
+.rumdl_cache
+.playwright-mcp
