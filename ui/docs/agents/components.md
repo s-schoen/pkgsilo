@@ -26,10 +26,13 @@ How to build a component of the UI library, style it with a CSS module and the t
 | Navigation                                        | `link`, `tabs` (a `Tab` with `href`)                          |
 | The links between the app's pages                 | `nav-list` (`NavList`, `NavItem`)                             |
 | Text input                                        | `text-field` (`TextField`, `TextArea`)                        |
+| A search, in a form or a toolbar                  | `search-field` (`variant="bare"` in a toolbar)                |
 | One of a few options                              | `select`                                                      |
 | One of many options, by typing                    | `combo-box`                                                   |
 | A yes or no that a form submits                   | `checkbox`                                                    |
 | A setting that applies at once                    | `switch`                                                      |
+| Options that show or hide something, any of them  | `toggle-button` (`ToggleButton`, `ToggleButtonGroup`)         |
+| Filters to check, out of many, by searching       | `filter-list` (`FilterList`, `FilterListSection`)             |
 | Actions of a row or a toolbar                     | `menu`                                                        |
 | The name of an icon-only button                   | `tooltip`                                                     |
 | A task that interrupts the page                   | `modal`                                                       |

@@ -1,0 +1,131 @@
+/* The search above a line, then the options, which scroll on their own so that the search stays in
+   view. */
+.filterList {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.search {
+  padding-block-end: var(--space-1);
+  padding-inline: var(--space-2);
+  margin-block-end: var(--space-1);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  max-block-size: var(--size-filter-list-max);
+  /* stylelint-disable-next-line property-layout-mappings -- Vite's target browsers lack overflow-block. */
+  overflow-y: auto;
+  outline: none;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding-block: var(--space-2) var(--space-1);
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+}
+
+/* A row that the pointer or the keyboard's (virtual) focus highlights; React Aria sets
+   data-focused for both. */
+.item {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: center;
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  cursor: pointer;
+  outline: none;
+  border-radius: var(--radius-sm);
+
+  &[data-focused] {
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+  }
+}
+
+/* The box of a checkbox, filled with the accent while the option is checked. */
+.box {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--size-checkbox);
+  block-size: var(--size-checkbox);
+  color: var(--color-on-accent);
+  background: transparent;
+  border: var(--border-width) solid var(--color-border-check);
+  border-radius: var(--radius-sm);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-fast);
+  transition-property: background-color, border-color;
+
+  .item[data-selected] & {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+
+  .item[data-disabled] & {
+    border-color: var(--color-text-disabled);
+  }
+
+  .item[data-disabled][data-selected] & {
+    background: var(--color-text-disabled);
+  }
+}
+
+.check {
+  visibility: hidden;
+  inline-size: 0.85em;
+  block-size: 0.85em;
+  stroke-width: 3;
+
+  .item[data-selected] & {
+    visibility: visible;
+  }
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+  color: var(--color-text-secondary);
+
+  .item[data-disabled] & {
+    color: inherit;
+  }
+}
+
+.label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding-block: var(--space-2);
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}

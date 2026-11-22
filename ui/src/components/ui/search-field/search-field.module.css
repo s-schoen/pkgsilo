@@ -1,0 +1,136 @@
+/* The icon, the input and the clear button in a row. The field look puts them in a field's box:
+   its border turns strong when hovered, and the accent with a soft ring while the input is focused,
+   the danger color while invalid. The bare look has no box: only the text and the icons show, as
+   the search of a toolbar. React Aria sets the states on the group. */
+.group {
+  display: flex;
+  gap: var(--control-gap-md);
+  align-items: center;
+  inline-size: 100%;
+  block-size: var(--control-height-md);
+  color: var(--color-text);
+  outline: var(--focus-ring-width) solid transparent;
+  outline-offset: 0;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-control);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color, border-color, outline-color;
+
+  &[data-disabled] {
+    color: var(--color-text-disabled);
+    cursor: not-allowed;
+  }
+}
+
+.field {
+  padding-inline: var(--control-inset-md) var(--space-1);
+  background: var(--color-layer-2);
+  border-color: var(--color-border-field);
+
+  &[data-hovered] {
+    background: var(--color-layer-2-hovered);
+    border-color: var(--color-border-strong);
+  }
+
+  &[data-focus-within] {
+    outline-color: var(--color-focus-ring-field);
+    background: var(--color-layer-2);
+    border-color: var(--color-border-accent);
+  }
+
+  &[data-invalid] {
+    border-color: var(--color-border-danger);
+  }
+
+  &[data-invalid][data-focus-within] {
+    outline-color: var(--color-focus-ring-danger);
+  }
+
+  &[data-disabled] {
+    background: var(--color-layer-2);
+    border-color: var(--color-border-field);
+  }
+}
+
+/* No inline padding, so the icon lines up with the content that the parent lays out around it. */
+.bare {
+  padding-inline: 0;
+  background: transparent;
+}
+
+.searchIcon {
+  flex-shrink: 0;
+  inline-size: 1.2em;
+  block-size: 1.2em;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-placeholder);
+
+  .group[data-disabled] & {
+    color: inherit;
+  }
+}
+
+.input {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 100%;
+  padding: 0;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  color: inherit;
+  caret-color: var(--color-accent);
+  outline: none;
+  background: transparent;
+  border: none;
+
+  &::placeholder {
+    color: var(--color-text-placeholder);
+  }
+
+  /* The browser's own clear button of a search input; the field has its own. */
+  &::-webkit-search-cancel-button {
+    appearance: none;
+  }
+
+  &[data-disabled] {
+    cursor: not-allowed;
+  }
+}
+
+/* A small ghost square for the pointer, hidden while there's nothing to clear; it keeps its place,
+   so that the input doesn't change its width. */
+.clear {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--control-height-sm);
+  block-size: var(--control-height-sm);
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+
+  &[data-hovered] {
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  &[data-pressed] {
+    background: var(--color-layer-transparent-pressed);
+  }
+
+  .searchField[data-empty] &,
+  .searchField[data-disabled] & {
+    visibility: hidden;
+  }
+}
+
+.clearIcon {
+  inline-size: 1.2em;
+  block-size: 1.2em;
+}
