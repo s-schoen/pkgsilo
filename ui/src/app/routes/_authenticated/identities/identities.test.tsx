@@ -230,6 +230,40 @@ describe("/identities", () => {
     expect(unknownGroup).toHaveTextContent(m.identityUnknown());
   });
 
+  it("groups the creators it can't know as one unknown creator", async () => {
+    // One creator it can't read, another, and a createdBy it can't read.
+    const unknownCreators: Array<IdentityResponse> = [
+      hidden,
+      {
+        id: "00000000-0000-4000-8000-000000000005",
+        createdBy: "00000000-0000-4000-8000-000000000098",
+      },
+      { id: "00000000-0000-4000-8000-000000000006" },
+    ];
+    server.use(
+      ...signedIn(),
+      getListIdentitiesMockHandler({
+        data: [ada, ...unknownCreators],
+        pagination: { offset: 0, limit: 100, nextOffset: null },
+      }),
+    );
+    renderRoute("/identities?group=createdBy");
+
+    const tree = await screen.findByRole("treegrid", { name: m.identities() });
+    const groupRows = () =>
+      within(tree)
+        .getAllByRole("row")
+        .filter((row) => !row.hasAttribute("data-row-id"));
+    await waitFor(() => {
+      expect(groupRows()).toHaveLength(2);
+    });
+    const [pkgsiloGroup, unknownGroup] = groupRows() as [HTMLElement, HTMLElement];
+    expect(pkgsiloGroup).toHaveTextContent("pkgsilo");
+    expect(unknownGroup).toHaveTextContent(m.identityUnknown());
+    // The group's count.
+    expect(within(unknownGroup).getByText(String(unknownCreators.length))).toBeInTheDocument();
+  });
+
   it("deletes an identity and says so in a toast", async () => {
     const requested: Array<string> = [];
     server.use(...signedIn(), listIdentities(), deleteIdentities(requested));
