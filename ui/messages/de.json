@@ -85,5 +85,7 @@
   "identityYou": "Du",
   "identityUnknown": "Unbekannte Identität",
   "identityUpdatedBy": "Aktualisiert von",
-  "propertyEmpty": "Keine Angabe"
+  "propertyEmpty": "Keine Angabe",
+  "inlineEditLabel": "{label} bearbeiten",
+  "inlineEditSaving": "Wird gespeichert"
 }

@@ -85,5 +85,7 @@
   "identityYou": "You",
   "identityUnknown": "Unknown identity",
   "identityUpdatedBy": "Updated by",
-  "propertyEmpty": "None"
+  "propertyEmpty": "None",
+  "inlineEditLabel": "Edit {label}",
+  "inlineEditSaving": "Saving"
 }

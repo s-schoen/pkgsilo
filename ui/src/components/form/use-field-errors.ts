@@ -13,9 +13,14 @@ export function useFieldErrors(): { isInvalid: boolean; errorMessage: string | u
 
   return {
     isInvalid,
-    // Validators of several events (onChange, onSubmit) may report the same error.
-    errorMessage: isInvalid ? [...new Set(errors.map(errorMessage))].join(" ") : undefined,
+    errorMessage: isInvalid ? joinErrors(errors) : undefined,
   };
+}
+
+// The messages of a field's errors, as one text. Validators of several events (onChange, onSubmit)
+// may report the same error.
+export function joinErrors(errors: ReadonlyArray<unknown>): string {
+  return [...new Set(errors.map(errorMessage))].join(" ");
 }
 
 // A validator returns its errors as it likes: a schema's validator (such as zod's) an issue with a
