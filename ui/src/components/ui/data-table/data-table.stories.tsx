@@ -100,6 +100,49 @@ const statusBadges = {
   revoked: { variant: "danger", label: text.revoked, icon: IconCircleX },
 } as const;
 
+// The owners' identities, as an owner's preview card shows them.
+const owners: Partial<Record<string, { displayName: string }>> = {
+  alice: { displayName: "Alice Liddell" },
+  bob: { displayName: "Bob Marley" },
+  "ci-bot": { displayName: "CI Bot" },
+};
+
+// An owner's card: their picture, or their initials while they have none, their display name and
+// their username.
+function OwnerCard({ username }: { username: string }) {
+  const displayName = owners[username]?.displayName ?? username;
+  const initials = displayName
+    .split(" ")
+    .map((part) => part.at(0)?.toUpperCase())
+    .join("")
+    .slice(0, 2);
+
+  return (
+    <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+      <span
+        aria-hidden
+        style={{
+          display: "grid",
+          placeItems: "center",
+          inlineSize: "var(--control-height-md)",
+          blockSize: "var(--control-height-md)",
+          fontSize: "var(--font-size-xs)",
+          fontWeight: "var(--font-weight-semibold)",
+          color: "var(--color-text-secondary)",
+          background: "var(--color-layer-3)",
+          borderRadius: "var(--radius-full)",
+        }}
+      >
+        {initials}
+      </span>
+      <span style={{ display: "flex", flexDirection: "column" }}>
+        <strong>{displayName}</strong>
+        <span style={{ color: "var(--color-text-tertiary)" }}>{username}</span>
+      </span>
+    </div>
+  );
+}
+
 // Keeps a row whose value is one of the checked options.
 function includesValue(values: Array<string>, value: unknown) {
   return values.includes(String(value));
@@ -153,6 +196,13 @@ const columns: Array<DataTableColumnDef<ApiKey>> = [
         {row.original.owner}
       </Badge>
     ),
+    // The owner's card shows their identity, and a click on the chip opens it.
+    preview: {
+      content: (key) => <OwnerCard username={key.owner} />,
+      // No route shows an identity yet: the cast stands in for a route such as
+      // /identities/$username.
+      href: (key) => `/identities/${key.owner}` as Href,
+    },
   },
   {
     accessorKey: "scopes",
@@ -390,6 +440,83 @@ export const RowAction = meta.story({
 
     await userEvent.keyboard("{ArrowLeft}{ArrowDown}{Enter}");
     await expect(args.onRowAction).toHaveBeenLastCalledWith(keys[3]);
+  },
+});
+
+// A property chip names its column in a card while the pointer rests on it; a screen reader reads
+// the column's name with the chip.
+export const PropertyPreviewOnHover = meta.story({
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    const row = canvas.getByRole("row", { name: "ci-publish" });
+    const scopes = within(row).getByRole("button", { name: `${text.scopes}: 3` });
+    // React Aria opens a preview on hover only while the pointer is the user's last input.
+    await userEvent.click(canvasElement);
+
+    await userEvent.hover(scopes);
+
+    const card = await screen.findByRole("dialog", { name: text.scopes }, { timeout: 2000 });
+    await expect(card).toHaveTextContent(text.scopes);
+
+    await userEvent.unhover(scopes);
+    await userEvent.pointer({
+      target: document.body,
+      coords: { clientX: window.innerWidth - 1, clientY: window.innerHeight - 1 },
+    });
+    await waitFor(async () => {
+      await expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  },
+});
+
+// A column's preview adds its own content to the card, as the owner's identity, and a link of its
+// own: a click on the owner's chip opens the owner, not the row.
+export const PropertyPreviewWithContent = meta.story({
+  args: { onRowAction: fn() },
+  play: async ({ args, canvas, canvasElement, userEvent }) => {
+    const row = canvas.getByRole("row", { name: "ci-publish" });
+    const owner = within(row).getByRole("link", { name: `${text.owner}: ci-bot` });
+    await userEvent.click(canvasElement);
+
+    await userEvent.hover(owner);
+
+    const card = await screen.findByRole("dialog", { name: text.owner }, { timeout: 2000 });
+    await expect(card).toHaveTextContent("CI Bot");
+
+    await userEvent.click(owner);
+
+    await expect(navigate).toHaveBeenCalledWith("/identities/ci-bot", undefined);
+    await expect(args.onRowAction).not.toHaveBeenCalled();
+  },
+});
+
+// The arrow keys reach the chips from the row; the focus opens a chip's card after the same delay
+// as the pointer, Escape closes it, and Enter on a chip without a link of its own opens the row.
+export const PropertyPreviewWithKeyboard = meta.story({
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("searchbox", { name: m.dataTableSearch() }));
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    const row = canvas.getByRole("row", { name: "ci-publish" });
+    await expect(row).toHaveFocus();
+
+    await userEvent.keyboard("{ArrowRight}{ArrowRight}");
+    const status = within(row).getByRole("button", { name: `${text.status}: ${text.active}` });
+    await expect(status).toHaveFocus();
+    const card = await screen.findByRole("dialog", { name: text.status }, { timeout: 2000 });
+    // It enters with a transition, from opacity 0.
+    await waitFor(async () => {
+      await expect(card).toBeVisible();
+    });
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(async () => {
+      await expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    await expect(status).toHaveFocus();
+
+    await userEvent.keyboard("{Enter}");
+    await expect(navigate).toHaveBeenCalledWith("/keys/k1", undefined);
   },
 });
 
@@ -833,6 +960,26 @@ export const Grouped = meta.story({
       "aria-level",
       "2",
     );
+  },
+});
+
+// In groups, Right moves from a row to its chips too, and a chip's card opens.
+export const PropertyPreviewInGroups = meta.story({
+  args: { groupingOptions, grouping: "status" },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("searchbox", { name: m.dataTableSearch() }));
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.keyboard("{ArrowDown}");
+    const row = canvas.getByRole("row", { name: "ci-publish" });
+    await expect(row).toHaveFocus();
+
+    await userEvent.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}");
+    await expect(within(row).getByRole("link", { name: `${text.owner}: ci-bot` })).toHaveFocus();
+    await expect(
+      await screen.findByRole("dialog", { name: text.owner }, { timeout: 2000 }),
+    ).toHaveTextContent("CI Bot");
   },
 });
 

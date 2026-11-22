@@ -24,13 +24,13 @@ import { m } from "@/paraglide/messages.js";
 import { getLocale } from "@/paraglide/runtime.js";
 
 import type { RowMenuItems } from "@/components/ui/data-table/row-menu-items.ts";
-import type { Href } from "@/components/ui/data-table/rows.tsx";
 import type {
   DataTableBulkAction,
   DataTableColumnDef,
   DataTableFeatures,
   DataTableFilterState,
   DataTableGroupingOption,
+  Href,
 } from "@/components/ui/data-table/types.ts";
 import type { ContextMenuPoint } from "@/components/ui/menu";
 import type {

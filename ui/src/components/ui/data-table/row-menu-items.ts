@@ -1,8 +1,7 @@
 import { applicableActions } from "@/components/ui/data-table/bulk-actions.ts";
 
 import type { ApplicableAction } from "@/components/ui/data-table/bulk-actions.ts";
-import type { Href } from "@/components/ui/data-table/rows.tsx";
-import type { DataTableBulkAction } from "@/components/ui/data-table/types.ts";
+import type { DataTableBulkAction, Href } from "@/components/ui/data-table/types.ts";
 import type { RowData } from "@tanstack/react-table";
 
 // What a row's context menu offers for the rows it acts on.
