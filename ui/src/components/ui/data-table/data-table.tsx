@@ -1,0 +1,179 @@
+import { functionalUpdate, useTable } from "@tanstack/react-table";
+import { useTanStackTableDevtools } from "@tanstack/react-table-devtools";
+import { useMemo, useState } from "react";
+
+import {
+  EMPTY_FILTER_STATE,
+  filterVariants,
+  fromColumnFilters,
+  hasActiveFilters,
+  isSameFilterState,
+  toColumnFilters,
+} from "@/components/ui/data-table/filter-state.ts";
+import { Rows } from "@/components/ui/data-table/rows.tsx";
+import { LoadingRows, NoMatches, NothingYet } from "@/components/ui/data-table/states.tsx";
+import { Toolbar } from "@/components/ui/data-table/toolbar.tsx";
+import { dataTableFeatures } from "@/components/ui/data-table/types.ts";
+
+import type { Href } from "@/components/ui/data-table/rows.tsx";
+import type {
+  DataTableColumnDef,
+  DataTableFeatures,
+  DataTableFilterState,
+} from "@/components/ui/data-table/types.ts";
+import type { ColumnVisibilityState, RowData, SortingState } from "@tanstack/react-table";
+import type { ReactNode } from "react";
+
+import styles from "@/components/ui/data-table/data-table.module.css";
+
+const noSorting: SortingState = [];
+const allVisible: ColumnVisibilityState = {};
+
+export type DataTableProps<TData extends RowData> = {
+  // The name of the list, as a screen reader announces it: a message.
+  label: string;
+  // The columns, which place their cells in the row (meta.placement) and filter, sort or hide.
+  // Keep them stable, as a constant of the module.
+  columns: Array<DataTableColumnDef<TData>>;
+  // Every row, as useLiveQuery returns them: the table filters and sorts them itself.
+  rows: Array<TData>;
+  // While the rows load: the table shows placeholders.
+  isLoading?: boolean;
+  // The row's id, which keeps its focus (and its selection) while the rows change.
+  getRowId: (row: TData) => string;
+  // Makes the row's title a link to this route, which also opens in a new tab.
+  getRowHref?: (row: TData) => Href;
+  // Opens the row on a click or Enter, as a peek: instead of following getRowHref.
+  onRowAction?: (row: TData) => void;
+  // Tints the row that's open, as the one of a peek.
+  isRowActive?: (row: TData) => boolean;
+  // The order the rows start in; sorting with onSortingChange controls it instead.
+  initialSorting?: SortingState;
+  sorting?: SortingState;
+  onSortingChange?: (sorting: SortingState) => void;
+  // The properties hidden at first, as { owner: false }.
+  initialColumnVisibility?: ColumnVisibilityState;
+  // The search and the filters; filterState with onFilterStateChange controls them, else they
+  // start at defaultFilterState.
+  filterState?: DataTableFilterState;
+  onFilterStateChange?: (state: DataTableFilterState) => void;
+  // The filters the page opens with, when they define what it lists: rows that none of them match
+  // show emptyState, and Clear filters goes back to them.
+  defaultFilterState?: DataTableFilterState;
+  // What the table shows without rows; a line with an icon by default.
+  emptyState?: ReactNode;
+};
+
+// A page's list, as Plane's: a toolbar with the search, a chip for each filter, and the Filters and
+// Display popovers, then a row for each item, with its leading icon, its title and its properties.
+// TanStack Table holds the rows and every state (the search, the filters, the order, the shown
+// properties); React Aria's GridList renders the rows. It fills its page from edge to edge, as
+// AppLayout's page frame leaves room for, and its toolbar sticks to the top of the window.
+export function DataTable<TData extends RowData>({
+  label,
+  columns,
+  rows,
+  isLoading = false,
+  getRowId,
+  getRowHref,
+  onRowAction,
+  isRowActive,
+  initialSorting = noSorting,
+  sorting: controlledSorting,
+  onSortingChange,
+  initialColumnVisibility = allVisible,
+  filterState: controlledFilterState,
+  onFilterStateChange,
+  defaultFilterState = EMPTY_FILTER_STATE,
+  emptyState,
+}: DataTableProps<TData>) {
+  const [localSorting, setLocalSorting] = useState(initialSorting);
+  const [localFilterState, setLocalFilterState] = useState(defaultFilterState);
+  const [columnVisibility, setColumnVisibility] = useState(initialColumnVisibility);
+
+  const sorting = controlledSorting ?? localSorting;
+  const filterState = controlledFilterState ?? localFilterState;
+  const variants = useMemo(() => filterVariants(columns), [columns]);
+  const columnFilters = useMemo(() => toColumnFilters(filterState), [filterState]);
+
+  const changeFilterState = (next: DataTableFilterState) => {
+    if (controlledFilterState === undefined) {
+      setLocalFilterState(next);
+    }
+    onFilterStateChange?.(next);
+  };
+
+  const table = useTable<DataTableFeatures, TData>({
+    key: label,
+    features: dataTableFeatures,
+    data: rows,
+    columns,
+    getRowId: (row) => getRowId(row),
+    state: {
+      sorting,
+      columnVisibility,
+      globalFilter: filterState.globalFilter,
+      columnFilters,
+    },
+    onSortingChange: (updater) => {
+      const next = functionalUpdate(updater, sorting);
+      if (controlledSorting === undefined) {
+        setLocalSorting(next);
+      }
+      onSortingChange?.(next);
+    },
+    onColumnVisibilityChange: setColumnVisibility,
+    onGlobalFilterChange: (updater) => {
+      const next: unknown = functionalUpdate(updater, filterState.globalFilter);
+      changeFilterState({ ...filterState, globalFilter: typeof next === "string" ? next : "" });
+    },
+    onColumnFiltersChange: (updater) => {
+      changeFilterState(
+        fromColumnFilters(filterState, functionalUpdate(updater, columnFilters), variants),
+      );
+    },
+    globalFilterFn: "includesString",
+  });
+  useTanStackTableDevtools(table);
+
+  const visibleRows = table.getRowModel().rows;
+
+  function body() {
+    if (isLoading) {
+      return <LoadingRows label={label} />;
+    }
+    if (visibleRows.length > 0) {
+      return (
+        <Rows
+          label={label}
+          rows={visibleRows}
+          getRowHref={getRowHref}
+          onRowAction={onRowAction}
+          isRowActive={isRowActive}
+        />
+      );
+    }
+    // The filters hide every row, unless they are the page's own: then the page has nothing.
+    const isFiltered =
+      rows.length > 0 &&
+      hasActiveFilters(filterState) &&
+      !isSameFilterState(filterState, defaultFilterState);
+    if (isFiltered) {
+      return (
+        <NoMatches
+          onClear={() => {
+            changeFilterState(defaultFilterState);
+          }}
+        />
+      );
+    }
+    return emptyState ?? <NothingYet />;
+  }
+
+  return (
+    <div className={styles.dataTable}>
+      <Toolbar table={table} />
+      {body()}
+    </div>
+  );
+}

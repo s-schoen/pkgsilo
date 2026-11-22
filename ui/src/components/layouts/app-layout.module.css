@@ -112,9 +112,13 @@
   border-block-start: var(--border-width) solid var(--color-border-subtle);
 }
 
+/* The page's padding is --app-layout-page-inset, so that a part of the page can reach the frame's
+   edges, as a data table's rows do. */
 .main {
+  --app-layout-page-inset: var(--space-5);
+
   min-inline-size: 0;
-  padding: var(--space-5);
+  padding: var(--app-layout-page-inset);
   margin-block-end: var(--space-2);
   margin-inline: var(--space-2);
   background: var(--color-surface-1);

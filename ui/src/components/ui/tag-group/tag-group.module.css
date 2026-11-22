@@ -1,0 +1,98 @@
+/* A row of tags that wraps; each tag is a property chip (as the badge's property variant) that the
+   keyboard can focus, with a button at its end that removes it. */
+.tagGroup {
+  display: flex;
+  min-inline-size: 0;
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+  min-inline-size: 0;
+  outline: none;
+}
+
+.tag {
+  display: inline-flex;
+  gap: var(--control-gap-sm);
+  align-items: center;
+  max-inline-size: 100%;
+  block-size: var(--control-height-sm);
+  padding-inline: var(--control-padding-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  cursor: default;
+  outline: none;
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: background-color;
+
+  &[data-hovered] {
+    background: var(--color-layer-transparent-hovered);
+  }
+
+  &[data-focus-visible] {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* The remove button sits close to the frame's end. */
+  &[data-allows-removing] {
+    padding-inline-end: var(--space-1);
+  }
+}
+
+.property {
+  color: var(--color-text-tertiary);
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.1em;
+  block-size: 1.1em;
+}
+
+.value {
+  min-inline-size: 0;
+  max-inline-size: var(--size-tag-value-max);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text);
+}
+
+.remove {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  outline: none;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-normal);
+  transition-property: color, background-color;
+
+  &[data-hovered] {
+    color: var(--color-text);
+    background: var(--color-layer-transparent-hovered);
+  }
+}
+
+.removeIcon {
+  inline-size: 1em;
+  block-size: 1em;
+}

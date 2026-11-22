@@ -11,6 +11,8 @@ How to build a component of the UI library, style it with a CSS module and the t
   Storybook titles the stories `components/ui/<name>`: it drops a file name that repeats its folder's.
 - A component wraps one of React Aria Components, imported from its subpath (`react-aria-components/Button`), which brings the behavior, the keyboard and the ARIA.
   The wrapper adds the look and the props of the project, such as `variant`.
+  The data table (`data-table/`) is the one exception: it composes several (a `GridList` for the rows, a `Dialog` in each popover of its toolbar, and the library's components), since TanStack Table holds its state and React Aria only renders it.
+  Its parts live in its folder, and `index.ts` exports only `DataTable` and its types.
 - A component styles itself and takes no `className` or `style`: its parent lays it out in its own CSS module, with `gap` or a grid.
 - `button/` is the reference component.
 - A field (`text-field/`, `select/`, `combo-box/`, `checkbox/`, `switch/`) takes `label`, `description` and `errorMessage` as messages, shows the error while `isInvalid` is set, and renders the parts of `field/` (`Label`, `Description`, `FieldError`) inside the React Aria field that it wraps.
@@ -33,6 +35,8 @@ How to build a component of the UI library, style it with a CSS module and the t
 | A setting that applies at once                    | `switch`                                                      |
 | Options that show or hide something, any of them  | `toggle-button` (`ToggleButton`, `ToggleButtonGroup`)         |
 | Filters to check, out of many, by searching       | `filter-list` (`FilterList`, `FilterListSection`)             |
+| A page's list of items, to search, filter, order  | `data-table` (`DataTable`, `DataTableColumnDef`)              |
+| Chips that the user removes, as active filters    | `tag-group` (`TagGroup`, `Tag`)                               |
 | Actions of a row or a toolbar                     | `menu`                                                        |
 | The name of an icon-only button                   | `tooltip`                                                     |
 | A task that interrupts the page                   | `modal`                                                       |
@@ -41,7 +45,7 @@ How to build a component of the UI library, style it with a CSS module and the t
 | The outcome of an action                          | `toast` (`showToast()`; the root route renders the `Toaster`) |
 | A failure on the page itself, as a form's         | `alert`                                                       |
 | Loading                                           | `spinner`                                                     |
-| A status                                          | `badge`                                                       |
+| A status, or a row's property                     | `badge` (`variant="property"` for a data table's chip)        |
 | A line between content                            | `separator`                                                   |
 | Building blocks of the above                      | `field`, `popover`, `list-box`                                |
 

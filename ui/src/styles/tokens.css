@@ -162,6 +162,17 @@
   --size-toggle-button-max: 7.5rem;
   /* A filter list scrolls its options beyond this, below its search. */
   --size-filter-list-max: 20rem;
+  /* A tag's value is cut beyond this, as a long filter value in a toolbar. */
+  --size-tag-value-max: 10rem;
+
+  /* A data table's row and its toolbar are at least this tall, as Plane's list rows; its search
+     is this wide, and its Filters and Display popovers these. */
+  --size-data-table-row: 2.75rem;
+  --size-data-table-search: 14rem;
+  --size-data-table-filters: 16rem;
+  --size-data-table-display: 20rem;
+  /* The title of a data table's row takes at least this before the properties wrap below it. */
+  --size-data-table-title-min: 10rem;
 
   /* The widths of a dialog, an alert dialog and a toast. */
   --size-dialog-sm: 36rem;
