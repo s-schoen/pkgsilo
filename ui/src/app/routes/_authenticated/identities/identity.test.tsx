@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { getListIdentitiesMockHandler } from "@/api/gen/client/identities/identities.msw.ts";
+import {
+  getGetIdentityMockHandler,
+  getListIdentitiesMockHandler,
+} from "@/api/gen/client/identities/identities.msw.ts";
 import { toastQueue } from "@/components/ui/toast";
 import { identitiesCollection } from "@/features/identities/api/identities-collection.ts";
 import { PKGSILO_ID } from "@/features/identities/utils/identity-name.ts";
@@ -186,6 +189,21 @@ describe("/identities/$id", () => {
       expect(property(m.username())).toHaveTextContent("ada.king");
     });
     expect(bodies).toEqual([{ displayName: "Ada King" }, { username: "ada.king" }]);
+  });
+
+  it("renames the signed-in identity in the account menu too", async () => {
+    server.use(...signedIn(), listIdentities(), patchIdentity([]));
+    const user = userEvent.setup();
+    renderRoute(`/identities/${ada.id}`);
+
+    await screen.findByRole("heading", { level: 1, name: testIdentity.displayName });
+    expect(
+      await screen.findByRole("button", { name: testIdentity.displayName }),
+    ).toBeInTheDocument();
+    server.use(getGetIdentityMockHandler({ data: { ...testIdentity, displayName: "Ada King" } }));
+    await edit(user, m.identityDisplayName(), "Ada King");
+
+    expect(await screen.findByRole("button", { name: "Ada King" })).toBeInTheDocument();
   });
 
   it("keeps an invalid username in edit mode without saving it", async () => {

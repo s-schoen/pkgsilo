@@ -1,13 +1,18 @@
-import { queryCollectionOptions } from "@tanstack/query-db-collection";
+import {
+  DeleteOperationItemNotFoundError,
+  queryCollectionOptions,
+} from "@tanstack/query-db-collection";
 import { collectionOptions } from "@tanstack/react-db";
 
 import {
   createIdentity,
   deleteIdentity,
+  getGetIdentityQueryKey,
   getListIdentitiesQueryKey,
   listIdentities,
   patchIdentity,
 } from "@/api/gen/client/identities/identities.ts";
+import { isIdentityNotFound } from "@/features/identities/utils/api-problem.ts";
 
 import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
 import type { QueryClient } from "@tanstack/react-query";
@@ -36,10 +41,15 @@ const pageSize = 100;
 // change it through useDbClient().collection(identitiesCollection). A change shows at once and is
 // sent to the API; once the API answers, its answer replaces the change, and if it fails, the
 // change rolls back and the caller's transaction rejects with the API's error.
-export const identitiesCollection = collectionOptions("identities", (client) =>
-  queryCollectionOptions({
+//
+// A refetch, as on the window's focus, may bring the API's change before its answer does: the
+// answer then applies over it.
+export const identitiesCollection = collectionOptions("identities", (client) => {
+  const queryClient = client.requireDependency<QueryClient>("queryClient");
+
+  return queryCollectionOptions({
     id: "identities",
-    queryClient: client.requireDependency<QueryClient>("queryClient"),
+    queryClient,
     queryKey: getListIdentitiesQueryKey(),
     // Every page, since the collection's queries see only what it has loaded.
     queryFn: async ({ signal }) => {
@@ -64,7 +74,7 @@ export const identitiesCollection = collectionOptions("identities", (client) =>
         }),
       );
       // The optimistic row has an id of the client's: the API's row, with its own id, replaces it.
-      await collection.utils.writeInsert(created);
+      await collection.utils.writeUpsert(created);
       transaction.mutations.forEach(({ metadata }, index) => {
         // Promise.all keeps the order: the created identity of each mutation is at its index.
         if (isInsertIdentityMetadata(metadata)) {
@@ -85,11 +95,38 @@ export const identitiesCollection = collectionOptions("identities", (client) =>
         }),
       );
       await collection.utils.writeUpsert(updated);
+      // A single identity's query, such as the account menu's of the signed-in one, loads the
+      // change too.
+      for (const { id } of updated) {
+        void queryClient.invalidateQueries({ queryKey: getGetIdentityQueryKey(id) });
+      }
     },
     onDelete: async ({ transaction, collection }) => {
       const keys = transaction.mutations.map(({ key }) => String(key));
-      await Promise.all(keys.map(async (id) => deleteIdentity(id)));
-      await collection.utils.writeDelete(keys);
+      await Promise.all(
+        keys.map(async (id) => {
+          try {
+            await deleteIdentity(id);
+          } catch (error) {
+            // Deleted already, or hidden from the actor since: either way, it leaves the list.
+            if (!isIdentityNotFound(error)) {
+              throw error;
+            }
+          }
+        }),
+      );
+      await Promise.all(
+        keys.map(async (id) => {
+          try {
+            await collection.utils.writeDelete(id);
+          } catch (error) {
+            // A refetch removed it first.
+            if (!(error instanceof DeleteOperationItemNotFoundError)) {
+              throw error;
+            }
+          }
+        }),
+      );
     },
-  }),
-);
+  });
+});

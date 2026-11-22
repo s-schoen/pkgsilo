@@ -6,6 +6,7 @@ import {
   getListIdentitiesMockHandler,
 } from "@/api/gen/client/identities/identities.msw.ts";
 import { identitiesCollection } from "@/features/identities/api/identities-collection.ts";
+import { problemTypes } from "@/features/identities/utils/api-problem.ts";
 import { createTestClients } from "@/test/clients.ts";
 import { server } from "@/test/server.ts";
 
@@ -34,6 +35,13 @@ function forbidden() {
   return HttpResponse.json(
     { type: "about:blank", title: "Forbidden", status: 403 },
     { status: 403, headers: { "Content-Type": "application/problem+json" } },
+  );
+}
+
+function notFound() {
+  return HttpResponse.json(
+    { type: problemTypes.identityNotFound, title: "Identity not found", status: 404 },
+    { status: 404, headers: { "Content-Type": "application/problem+json" } },
   );
 }
 
@@ -106,6 +114,44 @@ describe("identitiesCollection", () => {
     expect(collection.size).toBe(1);
   });
 
+  it("deletes an identity that the API doesn't know anymore", async () => {
+    server.use(listOf([ada, grace]), http.delete("*/api/v1/identities/:id", notFound));
+    const collection = await loadedCollection();
+
+    await collection.delete(grace.id).when("settled");
+
+    expect(collection.has(grace.id)).toBe(false);
+  });
+
+  it("rolls a denied delete back, and rejects with the API's error", async () => {
+    server.use(listOf([ada, grace]), http.delete("*/api/v1/identities/:id", forbidden));
+    const collection = await loadedCollection();
+
+    await expect(collection.delete(grace.id).when("settled")).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(collection.has(grace.id)).toBe(true);
+  });
+
+  it("deletes an identity that a refetch removed first", async () => {
+    const listed = [ada, grace];
+    server.use(listOf(listed));
+    const collection = await loadedCollection();
+    server.use(
+      http.delete("*/api/v1/identities/:id", async () => {
+        listed.pop();
+        // A refetch, as on the window's focus, sees the delete before its answer arrives.
+        await collection.utils.refetch();
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    await collection.delete(grace.id).when("settled");
+
+    expect(collection.has(grace.id)).toBe(false);
+    expect(collection.size).toBe(1);
+  });
+
   it("creates an identity with the API's id", async () => {
     server.use(
       listOf([ada]),
@@ -125,6 +171,29 @@ describe("identitiesCollection", () => {
       username: "alan",
       displayName: "Alan Turing",
     });
+    expect(collection.has("pending")).toBe(false);
+  });
+
+  it("creates an identity that a refetch brought first", async () => {
+    const listed = [ada];
+    server.use(listOf(listed));
+    const collection = await loadedCollection();
+    server.use(
+      http.post("*/api/v1/identities", async ({ request }) => {
+        const body = (await request.json()) as { username: string; displayName: string };
+        const created = { id: "id-new", ...body };
+        listed.push(created);
+        // A refetch, as on the window's focus, sees the identity before the answer arrives.
+        await collection.utils.refetch();
+        return HttpResponse.json({ data: created }, { status: 201 });
+      }),
+    );
+
+    await collection
+      .insert({ id: "pending", username: "alan", displayName: "Alan Turing" })
+      .when("settled");
+
+    expect(collection.get("id-new")).toMatchObject({ username: "alan" });
     expect(collection.has("pending")).toBe(false);
   });
 
