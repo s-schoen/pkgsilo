@@ -39,6 +39,10 @@ export type InlineEditProps<T> = {
   // with that message; any other rejection reverts the value and leaves, so show its toast here
   // before rejecting.
   onSave: (value: T) => Promise<void>;
+  // Called when the edit mode starts and ends, after a cancel or a failed save has restored the
+  // value: a caller whose value can change meanwhile, such as from another tab, takes the latest
+  // one while the user isn't editing.
+  onEditingChange?: (isEditing: boolean) => void;
   // Renders the value as plain text, without the edit mode, as for a value the actor can't change.
   isDisabled?: boolean;
   // The size: default for a sidebar's value, title for a page's large title.
@@ -60,6 +64,7 @@ export function InlineEdit<T>({
   renderView,
   renderEdit,
   onSave,
+  onEditingChange,
   isDisabled = false,
   variant = "default",
 }: InlineEditProps<T>) {
@@ -98,6 +103,7 @@ export function InlineEdit<T>({
     valueBefore.current = value;
     editing.current = true;
     setIsEditing(true);
+    onEditingChange?.(true);
   }
 
   // Leaves the edit mode; focusView returns the focus to the view, unless it has moved on.
@@ -113,6 +119,7 @@ export function InlineEdit<T>({
     setIsEditing(false);
     setHasTriedSave(false);
     setSaveError(undefined);
+    onEditingChange?.(false);
   }
 
   async function save(focusView: boolean) {

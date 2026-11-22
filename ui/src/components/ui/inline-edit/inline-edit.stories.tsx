@@ -38,6 +38,7 @@ const meta = preview.meta({
     value: text.value,
     onChange: fn(),
     onSave: fn(async () => {}),
+    onEditingChange: fn(),
   },
   render: (args) => <UsernameField {...args} />,
   decorators: [
@@ -103,6 +104,9 @@ export const SaveWithEnter = meta.story({
     await expect(args.onSave).toHaveBeenCalledWith(text.changed);
     await waitFor(() => expect(canvas.getByRole("button", { name })).toHaveFocus());
     await expect(canvas.getByText(text.changed)).toBeVisible();
+    // The edit mode started and ended.
+    await expect(args.onEditingChange).toHaveBeenNthCalledWith(1, true);
+    await expect(args.onEditingChange).toHaveBeenLastCalledWith(false);
   },
 });
 
@@ -212,6 +216,9 @@ export const FieldError = meta.story({
     await expect(await canvas.findByRole("alert")).toHaveTextContent(text.taken);
     await expect(input).toBeInvalid();
     await expect(input).toHaveValue(text.changed);
+    // Still in the edit mode.
+    await expect(args.onEditingChange).toHaveBeenCalledOnce();
+    await expect(args.onEditingChange).toHaveBeenCalledWith(true);
 
     await userEvent.keyboard("x");
 
@@ -234,6 +241,8 @@ export const Reverted = meta.story({
     await expect(args.onSave).toHaveBeenCalledWith(text.changed);
     await expect(await canvas.findByText(text.value)).toBeVisible();
     await waitFor(() => expect(canvas.getByRole("button", { name })).toHaveFocus());
+    // The edit mode ended once the value was restored.
+    await expect(args.onEditingChange).toHaveBeenLastCalledWith(false);
   },
 });
 

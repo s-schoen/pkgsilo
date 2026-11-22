@@ -8,6 +8,8 @@ type InlineTextFieldProps = {
   // show a message on the field, such as a taken username; any other rejection reverts the value,
   // so show its toast before.
   onSave: (value: string) => Promise<void>;
+  // Called when the edit mode starts and ends, as the UI library's InlineEdit's.
+  onEditingChange?: (isEditing: boolean) => void;
   placeholder?: string;
   isDisabled?: boolean;
   variant?: "default" | "title";
