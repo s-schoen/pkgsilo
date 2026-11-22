@@ -10,8 +10,8 @@ import {
 } from "@/api/gen/client/sessions/sessions.ts";
 import { Menu, MenuItem, MenuSection, MenuTrigger } from "@/components/ui/menu";
 import { showToast } from "@/components/ui/toast";
-import { initials } from "@/features/session/utils/initials.ts";
 import { m } from "@/paraglide/messages.js";
+import { initials } from "@/utils/initials.ts";
 
 import styles from "@/features/session/components/account-menu.module.css";
 
