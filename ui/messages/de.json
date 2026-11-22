@@ -74,5 +74,14 @@
   "dataTableDeleteDescription": "Das lässt sich nicht rückgängig machen.",
   "dataTableOpen": "Öffnen",
   "dataTableOpenInNewTab": "In neuem Tab öffnen",
-  "dataTableRowActions": "Aktionen für {name}"
+  "dataTableRowActions": "Aktionen für {name}",
+  "administration": "Administration",
+  "identities": "Identitäten",
+  "breadcrumbs": "Brotkrumen",
+  "identityDisplayName": "Anzeigename",
+  "identityCreatedBy": "Erstellt von",
+  "identityCreatedAt": "Erstellt",
+  "identityUpdatedAt": "Aktualisiert",
+  "identityYou": "Du",
+  "identityUnknown": "Unbekannte Identität"
 }

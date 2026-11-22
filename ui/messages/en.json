@@ -74,5 +74,14 @@
   "dataTableDeleteDescription": "This can't be undone.",
   "dataTableOpen": "Open",
   "dataTableOpenInNewTab": "Open in new tab",
-  "dataTableRowActions": "Actions for {name}"
+  "dataTableRowActions": "Actions for {name}",
+  "administration": "Administration",
+  "identities": "Identities",
+  "breadcrumbs": "Breadcrumbs",
+  "identityDisplayName": "Display name",
+  "identityCreatedBy": "Created by",
+  "identityCreatedAt": "Created",
+  "identityUpdatedAt": "Updated",
+  "identityYou": "You",
+  "identityUnknown": "Unknown identity"
 }
