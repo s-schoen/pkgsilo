@@ -14,6 +14,7 @@ import {
   identityColumns,
   identityGroupingOptions,
 } from "@/features/identities/components/identity-columns.tsx";
+import { useDeleteIdentities } from "@/features/identities/hooks/use-delete-identities.ts";
 import { m } from "@/paraglide/messages.js";
 import { routeHref } from "@/utils/route-href.ts";
 
@@ -26,7 +27,7 @@ const defaults: DataTableSearchDefaults = { sorting: [{ id: "displayName", desc:
 
 // The list of identities, at /identities: every identity the actor may read, which the route's
 // loader has loaded into identitiesCollection. Its search, filter, order and grouping live in the
-// URL.
+// URL. The user deletes the selected identities, except the signed-in one.
 export function IdentitiesPage() {
   const { data: identities, isLoading } = useLiveQuery((q) =>
     q.from({ identity: identitiesCollection }),
@@ -35,6 +36,7 @@ export function IdentitiesPage() {
   const currentId = session.data?.data.data.identityId;
   const search = useDataTableSearch(route, { filters: IDENTITY_FILTERS, defaults });
   const navigate = useNavigate();
+  const deleteIdentities = useDeleteIdentities();
   const newIdentity = () => {
     void navigate({ to: "/identities/new" });
   };
@@ -64,6 +66,12 @@ export function IdentitiesPage() {
         getRowId={(identity) => identity.id}
         getRowHref={(identity) => routeHref("/identities/$id", { id: identity.id })}
         groupingOptions={groupingOptions}
+        onDelete={async (selected) => {
+          await deleteIdentities(selected);
+        }}
+        // The signed-in identity can't delete itself; nothing is deleted until the session tells
+        // which one that is.
+        canDelete={(identity) => currentId !== undefined && identity.id !== currentId}
         emptyState={
           <DataTableEmptyState icon={IconUsers} message={m.identitiesEmpty()}>
             <Button variant="secondary" onPress={newIdentity}>

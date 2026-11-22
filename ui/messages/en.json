@@ -99,5 +99,41 @@
   "identityCreated": "Created {name}.",
   "identityCreateFailed": "Creating the identity failed. Try again in a moment.",
   "identityCreateForbidden": "You may not create identities.",
-  "identitiesEmpty": "No identities yet."
+  "identitiesEmpty": "No identities yet.",
+  "identityActions": "Identity actions",
+  "identityDelete": "Delete",
+  "identityDeleteTitle": "Delete {name}?",
+  "identityDeleteDescription": "The identity and everything that belongs to it are deleted. This can't be undone.",
+  "identityDeleted": "Deleted {name}.",
+  "identitiesDeleted": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Deleted {count} identity.",
+        "countPlural=other": "Deleted {count} identities."
+      }
+    }
+  ],
+  "identitiesDeletedPartly": "Deleted {deleted} of {count} identities. The others couldn't be deleted.",
+  "identitiesDeleteFailed": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Deleting the identity failed. Try again in a moment.",
+        "countPlural=other": "Deleting the identities failed. Try again in a moment."
+      }
+    }
+  ],
+  "identitiesDeleteForbidden": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "You may not delete this identity.",
+        "countPlural=other": "You may not delete these identities."
+      }
+    }
+  ]
 }

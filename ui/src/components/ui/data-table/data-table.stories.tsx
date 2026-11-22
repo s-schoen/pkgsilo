@@ -966,6 +966,70 @@ export const DeleteCancelled = meta.story({
   },
 });
 
+// The args of a table that deletes only the keys that are no longer active.
+const deletesInactive = {
+  bulkActions,
+  onDelete: fn(),
+  canDelete: (key: ApiKey) => key.status !== "active",
+};
+
+// With canDelete, Delete shows while one of the selected rows qualifies; the confirmation counts
+// only those, and onDelete gets them alone.
+export const DeleteMixedSelection = meta.story({
+  args: deletesInactive,
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "ci-publish" })));
+    await expect(canvas.getByText(selectedCount(1))).toBeVisible();
+    await expect(
+      canvas.queryByRole("button", { name: m.dataTableDelete() }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "backup-mirror" })));
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "legacy-uploader" })));
+    await userEvent.click(canvas.getByRole("button", { name: m.dataTableDelete() }));
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: m.dataTableDeleteTitle({ count: 2 }),
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: m.dataTableDelete() }));
+
+    await expect(args.onDelete).toHaveBeenCalledOnce();
+    await expect(args.onDelete).toHaveBeenCalledWith([keys[2], keys[3]]);
+    await waitFor(async () => {
+      await expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    await expect(canvas.queryByText(selectedCount(3))).not.toBeInTheDocument();
+  },
+});
+
+// With canDelete, a row's menu has Delete only when one of its rows qualifies: not on an active key
+// alone, but on a selection with an expired one, whose Delete asks about that one alone.
+export const ContextMenuMixedSelection = meta.story({
+  args: deletesInactive,
+  play: async ({ args, canvas, userEvent }) => {
+    let menu = await rightClick(userEvent, canvas.getByRole("row", { name: "ci-publish" }));
+    await expect(menuItemNames(menu)).toEqual([
+      m.dataTableOpen(),
+      m.dataTableOpenInNewTab(),
+      text.revoke,
+    ]);
+    await userEvent.keyboard("{Escape}");
+    await waitForMenuToClose();
+
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "backup-mirror" })));
+    menu = await rightClick(userEvent, canvas.getByRole("row", { name: "backup-mirror" }));
+    await expect(menuItemNames(menu)).toEqual([text.revoke, m.dataTableDelete()]);
+
+    await userEvent.click(within(menu).getByRole("menuitem", { name: m.dataTableDelete() }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: m.dataTableDeleteTitle({ count: 1 }),
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: m.dataTableDelete() }));
+
+    await expect(args.onDelete).toHaveBeenCalledWith([keys[2]]);
+  },
+});
+
 // In German: the selection's texts are messages, the count's in its plural.
 export const SelectionGerman = meta.story({
   args: selectable,

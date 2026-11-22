@@ -280,4 +280,73 @@ describe("/identities/$id", () => {
 
     expect(property(m.username())).toHaveTextContent("ada.king");
   });
+
+  it("deletes the identity from its menu and goes to the list", async () => {
+    const requested: Array<string> = [];
+    server.use(
+      ...signedIn(),
+      listIdentities(),
+      http.delete("/api/v1/identities/:id", ({ params }) => {
+        requested.push(String(params.id));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderRoute(`/identities/${grace.id}`);
+
+    await screen.findByRole("heading", { level: 1, name: "grace" });
+    await user.click(screen.getByRole("button", { name: m.identityActions() }));
+    await user.click(await screen.findByRole("menuitem", { name: m.identityDelete() }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: m.identityDeleteTitle({ name: "grace" }),
+    });
+    await user.click(within(dialog).getByRole("button", { name: m.identityDelete() }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: m.identities() }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/identities");
+    expect(screen.getByText(m.identityDeleted({ name: "grace" }))).toBeInTheDocument();
+    expect(requested).toEqual([grace.id]);
+  });
+
+  it("keeps the page and its dialog when the delete fails, which a toast shows", async () => {
+    server.use(
+      ...signedIn(),
+      listIdentities(),
+      http.delete("/api/v1/identities/:id", () =>
+        HttpResponse.json(
+          { type: "about:blank", title: "Forbidden", status: 403 },
+          { status: 403, headers: { "Content-Type": "application/problem+json" } },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    const { router } = renderRoute(`/identities/${grace.id}`);
+
+    await screen.findByRole("heading", { level: 1, name: "grace" });
+    await user.click(screen.getByRole("button", { name: m.identityActions() }));
+    await user.click(await screen.findByRole("menuitem", { name: m.identityDelete() }));
+    const title = m.identityDeleteTitle({ name: "grace" });
+    const dialog = await screen.findByRole("alertdialog", { name: title });
+    await user.click(within(dialog).getByRole("button", { name: m.identityDelete() }));
+
+    expect(await screen.findByText(m.identitiesDeleteForbidden({ count: 1 }))).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(`/identities/${grace.id}`);
+    // The dialog stays, so that the user can try again; Cancel goes back to the page.
+    await user.click(within(dialog).getByRole("button", { name: m.cancel() }));
+    await waitFor(() => {
+      // The toast is an alertdialog too.
+      expect(screen.queryByRole("alertdialog", { name: title })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { level: 1, name: "grace" })).toBeInTheDocument();
+  });
+
+  it("doesn't offer to delete the signed-in identity", async () => {
+    server.use(...signedIn(), listIdentities());
+    renderRoute(`/identities/${ada.id}`);
+
+    await screen.findByRole("heading", { level: 1, name: testIdentity.displayName });
+    expect(screen.queryByRole("button", { name: m.identityActions() })).not.toBeInTheDocument();
+  });
 });

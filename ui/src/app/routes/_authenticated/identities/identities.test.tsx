@@ -1,8 +1,10 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { http, HttpResponse } from "msw";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { getListIdentitiesMockHandler } from "@/api/gen/client/identities/identities.msw.ts";
+import { toastQueue } from "@/components/ui/toast";
 import { PKGSILO_ID } from "@/features/identities/utils/identity-name.ts";
 import { m } from "@/paraglide/messages.js";
 import { renderRoute } from "@/test/render.tsx";
@@ -44,12 +46,60 @@ function listIdentities() {
   });
 }
 
+// Answers a delete with 204, or with 403 for the ids in denied, and records the ids it was asked
+// for.
+function deleteIdentities(requested: Array<string>, denied: Array<string> = []) {
+  return http.delete("/api/v1/identities/:id", ({ params }) => {
+    const id = String(params.id);
+    requested.push(id);
+    if (denied.includes(id)) {
+      return HttpResponse.json(
+        { type: "about:blank", title: "Forbidden", status: 403 },
+        { status: 403, headers: { "Content-Type": "application/problem+json" } },
+      );
+    }
+    return new HttpResponse(null, { status: 204 });
+  });
+}
+
+function rowOf(id: string) {
+  const row = screen
+    .getAllByRole("row")
+    .find((candidate) => candidate.getAttribute("data-row-id") === id);
+  if (row === undefined) {
+    throw new Error(`no row for ${id}`);
+  }
+  return row;
+}
+
+// Selects the rows of these identities, then presses Delete and confirms the dialog, which counts
+// the identities it deletes.
+async function deleteSelected(
+  user: ReturnType<typeof userEvent.setup>,
+  ids: Array<string>,
+  count: number,
+) {
+  await findRows();
+  for (const id of ids) {
+    await user.click(within(rowOf(id)).getByRole("checkbox"));
+  }
+  await user.click(screen.getByRole("button", { name: m.dataTableDelete() }));
+  const dialog = await screen.findByRole("alertdialog", {
+    name: m.dataTableDeleteTitle({ count }),
+  });
+  await user.click(within(dialog).getByRole("button", { name: m.dataTableDelete() }));
+}
+
 async function findRows() {
   const list = await screen.findByRole("grid", { name: m.identities() });
   return within(list).getAllByRole("row");
 }
 
 describe("/identities", () => {
+  beforeEach(() => {
+    toastQueue.clear();
+  });
+
   it("lists the identities by name, with the fallbacks for the fields it can't read", async () => {
     server.use(...signedIn(), listIdentities());
     renderRoute("/identities");
@@ -177,5 +227,84 @@ describe("/identities", () => {
     expect(adaGroup).toHaveTextContent(testIdentity.displayName);
     expect(pkgsiloGroup).toHaveTextContent("pkgsilo");
     expect(unknownGroup).toHaveTextContent(m.identityUnknown());
+  });
+
+  it("deletes an identity and says so in a toast", async () => {
+    const requested: Array<string> = [];
+    server.use(...signedIn(), listIdentities(), deleteIdentities(requested));
+    const user = userEvent.setup();
+    renderRoute("/identities");
+
+    await deleteSelected(user, [grace.id], 1);
+
+    expect(await screen.findByText(m.identityDeleted({ name: "grace" }))).toBeInTheDocument();
+    expect(requested).toEqual([grace.id]);
+    expect((await findRows()).map((row) => row.getAttribute("data-row-id"))).toEqual([
+      hidden.id,
+      ada.id,
+    ]);
+  });
+
+  it("deletes several identities", async () => {
+    const requested: Array<string> = [];
+    server.use(...signedIn(), listIdentities(), deleteIdentities(requested));
+    const user = userEvent.setup();
+    renderRoute("/identities");
+
+    await deleteSelected(user, [grace.id, hidden.id], 2);
+
+    expect(await screen.findByText(m.identitiesDeleted({ count: 2 }))).toBeInTheDocument();
+    expect(requested.toSorted()).toEqual([grace.id, hidden.id].toSorted());
+    expect((await findRows()).map((row) => row.getAttribute("data-row-id"))).toEqual([ada.id]);
+  });
+
+  it("reports a partly failed delete and keeps the identities it couldn't delete", async () => {
+    server.use(...signedIn(), listIdentities(), deleteIdentities([], [hidden.id]));
+    const user = userEvent.setup();
+    renderRoute("/identities");
+
+    await deleteSelected(user, [grace.id, hidden.id], 2);
+
+    expect(
+      await screen.findByText(m.identitiesDeletedPartly({ deleted: 1, count: 2 })),
+    ).toBeInTheDocument();
+    await waitFor(async () => {
+      expect((await findRows()).map((row) => row.getAttribute("data-row-id"))).toEqual([
+        hidden.id,
+        ada.id,
+      ]);
+    });
+  });
+
+  it("reports a denied delete and keeps the identity", async () => {
+    server.use(...signedIn(), listIdentities(), deleteIdentities([], [grace.id]));
+    const user = userEvent.setup();
+    renderRoute("/identities");
+
+    await deleteSelected(user, [grace.id], 1);
+
+    expect(await screen.findByText(m.identitiesDeleteForbidden({ count: 1 }))).toBeInTheDocument();
+    await waitFor(async () => {
+      expect(await findRows()).toHaveLength(3);
+    });
+  });
+
+  it("doesn't delete the signed-in identity", async () => {
+    const requested: Array<string> = [];
+    server.use(...signedIn(), listIdentities(), deleteIdentities(requested));
+    const user = userEvent.setup();
+    renderRoute("/identities");
+
+    await findRows();
+    await user.click(within(rowOf(ada.id)).getByRole("checkbox"));
+    expect(screen.getByText(m.dataTableSelected({ count: 1 }))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: m.dataTableDelete() })).not.toBeInTheDocument();
+
+    // Among others, Delete leaves it out.
+    await deleteSelected(user, [grace.id], 1);
+
+    expect(await screen.findByText(m.identityDeleted({ name: "grace" }))).toBeInTheDocument();
+    expect(requested).toEqual([grace.id]);
+    expect(rowOf(ada.id)).toBeInTheDocument();
   });
 });

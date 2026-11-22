@@ -87,7 +87,7 @@ export function RowMenu<TData extends RowData>({
       )),
     );
   }
-  if (items.canDelete) {
+  if (items.deletable.length > 0) {
     if (groups.length > 0) {
       groups.push(<MenuSeparator key="delete-separator" />);
     }
@@ -98,7 +98,7 @@ export function RowMenu<TData extends RowData>({
         icon={IconTrash}
         variant="danger"
         onAction={() => {
-          onDelete(rows);
+          onDelete(items.deletable);
         }}
       >
         {m.dataTableDelete()}
