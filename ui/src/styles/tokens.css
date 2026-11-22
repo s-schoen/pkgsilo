@@ -179,6 +179,10 @@
   --size-detail-sidebar: 20rem;
   --size-property-label: 8rem;
 
+  /* The box of a text that only a screen reader reads, as a page's hidden heading: not zero, which
+     some screen readers skip. */
+  --size-visually-hidden: 1px;
+
   /* The widths of a dialog, an alert dialog and a toast. */
   --size-dialog-sm: 36rem;
   --size-dialog-md: 42rem;

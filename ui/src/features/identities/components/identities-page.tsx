@@ -1,10 +1,13 @@
+import IconPlus from "@tabler/icons-react/icons/IconPlus";
+import IconUsers from "@tabler/icons-react/icons/IconUsers";
 import { useLiveQuery } from "@tanstack/react-db";
-import { getRouteApi } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 
 import { useGetCurrentSession } from "@/api/gen/client/sessions/sessions.ts";
 import { PageHeader } from "@/components/layouts/page-header.tsx";
-import { DataTable, useDataTableSearch } from "@/components/ui/data-table";
+import { Button } from "@/components/ui/button";
+import { DataTable, DataTableEmptyState, useDataTableSearch } from "@/components/ui/data-table";
 import { identitiesCollection } from "@/features/identities/api/identities-collection.ts";
 import {
   IDENTITY_FILTERS,
@@ -31,6 +34,10 @@ export function IdentitiesPage() {
   const session = useGetCurrentSession();
   const currentId = session.data?.data.data.identityId;
   const search = useDataTableSearch(route, { filters: IDENTITY_FILTERS, defaults });
+  const navigate = useNavigate();
+  const newIdentity = () => {
+    void navigate({ to: "/identities/new" });
+  };
 
   const byId = useMemo(
     () => new Map(identities.map((identity) => [identity.id, identity])),
@@ -41,7 +48,14 @@ export function IdentitiesPage() {
 
   return (
     <>
-      <PageHeader title={m.identities()} />
+      <PageHeader
+        title={m.identities()}
+        actions={
+          <Button icon={IconPlus} onPress={newIdentity}>
+            {m.identityNew()}
+          </Button>
+        }
+      />
       <DataTable
         label={m.identities()}
         columns={columns}
@@ -50,6 +64,13 @@ export function IdentitiesPage() {
         getRowId={(identity) => identity.id}
         getRowHref={(identity) => routeHref("/identities/$id", { id: identity.id })}
         groupingOptions={groupingOptions}
+        emptyState={
+          <DataTableEmptyState icon={IconUsers} message={m.identitiesEmpty()}>
+            <Button variant="secondary" onPress={newIdentity}>
+              {m.identityNew()}
+            </Button>
+          </DataTableEmptyState>
+        }
         {...search}
       />
     </>

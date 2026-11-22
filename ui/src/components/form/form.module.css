@@ -9,3 +9,8 @@
     max-inline-size: 100%;
   }
 }
+
+/* A whole page: its parts lay themselves out. */
+.page {
+  display: block;
+}

@@ -12,6 +12,22 @@ import {
 import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
 import type { QueryClient } from "@tanstack/react-query";
 
+// The metadata of an insert into identitiesCollection, which learns the API's identity: the
+// optimistic row has an id of the client's, and onCreated gets the created identity with its own,
+// as a create page needs to show it.
+export type InsertIdentityMetadata = {
+  onCreated: (identity: IdentityResponse) => void;
+};
+
+function isInsertIdentityMetadata(metadata: unknown): metadata is InsertIdentityMetadata {
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    "onCreated" in metadata &&
+    typeof metadata.onCreated === "function"
+  );
+}
+
 // The most identities that a page of the API's list holds.
 const pageSize = 100;
 
@@ -49,6 +65,12 @@ export const identitiesCollection = collectionOptions("identities", (client) =>
       );
       // The optimistic row has an id of the client's: the API's row, with its own id, replaces it.
       await collection.utils.writeInsert(created);
+      transaction.mutations.forEach(({ metadata }, index) => {
+        // Promise.all keeps the order: the created identity of each mutation is at its index.
+        if (isInsertIdentityMetadata(metadata)) {
+          metadata.onCreated(created[index]);
+        }
+      });
     },
     // Patches only the fields that changed, so that a field the actor may not write, or another
     // user changed meanwhile, stays as it is.

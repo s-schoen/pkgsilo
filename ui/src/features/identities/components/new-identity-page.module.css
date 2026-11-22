@@ -1,0 +1,15 @@
+/* The page's <h1>, for a screen reader's list of headings: the title field shows the name. */
+.heading {
+  position: absolute;
+  inline-size: var(--size-visually-hidden);
+  block-size: var(--size-visually-hidden);
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+}

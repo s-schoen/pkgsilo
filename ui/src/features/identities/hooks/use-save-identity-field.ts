@@ -4,15 +4,15 @@ import { useCallback } from "react";
 import { InlineEditError } from "@/components/ui/inline-edit";
 import { showToast } from "@/components/ui/toast";
 import { identitiesCollection } from "@/features/identities/api/identities-collection.ts";
+import {
+  apiProblem,
+  isUsernameTaken,
+  problemTypes,
+} from "@/features/identities/utils/api-problem.ts";
 import { m } from "@/paraglide/messages.js";
 
 // The fields of an identity that its page edits in place.
 export type IdentityField = "username" | "displayName";
-
-const problemTypes = {
-  usernameTaken: "https://pkgsilo/problems/username-taken",
-  invalidBody: "https://pkgsilo/problems/invalid-body",
-};
 
 // The message on the field for the API's 422: the field's rules, which the form checks too, so the
 // API rejects only a value that the form's schema let through.
@@ -20,13 +20,6 @@ const invalidMessages = {
   username: m.identityUsernameInvalid,
   displayName: m.identityDisplayNameInvalid,
 } satisfies Record<IdentityField, () => string>;
-
-// The parts of the generated client's error that tell the failures apart.
-type ApiError = { status?: number; info?: { type?: string } };
-
-function apiError(error: unknown): ApiError {
-  return typeof error === "object" && error !== null ? error : {};
-}
 
 // Saves one field of the identity with this id, for its page's InlineTextFields: it changes the
 // field in identitiesCollection, which shows the change at once, the list too, and patches only that
@@ -45,8 +38,8 @@ export function useSaveIdentityField(id: string) {
       try {
         await transaction.when("settled");
       } catch (error) {
-        const { status, info } = apiError(error);
-        if (field === "username" && status === 409 && info?.type === problemTypes.usernameTaken) {
+        const { status, info } = apiProblem(error);
+        if (field === "username" && isUsernameTaken(error)) {
           throw new InlineEditError(m.identityUsernameTaken(), { cause: error });
         }
         if (status === 422 && info?.type === problemTypes.invalidBody) {

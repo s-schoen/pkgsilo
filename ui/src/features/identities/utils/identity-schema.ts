@@ -1,4 +1,4 @@
-import { PatchIdentityBody } from "@/api/gen/zod/identities/identities.zod.ts";
+import { CreateIdentityBody, PatchIdentityBody } from "@/api/gen/zod/identities/identities.zod.ts";
 import { m } from "@/paraglide/messages.js";
 
 // The rules of an identity's fields, as the API's service checks them (feature/identity/service):
@@ -25,3 +25,9 @@ export const displayNameSchema = PatchIdentityBody.shape.displayName
   .unwrap()
   .refine((value) => value.trim() !== "", { error: () => m.identityDisplayNameRequired() })
   .regex(displayNamePattern, { error: () => m.identityDisplayNameInvalid() });
+
+// A new identity: the generated schema of the create request, with the rules of its fields.
+export const createIdentitySchema = CreateIdentityBody.extend({
+  username: usernameSchema,
+  displayName: displayNameSchema,
+});

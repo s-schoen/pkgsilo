@@ -23,7 +23,7 @@ export function LoadingRows({ label }: { label: string }) {
   );
 }
 
-type EmptyStateProps = {
+export type EmptyStateProps = {
   icon: TablerIcon;
   // One short line: a message.
   message: string;
@@ -31,8 +31,10 @@ type EmptyStateProps = {
   children?: ReactNode;
 };
 
-// What the table shows instead of rows: an icon, a line, and the button that helps, if any.
-function EmptyState({ icon: Icon, message, children }: EmptyStateProps) {
+// What the table shows instead of rows: an icon, a line, and the button that helps, if any. A page
+// passes one as the table's emptyState, as DataTableEmptyState, to offer the button that creates
+// the first item.
+export function EmptyState({ icon: Icon, message, children }: EmptyStateProps) {
   return (
     <div className={styles.empty}>
       <Icon aria-hidden className={styles.emptyIcon} />

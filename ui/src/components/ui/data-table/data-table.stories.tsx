@@ -13,7 +13,8 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test";
 import preview from "#.storybook/preview";
 import { AppLayout } from "@/components/layouts/app-layout.tsx";
 import { Badge } from "@/components/ui/badge";
-import { DataTable } from "@/components/ui/data-table";
+import { Button } from "@/components/ui/button";
+import { DataTable, DataTableEmptyState } from "@/components/ui/data-table";
 import { m } from "@/paraglide/messages.js";
 import { routeHref } from "@/utils/route-href.ts";
 
@@ -51,6 +52,8 @@ const text = {
   revoked: "Revoked",
   empty: "No API keys yet. Create one to publish packages from CI.",
   revoke: "Revoke",
+  emptyMessage: "No API keys yet.",
+  create: "New API key",
 };
 
 const keys: Array<ApiKey> = [
@@ -553,6 +556,8 @@ export const Loading = meta.story({
   },
 });
 
+const created = fn();
+
 // No rows at all.
 export const Empty = meta.story({
   args: { rows: [] },
@@ -567,6 +572,28 @@ export const CustomEmpty = meta.story({
   play: async ({ canvas }) => {
     await expect(canvas.getByText(text.empty)).toBeVisible();
     await expect(canvas.queryByText(m.dataTableEmpty())).not.toBeInTheDocument();
+  },
+});
+
+// No rows, with the library's empty state and the page's button that creates the first one.
+export const EmptyWithAction = meta.story({
+  args: {
+    rows: [],
+    emptyState: (
+      <DataTableEmptyState icon={IconKey} message={text.emptyMessage}>
+        <Button onPress={created}>{text.create}</Button>
+      </DataTableEmptyState>
+    ),
+  },
+  beforeEach: () => {
+    created.mockClear();
+  },
+  play: async ({ canvas, userEvent }) => {
+    await expect(canvas.getByText(text.emptyMessage)).toBeVisible();
+
+    await userEvent.click(canvas.getByRole("button", { name: text.create }));
+
+    await expect(created).toHaveBeenCalledOnce();
   },
 });
 

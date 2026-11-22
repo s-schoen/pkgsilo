@@ -52,6 +52,17 @@
   line-height: var(--line-height-tight);
 }
 
+/* A page's large title, in the size of InlineTextField's title, so that a new object's name looks as
+   its details page's will. */
+.title {
+  block-size: var(--control-height-xl);
+  padding-block: 0;
+  padding-inline: var(--control-inset-md);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
 .textArea {
   padding-block: var(--space-2);
   padding-inline: var(--space-3);

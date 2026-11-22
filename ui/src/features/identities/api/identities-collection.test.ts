@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   getDeleteIdentityMockHandler,
@@ -11,6 +11,7 @@ import { server } from "@/test/server.ts";
 
 import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
 import type { PatchIdentityRequest } from "@/api/gen/client/model/patchIdentityRequest.ts";
+import type { InsertIdentityMetadata } from "@/features/identities/api/identities-collection.ts";
 
 const ada: IdentityResponse = { id: "id-ada", username: "ada", displayName: "Ada Lovelace" };
 const grace: IdentityResponse = { id: "id-grace", username: "grace", displayName: "Grace Hopper" };
@@ -125,5 +126,30 @@ describe("identitiesCollection", () => {
       displayName: "Alan Turing",
     });
     expect(collection.has("pending")).toBe(false);
+  });
+
+  it("hands the created identity to the insert's onCreated", async () => {
+    server.use(
+      listOf([ada]),
+      http.post("*/api/v1/identities", async ({ request }) => {
+        const body = (await request.json()) as { username: string; displayName: string };
+        return HttpResponse.json({ data: { id: "id-new", ...body } }, { status: 201 });
+      }),
+    );
+    const collection = await loadedCollection();
+    const onCreated = vi.fn<InsertIdentityMetadata["onCreated"]>();
+
+    await collection
+      .insert(
+        { id: "pending", username: "alan", displayName: "Alan Turing" },
+        { metadata: { onCreated } satisfies InsertIdentityMetadata },
+      )
+      .when("settled");
+
+    expect(onCreated).toHaveBeenCalledWith({
+      id: "id-new",
+      username: "alan",
+      displayName: "Alan Turing",
+    });
   });
 });
