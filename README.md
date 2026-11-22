@@ -164,6 +164,7 @@ Read [`docs/agents/`](docs/agents/) before changing layer code, authorization, M
 ## Documentation
 
 - [Operator guide](docs/operators.md) - first start, the bootstrap key, passwords and sessions.
+- [Security policy](SECURITY.md) - supported versions and how to report a vulnerability.
 - `GET /api/v1/openapi.json` - every endpoint of the API.
 
 ## License
