@@ -10,6 +10,10 @@ type TextFieldProps = {
   // What the browser and a password manager may fill in, as HTML's autocomplete: "username" and
   // "current-password" for a login.
   autoComplete?: string;
+  // As the UI library's TextField: title for a page's large title, and isLabelHidden where the page
+  // names the field already.
+  variant?: "default" | "title";
+  isLabelHidden?: boolean;
 };
 
 // The TextField of the UI library, bound to a string field of useAppForm: render it with

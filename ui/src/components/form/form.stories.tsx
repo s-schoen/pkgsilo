@@ -25,7 +25,13 @@ const text = {
 
 // A form of several fields and a submit button, as a view builds one. onSubmit takes a moment, as a
 // request to the API would.
-function GroupForm({ onSubmit }: { onSubmit: (value: Values) => void }) {
+function GroupForm({
+  onSubmit,
+  layout,
+}: {
+  onSubmit: (value: Values) => void;
+  layout?: "stack" | "page";
+}) {
   const form = useAppForm({
     defaultValues: { name: "", description: "", admin: false },
     validators: { onChange: schema },
@@ -37,7 +43,7 @@ function GroupForm({ onSubmit }: { onSubmit: (value: Values) => void }) {
 
   return (
     <form.AppForm>
-      <form.Form>
+      <form.Form layout={layout}>
         <form.AppField name="name">
           {(field) => <field.TextField label={text.name} />}
         </form.AppField>
@@ -106,6 +112,26 @@ export const InvalidOnSubmit = meta.story({
 
 // Enter in a field submits the form.
 export const SubmittedWithEnter = meta.story({
+  beforeEach: () => {
+    submitted.mockClear();
+  },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.type(canvas.getByRole("textbox", { name: text.name }), "maintainers{Enter}");
+
+    await waitFor(async () => {
+      await expect(submitted).toHaveBeenCalledWith({
+        name: "maintainers",
+        description: "",
+        admin: false,
+      });
+    });
+  },
+});
+
+// A form that holds a page lays out nothing: its parts lay themselves out, and it submits as the
+// stacked one does.
+export const PageLayout = meta.story({
+  render: () => <GroupForm onSubmit={submitted} layout="page" />,
   beforeEach: () => {
     submitted.mockClear();
   },

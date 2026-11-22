@@ -93,5 +93,11 @@
   "identityDisplayNameRequired": "Gib einen Anzeigenamen ein.",
   "identityDisplayNameInvalid": "Verwende höchstens 128 Zeichen, ohne Zeilenumbrüche.",
   "identitySaveFailed": "Die Änderung konnte nicht gespeichert werden. Versuche es gleich noch einmal.",
-  "identitySaveForbidden": "Du darfst diese Änderung nicht vornehmen."
+  "identitySaveForbidden": "Du darfst diese Änderung nicht vornehmen.",
+  "identityNew": "Neue Identität",
+  "identityCreate": "Erstellen",
+  "identityCreated": "{name} erstellt.",
+  "identityCreateFailed": "Die Identität konnte nicht erstellt werden. Versuche es gleich noch einmal.",
+  "identityCreateForbidden": "Du darfst keine Identitäten erstellen.",
+  "identitiesEmpty": "Noch keine Identitäten."
 }

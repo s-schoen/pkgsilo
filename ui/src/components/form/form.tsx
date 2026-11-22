@@ -10,7 +10,15 @@ import styles from "@/components/form/form.module.css";
 // fields: render it with <form.AppForm><form.Form>{fields and form.SubmitButton}</form.Form>
 // </form.AppForm>. Its fields validate with the form's schema (zod), never with the browser's own
 // validation, which would block the submission: React Aria's validationBehavior is "aria".
-export function Form({ children }: { children: ReactNode }) {
+// layout="page" lays out nothing, for a form that holds a whole page, as a create page whose
+// PageHeader holds the submit button and whose DetailLayout holds the fields.
+export function Form({
+  children,
+  layout = "stack",
+}: {
+  children: ReactNode;
+  layout?: "stack" | "page";
+}) {
   const form = useFormContext();
 
   return (
@@ -22,7 +30,7 @@ export function Form({ children }: { children: ReactNode }) {
         event.stopPropagation();
         void form.handleSubmit();
       }}
-      className={styles.form}
+      className={layout === "page" ? styles.page : styles.form}
     >
       {children}
     </AriaForm>

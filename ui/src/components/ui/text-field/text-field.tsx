@@ -27,6 +27,12 @@ type FieldProps = Omit<
 
 type TextFieldProps = FieldProps & {
   type?: "text" | "email" | "password" | "search" | "url" | "tel";
+  // The size: default for a form's field, title for a page's large title, as a new object's name
+  // in a details layout, in the size of InlineTextField's title.
+  variant?: "default" | "title";
+  // Names the input without showing the label, where the page shows its name already, as a
+  // PropertyItem's label, or a title whose placeholder names it.
+  isLabelHidden?: boolean;
   // For a parent that focuses the input.
   ref?: Ref<HTMLInputElement>;
 };
@@ -40,13 +46,24 @@ export function TextField({
   description,
   errorMessage,
   placeholder,
+  variant = "default",
+  isLabelHidden = false,
   ref,
   ...props
 }: TextFieldProps) {
   return (
-    <AriaTextField {...props} validationBehavior="aria" className={fieldClassName}>
-      <Label>{label}</Label>
-      <Input ref={ref} placeholder={placeholder} className={`${styles.control} ${styles.input}`} />
+    <AriaTextField
+      {...props}
+      aria-label={isLabelHidden ? label : undefined}
+      validationBehavior="aria"
+      className={fieldClassName}
+    >
+      {!isLabelHidden && <Label>{label}</Label>}
+      <Input
+        ref={ref}
+        placeholder={placeholder}
+        className={`${styles.control} ${variant === "title" ? styles.title : styles.input}`}
+      />
       {description && <Description>{description}</Description>}
       <FieldError>{errorMessage}</FieldError>
     </AriaTextField>

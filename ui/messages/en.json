@@ -93,5 +93,11 @@
   "identityDisplayNameRequired": "Enter a display name.",
   "identityDisplayNameInvalid": "Use at most 128 characters, without line breaks.",
   "identitySaveFailed": "Saving the change failed. Try again in a moment.",
-  "identitySaveForbidden": "You may not make this change."
+  "identitySaveForbidden": "You may not make this change.",
+  "identityNew": "New identity",
+  "identityCreate": "Create",
+  "identityCreated": "Created {name}.",
+  "identityCreateFailed": "Creating the identity failed. Try again in a moment.",
+  "identityCreateForbidden": "You may not create identities.",
+  "identitiesEmpty": "No identities yet."
 }
