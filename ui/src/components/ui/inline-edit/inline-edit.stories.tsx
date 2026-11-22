@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { expect, fn, waitFor } from "storybook/test";
+import { expect, fireEvent, fn, spyOn, waitFor } from "storybook/test";
 
 import preview from "#.storybook/preview";
 import { InlineEditError, InlineTextField } from "@/components/ui/inline-edit";
@@ -244,6 +244,101 @@ export const Reverted = meta.story({
     await waitFor(() => expect(canvas.getByRole("button", { name })).toHaveFocus());
     // The edit mode ended once the value was restored.
     await expect(args.onEditingChange).toHaveBeenLastCalledWith(false);
+  },
+});
+
+// Finishes the pending save of FocusMovedOn's first field.
+let finishSave = () => {};
+
+// After Enter, the user moves on to another field while the save runs: the save's end leaves the
+// focus there, and that field's edit goes on.
+export const FocusMovedOn = meta.story({
+  args: {
+    onSave: fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+    ),
+  },
+  render: (args) => (
+    <>
+      <UsernameField {...args} />
+      <UsernameField
+        {...args}
+        label={text.displayName}
+        value={text.title}
+        onSave={fn(async () => {})}
+      />
+    </>
+  ),
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(
+      canvas.getByRole("button", { name: m.inlineEditLabel({ label: args.label }) }),
+    );
+    // The editor takes the focus once it has rendered.
+    await waitFor(() => expect(canvas.getByRole("textbox", { name: args.label })).toHaveFocus());
+    await userEvent.keyboard(`${text.changed}{Enter}`);
+    await expect(args.onSave).toHaveBeenCalledOnce();
+
+    await userEvent.click(
+      canvas.getByRole("button", { name: m.inlineEditLabel({ label: text.displayName }) }),
+    );
+    const other = await canvas.findByRole("textbox", { name: text.displayName });
+    await waitFor(() => expect(other).toHaveFocus());
+    finishSave();
+
+    await expect(await canvas.findByText(text.changed)).toBeVisible();
+    // The editor selected its value, which the typing replaces.
+    await userEvent.keyboard("Ada King");
+    await expect(canvas.getByRole("textbox", { name: text.displayName })).toHaveValue("Ada King");
+  },
+});
+
+// The window loses the focus, as when the user switches to another tab: the edit stays, unsaved.
+export const WindowLeft = meta.story({
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(
+      canvas.getByRole("button", { name: m.inlineEditLabel({ label: args.label }) }),
+    );
+    // The editor takes the focus once it has rendered.
+    await waitFor(() => expect(canvas.getByRole("textbox", { name: args.label })).toHaveFocus());
+    await userEvent.keyboard(text.changed);
+
+    const hasFocus = spyOn(document, "hasFocus").mockReturnValue(false);
+    try {
+      canvas.getByRole("textbox", { name: args.label }).blur();
+    } finally {
+      hasFocus.mockRestore();
+    }
+
+    await expect(args.onSave).not.toHaveBeenCalled();
+    await expect(canvas.getByRole("textbox", { name: args.label })).toHaveValue(text.changed);
+  },
+});
+
+// The Enter that confirms an input method's composition, as of Japanese characters, doesn't save;
+// the next one does.
+export const Composing = meta.story({
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(
+      canvas.getByRole("button", { name: m.inlineEditLabel({ label: args.label }) }),
+    );
+    // The editor takes the focus once it has rendered.
+    await waitFor(() => expect(canvas.getByRole("textbox", { name: args.label })).toHaveFocus());
+    await userEvent.keyboard(text.changed);
+    const input = canvas.getByRole("textbox", { name: args.label });
+
+    await fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    // Safari's, after the composition has ended.
+    await fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+
+    await expect(args.onSave).not.toHaveBeenCalled();
+    await expect(input).toHaveValue(text.changed);
+
+    await userEvent.keyboard("{Enter}");
+
+    await expect(args.onSave).toHaveBeenCalledWith(text.changed);
   },
 });
 
