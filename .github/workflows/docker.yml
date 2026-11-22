@@ -1,0 +1,81 @@
+name: docker
+
+# Every commit to master publishes two image variants to ghcr.io: the distroless image as edge and its
+# short commit, and the Debian trixie image as edge-trixie and the commit with -trixie. latest is
+# reserved for the first release. A pull request builds both without pushing, so a broken Dockerfile
+# fails before the merge; a manual run on any other ref builds without publishing. Both images are
+# built for linux/amd64 and linux/arm64.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.event_name }}-${{ github.ref }}
+  # A master run isn't cancelled, so every commit that starts publishing gets its tags. A pull request
+  # cancels its superseded builds.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # act has no registry credentials, and its runner can't register QEMU for arm64, so every step is
+  # skipped there. Build the images locally with `docker build --target distroless .` and
+  # `--target trixie` instead.
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - if: ${{ !env.ACT }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: ${{ !env.ACT }}
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - if: ${{ !env.ACT }}
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - if: ${{ !env.ACT }}
+        id: version
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      # A pull request from a fork gets a read-only token, and pushes nowhere.
+      - if: ${{ !env.ACT && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The two builds share the Node and Go stages, which the second one takes from the first one's
+      # cache.
+      - if: ${{ !env.ACT }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: distroless
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+          tags: |
+            ghcr.io/${{ github.repository }}:edge
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.short }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.short }}
+            REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=distroless
+          cache-to: type=gha,mode=max,scope=distroless
+      - if: ${{ !env.ACT }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: trixie
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+          tags: |
+            ghcr.io/${{ github.repository }}:edge-trixie
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.short }}-trixie
+          build-args: |
+            VERSION=${{ steps.version.outputs.short }}
+            REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=trixie
+          cache-to: type=gha,mode=max,scope=trixie

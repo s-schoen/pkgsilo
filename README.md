@@ -64,6 +64,45 @@ task build:prod
 
 </details>
 
+### Container images
+
+Every commit to master publishes two image variants to `ghcr.io/s-schoen/pkgsilo`, each for `linux/amd64` and `linux/arm64`:
+
+- `edge` and `<short-commit>`: distroless, with no shell, as user and group 65532.
+- `edge-trixie` and `<short-commit>-trixie`: Debian 13 with bash, as the same user and group.
+  `docker exec -it <container> bash` opens the shell; `docker exec -it -u 0 <container> bash` opens it as root.
+
+`edge` follows master, and `latest` is reserved for the first release.
+Pin `<short-commit>` for a deployment that changes only when you update it.
+
+Both images embed the web UI and include the `migrate` CLI with the migrations in `/migrations`.
+The server doesn't migrate on startup, so apply them first, with the database reachable from the container (on Linux, `--network host` reaches `localhost`):
+
+```sh
+export DATABASE_URL='postgres://pkgsilo:pkgsilo@localhost:5432/pkgsilo?sslmode=disable'
+# Once; reuse the same value on every start, since changing it invalidates every API key.
+export API_KEY_PEPPER="$(openssl rand -hex 32)"
+
+docker run --rm --network host -e DATABASE_URL \
+  --entrypoint /usr/local/bin/migrate \
+  ghcr.io/s-schoen/pkgsilo:edge \
+  -path /migrations -database "$DATABASE_URL" up
+```
+
+Then start the server:
+
+```sh
+docker run --rm --network host \
+  -e DATABASE_URL="$DATABASE_URL" \
+  -e API_KEY_PEPPER="$API_KEY_PEPPER" \
+  ghcr.io/s-schoen/pkgsilo:edge
+```
+
+The API and the web UI are on port 8080, and `/metrics` is on 9090.
+With a database outside the host, drop `--network host`, publish the ports with `-p 8080:8080 -p 9090:9090`, and use the database's address in `DATABASE_URL`.
+The image needs the same [configuration](#configuration) as the binary.
+If the package is private, `docker login ghcr.io` first with a token that has `read:packages`.
+
 ## Quickstart
 
 The shortest path uses the PostgreSQL container from `docker-compose.dev.yaml`; the commands assume Linux or WSL.
