@@ -1,5 +1,6 @@
 // The problem types of the API's identities that the UI tells apart (feature/identity/api).
 export const problemTypes = {
+  identityNotFound: "https://pkgsilo/problems/identity-not-found",
   usernameTaken: "https://pkgsilo/problems/username-taken",
   invalidBody: "https://pkgsilo/problems/invalid-body",
 };
@@ -10,6 +11,13 @@ export type ApiProblem = { status?: number; info?: { type?: string } };
 
 export function apiProblem(error: unknown): ApiProblem {
   return typeof error === "object" && error !== null ? error : {};
+}
+
+// The API's 404 for an identity that doesn't exist, or that the actor can't read, which it answers
+// alike.
+export function isIdentityNotFound(error: unknown): boolean {
+  const { status, info } = apiProblem(error);
+  return status === 404 && info?.type === problemTypes.identityNotFound;
 }
 
 // The API's 409 for a username that another identity has.
