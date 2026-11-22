@@ -115,6 +115,9 @@ export type DataTableProps<TData extends RowData> = {
   // reports its outcome itself, such as with a toast; while its promise runs, the dialog waits,
   // and if it rejects, the dialog stays open.
   onDelete?: (rows: Array<TData>) => Promise<void> | void;
+  // The rows that onDelete can delete; every row when it's missing. Delete shows while one of the
+  // selected rows qualifies, onDelete gets only those, and the confirmation counts them.
+  canDelete?: (row: TData) => boolean;
 };
 
 // A page's list, as Plane's: a toolbar with the search, a chip for each filter, and the Filters and
@@ -141,6 +144,7 @@ export function DataTable<TData extends RowData>({
   emptyState,
   bulkActions = noBulkActions,
   onDelete,
+  canDelete,
   groupingOptions = noGroupingOptions,
   grouping: groupingProp,
   onGroupingChange,
@@ -297,6 +301,10 @@ export function DataTable<TData extends RowData>({
     }
   };
 
+  // The rows of these that Delete deletes; none when the page deletes nothing.
+  const deletableRows = (targets: Array<TData>) =>
+    onDelete ? (canDelete ? targets.filter(canDelete) : targets) : [];
+
   const askDelete = (targets: Array<TData>) => {
     setDeleting(targets);
     setDeleteOpen(true);
@@ -315,7 +323,7 @@ export function DataTable<TData extends RowData>({
     const targets = isSelected ? selectedRows : [row];
     const items = rowMenuItems(
       targets.map((selected) => selected.original),
-      { getRowHref, onRowAction, bulkActions, canDelete: Boolean(onDelete) },
+      { getRowHref, onRowAction, bulkActions, deletableRows },
     );
     if (!items) {
       return false;
@@ -433,7 +441,8 @@ export function DataTable<TData extends RowData>({
               bulkActions={bulkActions}
               runningAction={runningAction}
               onAction={runAction}
-              onDelete={onDelete && askDelete}
+              deletable={deletableRows(selectedRows.map((row) => row.original))}
+              onDelete={askDelete}
               onClear={clearSelection}
             />
           )

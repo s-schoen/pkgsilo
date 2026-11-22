@@ -10,29 +10,32 @@ export type RowMenuItems<TData extends RowData> = {
   open: (() => void) | undefined;
   href: Href | undefined;
   actions: Array<ApplicableAction<TData>>;
-  canDelete: boolean;
+  // The rows that Delete deletes; none when the menu has no Delete.
+  deletable: Array<TData>;
 };
 
 type RowMenuOptions<TData extends RowData> = {
   getRowHref: ((row: TData) => Href) | undefined;
   onRowAction: ((row: TData) => void) | undefined;
   bulkActions: Array<DataTableBulkAction<TData>>;
-  canDelete: boolean;
+  // Picks the rows that Delete deletes, none when the page deletes nothing.
+  deletableRows: (rows: Array<TData>) => Array<TData>;
 };
 
 // The items of the menu on these rows, or none when there's nothing to do with them: then the
 // browser shows its own menu.
 export function rowMenuItems<TData extends RowData>(
   rows: Array<TData>,
-  { getRowHref, onRowAction, bulkActions, canDelete }: RowMenuOptions<TData>,
+  { getRowHref, onRowAction, bulkActions, deletableRows }: RowMenuOptions<TData>,
 ): RowMenuItems<TData> | undefined {
   const single = rows.length === 1 ? rows[0] : undefined;
   const items = {
     open: single !== undefined && onRowAction ? () => onRowAction(single) : undefined,
     href: single !== undefined ? getRowHref?.(single) : undefined,
     actions: applicableActions(bulkActions, rows),
-    canDelete: canDelete && rows.length > 0,
+    deletable: deletableRows(rows),
   };
-  const isEmpty = !items.open && !items.href && items.actions.length === 0 && !items.canDelete;
+  const isEmpty =
+    !items.open && !items.href && items.actions.length === 0 && items.deletable.length === 0;
   return isEmpty ? undefined : items;
 }

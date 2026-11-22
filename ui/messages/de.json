@@ -99,5 +99,41 @@
   "identityCreated": "{name} erstellt.",
   "identityCreateFailed": "Die Identität konnte nicht erstellt werden. Versuche es gleich noch einmal.",
   "identityCreateForbidden": "Du darfst keine Identitäten erstellen.",
-  "identitiesEmpty": "Noch keine Identitäten."
+  "identitiesEmpty": "Noch keine Identitäten.",
+  "identityActions": "Aktionen der Identität",
+  "identityDelete": "Löschen",
+  "identityDeleteTitle": "{name} löschen?",
+  "identityDeleteDescription": "Die Identität und alles, was zu ihr gehört, werden gelöscht. Das lässt sich nicht rückgängig machen.",
+  "identityDeleted": "{name} gelöscht.",
+  "identitiesDeleted": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} Identität gelöscht.",
+        "countPlural=other": "{count} Identitäten gelöscht."
+      }
+    }
+  ],
+  "identitiesDeleteFailed": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Die Identität konnte nicht gelöscht werden. Versuche es gleich noch einmal.",
+        "countPlural=other": "Die Identitäten konnten nicht gelöscht werden. Versuche es gleich noch einmal."
+      }
+    }
+  ],
+  "identitiesDeleteForbidden": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Du darfst diese Identität nicht löschen.",
+        "countPlural=other": "Du darfst diese Identitäten nicht löschen."
+      }
+    }
+  ],
+  "identitiesDeletedPartly": "{deleted} von {count} Identitäten gelöscht. Die übrigen konnten nicht gelöscht werden."
 }

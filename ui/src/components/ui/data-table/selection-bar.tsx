@@ -20,18 +20,21 @@ type SelectionBarProps<TData extends RowData> = {
   runningAction: string | undefined;
   // Runs an action on the rows it applies to.
   onAction: (action: DataTableBulkAction<TData>, rows: Array<TData>) => Promise<void>;
-  // Asks before it deletes the rows; missing when the page deletes nothing.
-  onDelete: ((rows: Array<TData>) => void) | undefined;
+  // The selected rows that Delete deletes; Delete shows while there's one at least.
+  deletable: Array<TData>;
+  // Asks before it deletes the rows.
+  onDelete: (rows: Array<TData>) => void;
   onClear: () => void;
 };
 
 // The toolbar's part for the selected rows: how many there are, a button that clears the selection,
-// the bulk actions that apply to one of them, and delete last.
+// the bulk actions that apply to one of them, and delete last, when it applies to one of them.
 export function SelectionBar<TData extends RowData>({
   rows,
   bulkActions,
   runningAction,
   onAction,
+  deletable,
   onDelete,
   onClear,
 }: SelectionBarProps<TData>) {
@@ -66,13 +69,13 @@ export function SelectionBar<TData extends RowData>({
           </Button>
         );
       })}
-      {onDelete && (
+      {deletable.length > 0 && (
         <Button
           variant="danger-outline"
           icon={IconTrash}
           isDisabled={isRunning}
           onPress={() => {
-            onDelete(rows);
+            onDelete(deletable);
           }}
         >
           {m.dataTableDelete()}
