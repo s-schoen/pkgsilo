@@ -106,16 +106,19 @@ export function InlineEdit<T>({
     onEditingChange?.(true);
   }
 
-  // Leaves the edit mode; focusView returns the focus to the view, unless it has moved on.
+  // Leaves the edit mode; focusView returns the focus to the view, unless it has moved on: the user
+  // may have moved it to another field while the save ran.
   function leave(focusView: boolean) {
     editing.current = false;
+    const focused = document.activeElement;
+    const isFocusInEditor = focused instanceof HTMLElement && editorRef.current?.contains(focused);
     // The editor gives up the focus before React removes it: the browser's blur of a removed element
     // would reach React Aria's handlers while React commits, which React rejects.
-    const focused = document.activeElement;
-    if (focused instanceof HTMLElement && editorRef.current?.contains(focused)) {
+    if (isFocusInEditor) {
       focused.blur();
     }
-    focusViewOnLeave.current = focusView;
+    focusViewOnLeave.current =
+      focusView && (isFocusInEditor || focused === null || focused === document.body);
     setIsEditing(false);
     setHasTriedSave(false);
     setSaveError(undefined);
@@ -162,6 +165,12 @@ export function InlineEdit<T>({
   }
 
   function handleKeyDown(event: KeyboardEvent) {
+    // The keys of an input method's composition, as the Enter that confirms Japanese characters,
+    // are the composition's. Safari sends that Enter after the composition has ended, with the
+    // keyCode 229 of a key that the input method took.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       void save(true);
@@ -171,8 +180,12 @@ export function InlineEdit<T>({
     }
   }
 
-  // Leaving the editor saves, but not moving within it.
+  // Leaving the editor saves, but not moving within it, nor leaving the window, as for another tab:
+  // the editor has the focus again when the user comes back.
   function handleBlur(event: FocusEvent) {
+    if (!document.hasFocus()) {
+      return;
+    }
     if (!event.currentTarget.contains(event.relatedTarget)) {
       void save(false);
     }
