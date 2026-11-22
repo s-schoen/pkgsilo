@@ -1,7 +1,7 @@
 // Before any other import, as in main.tsx: zod reads the setting when it creates a schema.
 import "@/lib/zod-jitless.ts";
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
 
 import { configureZodLocale } from "@/lib/zod-locale.ts";
@@ -26,6 +26,10 @@ window.matchMedia = (media) => ({
 // zod's messages in English, as main.tsx sets them for jsdom's en-US. A test of another locale sets
 // it back after itself, since the setting is global.
 configureZodLocale("en");
+
+// CI runs the unit tests beside two Chromium projects, and the 1 s default of findBy* and waitFor is
+// too tight for the first render of the app through the router.
+configure({ asyncUtilTimeout: 5000 });
 
 beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });
