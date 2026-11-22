@@ -25,3 +25,11 @@ reflow-mode = "sentence-per-line"
 # Consistent fenced code blocks.
 [MD048]
 style = "backtick"
+
+# Collapsible sections, as in the README's alternative install paths.
+[MD033]
+allowed-elements = ["details", "summary"]
+
+# The licence text is neither headed nor written one sentence per line.
+[per-file-ignores]
+"LICENSE" = ["MD013", "MD041"]
