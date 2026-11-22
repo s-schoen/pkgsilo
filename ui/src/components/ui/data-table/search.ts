@@ -45,6 +45,21 @@ function joinList(values: Array<string>): string {
   return values.join(",");
 }
 
+// The params of the table itself, which a select filter's param would replace.
+const RESERVED_PARAMS: ReadonlySet<string> = new Set(["q", "group", "sort"]);
+
+// Fails for a select filter whose id is one of the table's own params, which would read and write
+// the same key as the search, the grouping or the order.
+export function assertFilterParams(filters: ReadonlyArray<string>) {
+  for (const id of filters) {
+    if (RESERVED_PARAMS.has(id)) {
+      throw new Error(
+        `A data table's select filter can't be named "${id}", the table's own param: give its column another id.`,
+      );
+    }
+  }
+}
+
 // The search params of a data table, with one param per select filter of `filters`.
 export type DataTableSearch<TFilter extends string = string> = {
   q?: string;
@@ -55,13 +70,14 @@ export type DataTableSearch<TFilter extends string = string> = {
 // The schema of a data table's search params, for the route's validateSearch: `q` (the search),
 // `group` (a column's id, or "none"), `sort` (a column's id, "-" before it for descending) and one
 // param per select filter, whose values are comma-joined, so a value must not hold a comma. A
-// value that doesn't parse falls back to none instead of failing the route. Spread its shape into
-// a z.object to add the route's own params.
+// value that doesn't parse falls back to none instead of failing the route. A filter can't be named
+// q, group or sort, which throws. Spread its shape into a z.object to add the route's own params.
 export function dataTableSearchSchema<const TFilter extends string>({
   filters,
 }: {
   filters: ReadonlyArray<TFilter>;
 }) {
+  assertFilterParams(filters);
   const filterParams = Object.fromEntries(filters.map((id) => [id, listParam])) as Record<
     TFilter,
     typeof listParam
@@ -70,8 +86,8 @@ export function dataTableSearchSchema<const TFilter extends string>({
 }
 
 // What a page shows when its URL has no params: the filters it lists by, its order and its
-// grouping. Only text and select filters of `filterState` count; text and number filters stay out
-// of the URL.
+// grouping. The search and the select filters of `filters` are left out of the URL while they
+// equal their defaults; the other filters stay in the page's state, starting from theirs.
 export type DataTableSearchDefaults = {
   filterState?: DataTableFilterState;
   sorting?: SortingState;

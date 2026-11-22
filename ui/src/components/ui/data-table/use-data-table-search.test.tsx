@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod/v4";
 
 import { DataTable, dataTableSearchSchema, useDataTableSearch } from "@/components/ui/data-table";
@@ -16,13 +16,13 @@ import { m } from "@/paraglide/messages.js";
 
 import type { DataTableColumnDef, DataTableSearchDefaults } from "@/components/ui/data-table";
 
-type Key = { id: string; name: string; status: string };
+type Key = { id: string; name: string; status: string; owner: string };
 
 const keys: Array<Key> = [
-  { id: "k1", name: "ci-publish", status: "active" },
-  { id: "k2", name: "backup-mirror", status: "expired" },
-  { id: "k3", name: "ci-legacy", status: "revoked" },
-  { id: "k4", name: "deploy", status: "active" },
+  { id: "k1", name: "ci-publish", status: "active", owner: "alice" },
+  { id: "k2", name: "backup-mirror", status: "expired", owner: "bob" },
+  { id: "k3", name: "ci-legacy", status: "revoked", owner: "bob" },
+  { id: "k4", name: "deploy", status: "active", owner: "alice" },
 ];
 
 const columns: Array<DataTableColumnDef<Key>> = [
@@ -35,8 +35,15 @@ const columns: Array<DataTableColumnDef<Key>> = [
       filterVariant: "select",
       options: ["active", "expired", "revoked"].map((value) => ({ value, label: value })),
     },
-    filterFn: (row, columnId, values: Array<string>) =>
-      values.includes(String(row.getValue(columnId))),
+  },
+  // A select filter that the URL doesn't keep.
+  {
+    accessorKey: "owner",
+    meta: {
+      label: () => "Owner",
+      filterVariant: "select",
+      options: ["alice", "bob"].map((value) => ({ value, label: value })),
+    },
   },
 ];
 
@@ -78,10 +85,34 @@ const keysRoute = createRoute({
   },
 });
 
+// What the navigations of the slow page wait for, as a slow loader would make them.
+let gate = Promise.resolve();
+
+// A list page without defaults, whose navigations complete only once the gate opens: until then,
+// its search stays the one of the last navigation that completed.
+const slowKeysRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/slow-keys",
+  validateSearch: dataTableSearchSchema({ filters }),
+  beforeLoad: () => gate,
+  component: function SlowKeysPage() {
+    const search = useDataTableSearch(slowKeysRoute, { filters });
+    return (
+      <DataTable
+        label="Keys"
+        columns={columns}
+        rows={keys}
+        getRowId={(key) => key.id}
+        {...search}
+      />
+    );
+  },
+});
+
 function renderPage(path: string) {
   const history = createMemoryHistory({ initialEntries: ["/", path] });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([homeRoute, keysRoute]),
+    routeTree: rootRoute.addChildren([homeRoute, keysRoute, slowKeysRoute]),
     history,
   });
   render(<RouterProvider router={router} />);
@@ -94,6 +125,19 @@ async function rowNames() {
     .getAllByRole("row")
     .map((row) => row.textContent);
 }
+
+// Opens the Filters popover and checks its options, one after the other.
+async function checkFilters(user: ReturnType<typeof userEvent.setup>, ...options: Array<string>) {
+  await user.click(screen.getByRole("button", { name: m.dataTableFilters() }));
+  const dialog = await screen.findByRole("dialog", { name: m.dataTableFilters() });
+  for (const option of options) {
+    await user.click(within(dialog).getByRole("option", { name: option }));
+  }
+}
+
+afterEach(() => {
+  gate = Promise.resolve();
+});
 
 describe("useDataTableSearch", () => {
   it("opens with the defaults and keeps them out of the URL", async () => {
@@ -169,5 +213,42 @@ describe("useDataTableSearch", () => {
 
     expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("keeps a select filter that filters doesn't list in the page's state", async () => {
+    const user = userEvent.setup();
+    const { router } = renderPage("/keys?status=");
+    expect(await rowNames()).toHaveLength(4);
+
+    await checkFilters(user, "alice");
+    await user.keyboard("{Escape}");
+
+    expect(await rowNames()).toEqual([
+      expect.stringContaining("ci-publish"),
+      expect.stringContaining("deploy"),
+    ]);
+    expect(router.state.location.search).toEqual({ status: "" });
+  });
+
+  it("builds a change on the last one while its navigation is pending", async () => {
+    const user = userEvent.setup();
+    const { router } = renderPage("/slow-keys");
+    expect(await rowNames()).toHaveLength(4);
+
+    let open = () => {};
+    gate = new Promise((resolve) => {
+      open = resolve;
+    });
+    await checkFilters(user, "expired", "revoked");
+    open();
+
+    await waitFor(() => {
+      expect(router.state.location.search).toEqual({ status: "expired,revoked" });
+    });
+    await user.keyboard("{Escape}");
+    expect(await rowNames()).toEqual([
+      expect.stringContaining("backup-mirror"),
+      expect.stringContaining("ci-legacy"),
+    ]);
   });
 });

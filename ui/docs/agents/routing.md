@@ -69,5 +69,6 @@ return (
 - The defaults stay out of the URL: a param that's missing takes its default, and the hook leaves out each value that equals one.
   An empty param (`?status=`, `?sort=`) or `group=none` turns a default off.
 - A change replaces the history entry (`replace: true`) and keeps the route's other params, so Back leaves the page.
-- Text and number filters stay out of the URL, in the page's state.
+- `filters` names the select filters by their columns' ids, as TanStack gives them (`owner.name` is `owner_name`); none may be `q`, `group` or `sort`, the table's own params, which throws.
+- Text and number filters, and select filters of columns that `filters` leaves out, stay out of the URL, in the page's state.
 - To add the page's own params, spread the schema's shape: `z.object({ ...dataTableSearchSchema({ filters }).shape, peek: … })`.
