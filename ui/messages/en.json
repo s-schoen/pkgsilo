@@ -46,5 +46,28 @@
   "dataTableProperties": "Properties",
   "dataTableEmpty": "Nothing here yet",
   "dataTableNoMatches": "No results match these filters",
-  "dataTableClearFilters": "Clear filters"
+  "dataTableClearFilters": "Clear filters",
+  "dataTableSelected": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} item selected",
+        "countPlural=other": "{count} items selected"
+      }
+    }
+  ],
+  "dataTableClearSelection": "Clear selection",
+  "dataTableDelete": "Delete",
+  "dataTableDeleteTitle": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Delete this item?",
+        "countPlural=other": "Delete {count} items?"
+      }
+    }
+  ],
+  "dataTableDeleteDescription": "This can't be undone."
 }

@@ -13,17 +13,19 @@ import type {
   DataTableTable,
 } from "@/components/ui/data-table/types.ts";
 import type { RowData } from "@tanstack/react-table";
-import type { Key, RefObject } from "react";
+import type { Key, ReactNode, RefObject } from "react";
 
 import styles from "@/components/ui/data-table/data-table.module.css";
 
 type ToolbarProps<TData extends RowData> = {
   table: DataTableTable<TData>;
+  // The part for the selected rows, while there are any.
+  selectionBar?: ReactNode;
 };
 
 // The bar above the rows, which sticks to the top of the window: the search, a chip for each
-// active filter, and the Filters and Display popovers.
-export function Toolbar<TData extends RowData>({ table }: ToolbarProps<TData>) {
+// active filter, the selected rows' actions, and the Filters and Display popovers.
+export function Toolbar<TData extends RowData>({ table, selectionBar }: ToolbarProps<TData>) {
   const searchRef = useRef<HTMLInputElement>(null);
   const filterColumns = table
     .getAllColumns()
@@ -44,6 +46,7 @@ export function Toolbar<TData extends RowData>({ table }: ToolbarProps<TData>) {
         <FilterChips table={table} columns={filterColumns} searchRef={searchRef} />
       </div>
       <div className={styles.actions}>
+        {selectionBar}
         {filterColumns.length > 0 && <FiltersPopover table={table} columns={filterColumns} />}
         <DisplayPopover table={table} />
       </div>

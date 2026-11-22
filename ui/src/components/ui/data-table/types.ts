@@ -108,3 +108,16 @@ export type DataTableColumn<TData extends RowData, TValue extends CellData = Cel
 export type DataTableRow<TData extends RowData> = Row<DataTableFeatures, TData>;
 
 export type DataTableTable<TData extends RowData> = ReactTable<DataTableFeatures, TData>;
+
+// An action on the selected rows, besides delete, such as revoking API keys: the toolbar offers it
+// while one of the selected rows qualifies.
+export type DataTableBulkAction<TData extends RowData> = {
+  // The button's text: a message.
+  label: Message;
+  icon: TablerIcon;
+  // The rows the action can change; every row when it's missing.
+  appliesTo?: (row: TData) => boolean;
+  // Runs on the selected rows that the action applies to, and on no other. It reports its outcome
+  // itself, such as with a toast.
+  onAction: (rows: Array<TData>) => Promise<void> | void;
+};

@@ -46,5 +46,28 @@
   "dataTableProperties": "Eigenschaften",
   "dataTableEmpty": "Hier ist noch nichts",
   "dataTableNoMatches": "Keine Ergebnisse für diese Filter",
-  "dataTableClearFilters": "Filter zurücksetzen"
+  "dataTableClearFilters": "Filter zurücksetzen",
+  "dataTableSelected": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} Eintrag ausgewählt",
+        "countPlural=other": "{count} Einträge ausgewählt"
+      }
+    }
+  ],
+  "dataTableClearSelection": "Auswahl aufheben",
+  "dataTableDelete": "Löschen",
+  "dataTableDeleteTitle": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Diesen Eintrag löschen?",
+        "countPlural=other": "{count} Einträge löschen?"
+      }
+    }
+  ],
+  "dataTableDeleteDescription": "Das lässt sich nicht rückgängig machen."
 }

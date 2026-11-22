@@ -12,23 +12,34 @@ import styles from "@/components/ui/checkbox/checkbox.module.css";
 // schema (zod) validates it instead.
 type CheckboxProps = Omit<
   CheckboxFieldProps,
-  "children" | "className" | "style" | "validationBehavior" | "validate"
+  "children" | "className" | "style" | "validationBehavior" | "validate" | "slot"
 > & {
-  // The text next to the box, which names it: a message.
-  children: string;
   // A hint below the text.
   description?: string;
   // The error below the text, shown while isInvalid is set.
   errorMessage?: string;
-};
+} & (
+    | {
+        // The text next to the box, which names it: a message.
+        children: string;
+        slot?: undefined;
+      }
+    // The box alone, as a row's selection in a GridList, which names it ("Select") and binds it.
+    | { children?: undefined; slot: "selection" }
+  );
 
 // A checkbox with its text, of React Aria Components, which takes its props, such as isSelected,
 // onChange, isIndeterminate and isDisabled: <Checkbox isSelected={…} onChange={…}>{m.admin()}
 // </Checkbox>. The text and the box both toggle it. In a form of useAppForm, use the field's
-// Checkbox (@/components/form), which binds it.
+// Checkbox (@/components/form), which binds it. In a GridListItem, <Checkbox slot="selection" />
+// is the row's selection box.
 export function Checkbox({ children, description, errorMessage, ...props }: CheckboxProps) {
   return (
-    <CheckboxField {...props} validationBehavior="aria" className={styles.field}>
+    <CheckboxField
+      {...props}
+      validationBehavior="aria"
+      className={children ? styles.field : `${styles.field} ${styles.boxOnly}`}
+    >
       <CheckboxButton className={styles.button}>
         {({ isSelected, isIndeterminate }) => (
           <>
