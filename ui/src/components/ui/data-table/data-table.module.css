@@ -42,6 +42,20 @@
   margin-inline-start: auto;
 }
 
+/* The selected rows' part: the count, the clear button, the bulk actions and delete. */
+.selectionBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.selectionCount {
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
 /* The Filters popover: the filter list, then a field for each text or number column. */
 .filtersDialog {
   display: flex;
@@ -134,14 +148,32 @@
     background: var(--color-layer-transparent-hovered);
   }
 
-  /* The row that's open, as the one of a peek. */
-  &[data-active] {
+  /* The row that's open, as the one of a peek, and the selected rows. */
+  &[data-active],
+  &[data-selected] {
     background: var(--color-accent-subtle);
   }
 
   &[data-focus-visible] {
     outline: var(--focus-ring-width) solid var(--color-focus-ring);
     outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+}
+
+/* The row's selection box, which shows on hover, on focus, and while any row is selected: until
+   then it keeps its room, so that nothing moves when it shows. */
+.selection {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  opacity: 0;
+  transition-timing-function: var(--ease-out);
+  transition-duration: var(--duration-fast);
+  transition-property: opacity;
+
+  .row:is([data-hovered], [data-focused], [data-focus-visible-within]) &,
+  .rows[data-selecting] & {
+    opacity: 1;
   }
 }
 

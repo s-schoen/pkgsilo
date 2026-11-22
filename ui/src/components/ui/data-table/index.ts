@@ -2,6 +2,7 @@
 export { DataTable } from "@/components/ui/data-table/data-table.tsx";
 export type { DataTableProps } from "@/components/ui/data-table/data-table.tsx";
 export type {
+  DataTableBulkAction,
   DataTableColumn,
   DataTableColumnDef,
   DataTableColumnMeta,

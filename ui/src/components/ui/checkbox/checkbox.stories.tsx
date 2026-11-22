@@ -3,9 +3,12 @@ import { expect, fn } from "storybook/test";
 import preview from "#.storybook/preview";
 import { Checkbox } from "@/components/ui/checkbox";
 
+// The box's text, which a play function clicks; the type of args.children allows the box alone.
+const text = { label: "Administrator" };
+
 const meta = preview.meta({
   component: Checkbox,
-  args: { children: "Administrator", onChange: fn() },
+  args: { children: text.label, onChange: fn() },
 });
 
 // A click on the text checks the box.
@@ -13,7 +16,7 @@ export const Default = meta.story({
   play: async ({ args, canvas, userEvent }) => {
     const checkbox = canvas.getByRole("checkbox", { name: args.children });
 
-    await userEvent.click(canvas.getByText(args.children));
+    await userEvent.click(canvas.getByText(text.label));
 
     await expect(checkbox).toBeChecked();
     await expect(args.onChange).toHaveBeenCalledWith(true);
@@ -81,7 +84,7 @@ export const Disabled = meta.story({
   play: async ({ args, canvas, userEvent }) => {
     const [unchecked, checked] = canvas.getAllByRole("checkbox", { name: args.children });
 
-    await userEvent.click(canvas.getAllByText(args.children)[0] ?? unchecked);
+    await userEvent.click(canvas.getAllByText(text.label)[0] ?? unchecked);
 
     await expect(unchecked).toBeDisabled();
     await expect(unchecked).not.toBeChecked();

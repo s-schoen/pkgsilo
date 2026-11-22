@@ -1,3 +1,4 @@
+import IconBan from "@tabler/icons-react/icons/IconBan";
 import IconCalendar from "@tabler/icons-react/icons/IconCalendar";
 import IconCircleCheck from "@tabler/icons-react/icons/IconCircleCheck";
 import IconCircleX from "@tabler/icons-react/icons/IconCircleX";
@@ -15,7 +16,11 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { m } from "@/paraglide/messages.js";
 
-import type { DataTableColumnDef, DataTableProps } from "@/components/ui/data-table";
+import type {
+  DataTableBulkAction,
+  DataTableColumnDef,
+  DataTableProps,
+} from "@/components/ui/data-table";
 
 type Status = "active" | "expired" | "revoked";
 
@@ -40,6 +45,7 @@ const text = {
   expired: "Expired",
   revoked: "Revoked",
   empty: "No API keys yet. Create one to publish packages from CI.",
+  revoke: "Revoke",
 };
 
 const keys: Array<ApiKey> = [
@@ -217,9 +223,11 @@ function rowNames(grid: HTMLElement) {
     .map((row) => row.getAttribute("aria-label"));
 }
 
-// The keys as rows: an icon, the name as a link, and the properties as chips at the end.
+// The keys as rows: an icon, the name as a link, and the properties as chips at the end. Without
+// anything to do with them, the rows aren't selectable.
 export const Default = meta.story({
   play: async ({ canvas }) => {
+    await expect(canvas.queryByRole("checkbox")).not.toBeInTheDocument();
     const grid = canvas.getByRole("grid", { name: text.label });
     await expect(rowNames(grid)).toEqual(keys.map((key) => key.name));
     const row = canvas.getByRole("row", { name: "ci-publish" });
@@ -502,6 +510,252 @@ export const InPage = meta.story({
       canvas.getByRole("heading", { name: text.label }).getBoundingClientRect().bottom,
     ).toBeLessThan(0);
     window.scrollTo({ top: 0 });
+  },
+});
+
+// Revokes the active keys among the selected ones.
+const revoke = fn<(rows: Array<ApiKey>) => void>();
+const bulkActions: Array<DataTableBulkAction<ApiKey>> = [
+  {
+    label: () => text.revoke,
+    icon: IconBan,
+    appliesTo: (key) => key.status === "active",
+    onAction: revoke,
+  },
+];
+
+// The args of a table whose rows are selectable: they can be revoked and deleted.
+const selectable = { bulkActions, onDelete: fn() };
+
+function selectedCount(count: number) {
+  return m.dataTableSelected({ count });
+}
+
+function selectionBox(row: HTMLElement) {
+  return within(row).getByRole("checkbox");
+}
+
+// How visible a row's selection box is: the product of the opacities up to the row, since a
+// parent's opacity isn't inherited by the computed style.
+function boxOpacity(row: HTMLElement) {
+  let opacity = 1;
+  for (let node: HTMLElement | null = selectionBox(row); node && node !== row;) {
+    opacity *= Number(getComputedStyle(node).opacity);
+    node = node.parentElement;
+  }
+  return opacity;
+}
+
+// A row's box shows on hover and selects it; once a row is selected, every box shows, a click on a
+// row toggles it, and Shift+click selects the rows up to it. The clear button ends the selection.
+export const SelectWithPointer = meta.story({
+  args: selectable,
+  beforeEach: () => {
+    revoke.mockClear();
+  },
+  play: async ({ canvas, userEvent }) => {
+    const first = canvas.getByRole("row", { name: "ci-publish" });
+    const last = canvas.getByRole("row", { name: "release-signing" });
+    await expect(boxOpacity(last)).toBe(0);
+    await userEvent.hover(last);
+    await waitFor(async () => {
+      await expect(boxOpacity(last)).toBe(1);
+    });
+    await userEvent.unhover(last);
+
+    await userEvent.click(selectionBox(first));
+    await expect(selectionBox(first)).toBeChecked();
+    await expect(first).toHaveAttribute("aria-selected", "true");
+    await expect(canvas.getByText(selectedCount(1))).toBeVisible();
+    await expect(navigate).not.toHaveBeenCalled();
+
+    // Away from the first row, the other rows' boxes still show.
+    const third = canvas.getByRole("row", { name: "backup-mirror" });
+    await userEvent.unhover(first);
+    await waitFor(async () => {
+      await expect(boxOpacity(third)).toBe(1);
+    });
+
+    // Each call of userEvent starts with no key held: one session holds Shift through the click.
+    const session = userEvent.setup({});
+    await session.keyboard("{Shift>}");
+    await session.click(within(third).getByText(text.expired));
+    await session.keyboard("{/Shift}");
+    await expect(canvas.getByText(selectedCount(3))).toBeVisible();
+    await expect(canvas.getByRole("row", { name: "deploy-staging" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    // A plain click on a selected row unselects it rather than opening it.
+    await userEvent.click(within(third).getByText(text.expired));
+    await expect(canvas.getByText(selectedCount(2))).toBeVisible();
+    await expect(navigate).not.toHaveBeenCalled();
+
+    await userEvent.click(canvas.getByRole("button", { name: m.dataTableClearSelection() }));
+    await expect(canvas.queryByText(selectedCount(2))).not.toBeInTheDocument();
+    await expect(first).toHaveAttribute("aria-selected", "false");
+    // The focus moves from the gone button to the rows.
+    await expect(canvas.getByRole("grid", { name: text.label })).toContainElement(
+      document.activeElement as HTMLElement,
+    );
+  },
+});
+
+// Space selects the focused row, and Ctrl+A every row; Escape clears the selection.
+export const SelectWithKeyboard = meta.story({
+  args: selectable,
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("searchbox", { name: m.dataTableSearch() }));
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    const first = canvas.getByRole("row", { name: "ci-publish" });
+    await expect(first).toHaveFocus();
+    await waitFor(async () => {
+      await expect(boxOpacity(first)).toBe(1);
+    });
+
+    await userEvent.keyboard(" ");
+    await userEvent.keyboard("{ArrowDown} ");
+    await expect(canvas.getByText(selectedCount(2))).toBeVisible();
+    await expect(navigate).not.toHaveBeenCalled();
+
+    await userEvent.keyboard("{Control>}a{/Control}");
+    await expect(canvas.getByText(selectedCount(keys.length))).toBeVisible();
+
+    await userEvent.keyboard("{Escape}");
+    await expect(canvas.queryByText(selectedCount(keys.length))).not.toBeInTheDocument();
+  },
+});
+
+// Select all takes the rows that the filters keep, and the rows hidden later don't come back with
+// the filter's end.
+export const SelectAllFiltered = meta.story({
+  args: selectable,
+  play: async ({ canvas, userEvent }) => {
+    const search = canvas.getByRole("searchbox", { name: m.dataTableSearch() });
+    await userEvent.type(search, "alice");
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "deploy-staging" })));
+    await userEvent.keyboard("{Control>}a{/Control}");
+    await expect(canvas.getByText(selectedCount(2))).toBeVisible();
+
+    await userEvent.clear(search);
+    await expect(rowNames(canvas.getByRole("grid", { name: text.label }))).toHaveLength(
+      keys.length,
+    );
+    await expect(canvas.getByText(selectedCount(2))).toBeVisible();
+    await expect(canvas.getByRole("row", { name: "ci-publish" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  },
+});
+
+// A filter that hides a selected row takes it out of the selection for good.
+export const SelectionClearedByFilter = meta.story({
+  args: selectable,
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "ci-publish" })));
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "deploy-staging" })));
+    await expect(canvas.getByText(selectedCount(2))).toBeVisible();
+
+    const search = canvas.getByRole("searchbox", { name: m.dataTableSearch() });
+    await userEvent.type(search, "alice");
+    await expect(canvas.getByText(selectedCount(1))).toBeVisible();
+
+    await userEvent.clear(search);
+    await expect(canvas.getByText(selectedCount(1))).toBeVisible();
+    await expect(canvas.getByRole("row", { name: "ci-publish" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  },
+});
+
+// A bulk action shows while one of the selected rows qualifies, and acts on those rows alone.
+export const BulkAction = meta.story({
+  args: selectable,
+  beforeEach: () => {
+    revoke.mockClear();
+  },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "backup-mirror" })));
+    await expect(canvas.getByText(selectedCount(1))).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: text.revoke })).not.toBeInTheDocument();
+
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "ci-publish" })));
+    await userEvent.click(canvas.getByRole("button", { name: text.revoke }));
+    await expect(revoke).toHaveBeenCalledOnce();
+    await expect(revoke).toHaveBeenCalledWith([keys[0]]);
+
+    // Delete comes after the bulk actions.
+    const buttons = canvas.getAllByRole("button").map((button) => button.textContent);
+    await expect(buttons.indexOf(m.dataTableDelete())).toBeGreaterThan(
+      buttons.indexOf(text.revoke),
+    );
+  },
+});
+
+// Delete asks first, naming how many rows it deletes; confirming deletes them and ends the
+// selection.
+export const DeleteConfirmed = meta.story({
+  args: selectable,
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "ci-publish" })));
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "backup-mirror" })));
+    await userEvent.click(canvas.getByRole("button", { name: m.dataTableDelete() }));
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: m.dataTableDeleteTitle({ count: 2 }),
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: m.dataTableDelete() }));
+
+    await expect(args.onDelete).toHaveBeenCalledOnce();
+    await expect(args.onDelete).toHaveBeenCalledWith([keys[0], keys[2]]);
+    await waitFor(async () => {
+      await expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    await expect(canvas.queryByText(selectedCount(2))).not.toBeInTheDocument();
+  },
+});
+
+// Cancel deletes nothing and keeps the selection.
+export const DeleteCancelled = meta.story({
+  args: selectable,
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "ci-publish" })));
+    await userEvent.click(canvas.getByRole("button", { name: m.dataTableDelete() }));
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: m.dataTableDeleteTitle({ count: 1 }),
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: m.cancel() }));
+
+    await waitFor(async () => {
+      await expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    await expect(args.onDelete).not.toHaveBeenCalled();
+    await expect(canvas.getByText(selectedCount(1))).toBeVisible();
+  },
+});
+
+// In German: the selection's texts are messages, the count's in its plural.
+export const SelectionGerman = meta.story({
+  args: selectable,
+  globals: { locale: "de" },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "ci-publish" })));
+    await expect(
+      canvas.getByText(m.dataTableSelected({ count: 1 }, { locale: "de" })),
+    ).toBeVisible();
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "deploy-staging" })));
+    await expect(
+      canvas.getByText(m.dataTableSelected({ count: 2 }, { locale: "de" })),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: m.dataTableDelete({}, { locale: "de" }) }),
+    ).toBeVisible();
   },
 });
 

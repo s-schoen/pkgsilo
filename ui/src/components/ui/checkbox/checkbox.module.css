@@ -12,6 +12,11 @@
   }
 }
 
+/* Without a text, as a row's selection box: the box alone, without the text's column. */
+.boxOnly {
+  grid-template-columns: var(--size-checkbox);
+}
+
 .button {
   display: flex;
   grid-column: 1 / -1;
