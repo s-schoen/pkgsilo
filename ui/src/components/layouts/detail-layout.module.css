@@ -1,0 +1,47 @@
+@import "@/styles/media.css";
+
+/* One column below --lg: the title, the sidebar, the body. From --lg the title and the body share
+   the main column, and the sidebar spans both rows at the end. */
+.layout {
+  display: grid;
+  grid-template-areas:
+    "title"
+    "sidebar"
+    "body";
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+
+  /* The body's row takes what the sidebar adds beyond the title, so that the title keeps its
+     own height. */
+  @media (--lg) {
+    /* stylelint-disable-next-line declaration-block-no-redundant-longhand-properties -- the shorthand would hold a token among its sizes, which breaks the renamed areas (ui/docs/agents/components.md) */
+    grid-template-areas:
+      "title sidebar"
+      "body sidebar";
+    grid-template-rows: auto 1fr;
+    grid-template-columns: minmax(0, 1fr) var(--size-detail-sidebar);
+  }
+}
+
+.title {
+  grid-area: title;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The page is a surface already, and surfaces don't nest: the sidebar stands apart as a layer
+   with a frame. */
+.sidebar {
+  grid-area: sidebar;
+  min-inline-size: 0;
+  padding: var(--space-3);
+  background: var(--color-layer-1);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.body {
+  grid-area: body;
+  min-inline-size: 0;
+}

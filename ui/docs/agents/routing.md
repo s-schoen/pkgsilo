@@ -27,6 +27,7 @@ TanStack Router routes by the files in `src/app/routes/`: `__root.tsx` is the la
   The router preloads a route when the pointer rests on a link to it, and leaves it to TanStack Query whether the cached data is fresh (`defaultPreloadStaleTime: 0`).
   A React Aria link preloads only with `useRoutePreload(href)` (`ui/docs/agents/components.md`).
 - Link with `<Link to="/…">`, which the routes type: a link to a route that doesn't exist fails the type check.
+  A React Aria link's `href` to a route with path params is `routeHref("/identities/$id", { id })` (`src/utils/route-href.ts`).
 - `core/spa` answers a browser's navigation to every path that names no file with `index.html`, so a deep link reaches the router.
 - A stale tab whose route chunk is gone after a deploy reloads the page once when it renders that route, so that it loads the new build (`lazyRouteComponent` of the router, which the code splitting uses).
 - Test a route with `renderRoute(path)` from `@/test/render`, which renders the whole app at that path, with a memory history and its own `QueryClient` and `DbClient`, and returns the `router` too.

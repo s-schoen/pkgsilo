@@ -48,6 +48,7 @@ How to build a component of the UI library, style it with a CSS module and the t
 | A failure on the page itself, as a form's         | `alert`                                                       |
 | Loading                                           | `spinner`                                                     |
 | A status, or a row's property                     | `badge` (`variant="property"` for a data table's chip)        |
+| An object's properties, in a details page         | `property-list` (`PropertyList`, `PropertyItem`)              |
 | A line between content                            | `separator`                                                   |
 | Building blocks of the above                      | `field`, `popover`, `list-box`                                |
 
@@ -131,6 +132,8 @@ React Aria formats dates and numbers, and has strings of its own (a ComboBox's b
 
 React Aria's links (`Link`, a `MenuItem`'s or a `Tab`'s `href`) navigate through TanStack Router: `src/app/root-layout.tsx` wraps the routes in React Aria's `RouterProvider`, and types `href` as a route, which the type check checks as it checks `<Link to>`.
 Outside a router, as in a story, a link is a plain `<a>`.
+
+A route with path params takes `routeHref` (`src/utils/route-href.ts`): `routeHref("/identities/$id", { id })` checks the route and its params as `<Link to params>` does, and fills them in.
 
 Unlike TanStack's `<Link>`, a React Aria link doesn't preload its route on the user's intent by itself: spread `useRoutePreload(href)` (`src/hooks/use-route-preload.ts`) onto it, as `NavItem` and the layout's brand link do, and the router preloads it once the pointer rests on it, it's focused, or a touch starts on it.
 

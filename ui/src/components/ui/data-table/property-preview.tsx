@@ -39,10 +39,12 @@ export function PropertyPreview<TData extends RowData>({
     </>
   );
 
+  const href = preview?.href?.(row);
+
   return (
     <PreviewTrigger>
-      {preview?.href ? (
-        <PropertyLink href={preview.href(row)}>{name}</PropertyLink>
+      {href !== undefined ? (
+        <PropertyLink href={href}>{name}</PropertyLink>
       ) : preview?.onAction ? (
         <Button
           className={styles.propertyTrigger}

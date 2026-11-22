@@ -83,5 +83,7 @@
   "identityCreatedAt": "Created",
   "identityUpdatedAt": "Updated",
   "identityYou": "You",
-  "identityUnknown": "Unknown identity"
+  "identityUnknown": "Unknown identity",
+  "identityUpdatedBy": "Updated by",
+  "propertyEmpty": "None"
 }

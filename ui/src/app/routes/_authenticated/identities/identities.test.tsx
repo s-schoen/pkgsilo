@@ -91,6 +91,39 @@ describe("/identities", () => {
     expect(within(hiddenRow).getByText(m.identityUnknown())).toBeInTheDocument();
   });
 
+  it("links a row's title to its identity's page", async () => {
+    server.use(...signedIn(), listIdentities());
+    const user = userEvent.setup();
+    const { router } = renderRoute("/identities");
+
+    const [, , graceRow] = (await findRows()) as [HTMLElement, HTMLElement, HTMLElement];
+    await user.click(within(graceRow).getByRole("link", { name: "grace" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "grace" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(`/identities/${grace.id}`);
+  });
+
+  it("links a creator's chip to the creator, but not pkgsilo's or an unknown one", async () => {
+    server.use(...signedIn(), listIdentities());
+    renderRoute("/identities");
+
+    const [hiddenRow, adaRow, graceRow] = (await findRows()) as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+    const creator = (row: HTMLElement) =>
+      within(row).getByText((_, element) =>
+        Boolean(
+          element?.matches("a, button") &&
+          element.textContent.startsWith(`${m.identityCreatedBy()}:`),
+        ),
+      );
+    expect(creator(graceRow)).toHaveAttribute("href", `/identities/${ada.id}`);
+    expect(creator(adaRow)).not.toHaveAttribute("href");
+    expect(creator(hiddenRow)).not.toHaveAttribute("href");
+  });
+
   it("marks the menu's Identities as the current page", async () => {
     server.use(...signedIn(), listIdentities());
     renderRoute("/identities");

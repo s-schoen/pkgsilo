@@ -108,8 +108,9 @@ export type DataTablePreview<TData extends RowData> = {
   // card is open, so it may load what it shows.
   content?: (row: TData) => ReactNode;
   // A click or Enter on the chip follows this link instead of opening the row, such as to the
-  // owner's page; a modifier key opens it in a new tab.
-  href?: (row: TData) => Href;
+  // owner's page; a modifier key opens it in a new tab. A row without one (undefined), such as
+  // one whose owner the actor can't read, falls back to onAction, else opens the row.
+  href?: (row: TData) => Href | undefined;
   // A click or Enter on the chip runs this instead of opening the row.
   onAction?: (row: TData) => void;
 };
