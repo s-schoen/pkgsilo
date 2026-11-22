@@ -71,5 +71,8 @@
       }
     }
   ],
-  "dataTableDeleteDescription": "Das lässt sich nicht rückgängig machen."
+  "dataTableDeleteDescription": "Das lässt sich nicht rückgängig machen.",
+  "dataTableOpen": "Öffnen",
+  "dataTableOpenInNewTab": "In neuem Tab öffnen",
+  "dataTableRowActions": "Aktionen für {name}"
 }

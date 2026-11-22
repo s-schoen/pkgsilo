@@ -8,7 +8,7 @@ import IconShield from "@tabler/icons-react/icons/IconShield";
 import IconUser from "@tabler/icons-react/icons/IconUser";
 // Only the package root exports RouterProvider.
 import { RouterProvider } from "react-aria-components";
-import { expect, fn, screen, waitFor, within } from "storybook/test";
+import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test";
 
 import preview from "#.storybook/preview";
 import { AppLayout } from "@/components/layouts/app-layout.tsx";
@@ -1070,5 +1070,212 @@ export const GroupedGerman = meta.story({
       await expect(none).toBeVisible();
     });
     await userEvent.keyboard("{Escape}");
+  },
+});
+
+// Right-clicks a row and waits for its menu's first item to take the focus.
+async function rightClick(
+  userEvent: { pointer: (input: { keys: string; target: Element }) => Promise<void> },
+  row: HTMLElement,
+) {
+  await userEvent.pointer({ keys: "[MouseRight]", target: row });
+  const menu = await screen.findByRole("menu");
+  await waitFor(async () => {
+    await expect(within(menu).getAllByRole("menuitem")[0]).toHaveFocus();
+  });
+  return menu;
+}
+
+function menuItemNames(menu: HTMLElement) {
+  return within(menu)
+    .getAllByRole("menuitem")
+    .map((item) => item.textContent);
+}
+
+async function waitForMenuToClose() {
+  await waitFor(async () => {
+    await expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+}
+
+// A right-click on a row that isn't selected selects it alone, and its menu acts on it: Open, Open
+// in new tab, the bulk actions that apply to it, and Delete last. The focus returns to the row.
+export const ContextMenuOnRow = meta.story({
+  args: selectable,
+  beforeEach: () => {
+    revoke.mockClear();
+  },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "ci-publish" })));
+    const row = canvas.getByRole("row", { name: "deploy-staging" });
+
+    const menu = await rightClick(userEvent, row);
+
+    await expect(menu).toHaveAccessibleName(m.dataTableRowActions({ name: "deploy-staging" }));
+    await expect(menuItemNames(menu)).toEqual([
+      m.dataTableOpen(),
+      m.dataTableOpenInNewTab(),
+      text.revoke,
+      m.dataTableDelete(),
+    ]);
+    await expect(canvas.getByText(selectedCount(1))).toBeVisible();
+    await expect(row).toHaveAttribute("aria-selected", "true");
+    await expect(canvas.getByRole("row", { name: "ci-publish" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    // A new tab is the browser's: the item is a link to the row's route.
+    const newTab = within(menu).getByRole("menuitem", { name: m.dataTableOpenInNewTab() });
+    await expect(newTab).toHaveAttribute("href", "/keys/k2");
+    await expect(newTab).toHaveAttribute("target", "_blank");
+
+    await userEvent.click(within(menu).getByRole("menuitem", { name: text.revoke }));
+
+    await expect(revoke).toHaveBeenCalledWith([keys[1]]);
+    await waitForMenuToClose();
+    await waitFor(async () => {
+      await expect(row).toHaveFocus();
+    });
+  },
+});
+
+// A right-click on a selected row acts on the whole selection: the menu's header names the count,
+// it has no Open, a bulk action gets the rows it applies to, and Delete asks about them all.
+export const ContextMenuOnSelection = meta.story({
+  args: selectable,
+  beforeEach: () => {
+    revoke.mockClear();
+  },
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "ci-publish" })));
+    await userEvent.click(selectionBox(canvas.getByRole("row", { name: "backup-mirror" })));
+
+    const menu = await rightClick(userEvent, canvas.getByRole("row", { name: "backup-mirror" }));
+
+    await expect(menu).toHaveAccessibleName(selectedCount(2));
+    // Once the menu has entered with its animation.
+    await waitFor(async () => {
+      await expect(within(menu).getByText(selectedCount(2))).toBeVisible();
+    });
+    await expect(menuItemNames(menu)).toEqual([text.revoke, m.dataTableDelete()]);
+    await expect(canvas.getByText(selectedCount(2))).toBeVisible();
+
+    await userEvent.click(within(menu).getByRole("menuitem", { name: m.dataTableDelete() }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: m.dataTableDeleteTitle({ count: 2 }),
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: m.dataTableDelete() }));
+
+    await expect(args.onDelete).toHaveBeenCalledWith([keys[0], keys[2]]);
+    await expect(revoke).not.toHaveBeenCalled();
+    await waitFor(async () => {
+      await expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+  },
+});
+
+// Shift+F10 opens the focused row's menu below it; Open follows the row's link. The context-menu
+// key opens it as well, and Escape closes it, giving the row its focus back.
+export const ContextMenuWithKeyboard = meta.story({
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("searchbox", { name: m.dataTableSearch() }));
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.keyboard("{ArrowDown}");
+    const row = canvas.getByRole("row", { name: "deploy-staging" });
+    await expect(row).toHaveFocus();
+
+    await userEvent.keyboard("{ContextMenu}");
+    const menu = await screen.findByRole("menu", {
+      name: m.dataTableRowActions({ name: "deploy-staging" }),
+    });
+    await waitFor(async () => {
+      await expect(within(menu).getByRole("menuitem", { name: m.dataTableOpen() })).toHaveFocus();
+    });
+    await expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      row.getBoundingClientRect().bottom,
+    );
+    await userEvent.keyboard("{Escape}");
+    await waitForMenuToClose();
+    await waitFor(async () => {
+      await expect(row).toHaveFocus();
+    });
+
+    await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+    await waitFor(async () => {
+      await expect(screen.getByRole("menuitem", { name: m.dataTableOpen() })).toHaveFocus();
+    });
+    await userEvent.keyboard("{Enter}");
+
+    await expect(navigate).toHaveBeenCalledWith("/keys/k2", undefined);
+    await waitForMenuToClose();
+  },
+});
+
+// With onRowAction, Open opens the row as a click does.
+export const ContextMenuOpensRow = meta.story({
+  args: { onRowAction: fn() },
+  play: async ({ args, canvas, userEvent }) => {
+    const menu = await rightClick(userEvent, canvas.getByRole("row", { name: "backup-mirror" }));
+    await expect(menuItemNames(menu)).toEqual([m.dataTableOpen(), m.dataTableOpenInNewTab()]);
+
+    await userEvent.click(within(menu).getByRole("menuitem", { name: m.dataTableOpen() }));
+
+    await expect(args.onRowAction).toHaveBeenCalledWith(keys[2]);
+    await expect(navigate).not.toHaveBeenCalled();
+    await waitForMenuToClose();
+  },
+});
+
+// With nothing to open and no actions, a right-click leaves the browser its own menu.
+export const NoContextMenu = meta.story({
+  args: { getRowHref: undefined },
+  play: async ({ canvas }) => {
+    const notCancelled = fireEvent.contextMenu(canvas.getByRole("row", { name: "ci-publish" }));
+
+    await expect(notCancelled).toBe(true);
+    await expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  },
+});
+
+// In groups, a row has its menu as well; a group has none.
+export const ContextMenuInGroups = meta.story({
+  args: { ...selectable, groupingOptions, grouping: "owner" },
+  play: async ({ canvas, userEvent }) => {
+    await expect(fireEvent.contextMenu(groupRow(canvas, "alice"))).toBe(true);
+    await expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    const row = canvas.getByRole("row", { name: "release-signing" });
+    const menu = await rightClick(userEvent, row);
+
+    await expect(menu).toHaveAccessibleName(m.dataTableRowActions({ name: "release-signing" }));
+    await expect(row).toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Escape}");
+    await waitForMenuToClose();
+    await waitFor(async () => {
+      await expect(row).toHaveFocus();
+    });
+  },
+});
+
+// In German: the menu's items and name are messages.
+export const ContextMenuGerman = meta.story({
+  args: selectable,
+  globals: { locale: "de" },
+  play: async ({ canvas, userEvent }) => {
+    const menu = await rightClick(userEvent, canvas.getByRole("row", { name: "ci-publish" }));
+
+    await expect(menu).toHaveAccessibleName(
+      m.dataTableRowActions({ name: "ci-publish" }, { locale: "de" }),
+    );
+    await expect(menuItemNames(menu)).toEqual([
+      m.dataTableOpen({}, { locale: "de" }),
+      m.dataTableOpenInNewTab({}, { locale: "de" }),
+      text.revoke,
+      m.dataTableDelete({}, { locale: "de" }),
+    ]);
+    await userEvent.keyboard("{Escape}");
+    await waitForMenuToClose();
   },
 });

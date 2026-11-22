@@ -6,6 +6,7 @@ import { Link } from "react-aria-components/Link";
 import { Tree, TreeItem, TreeItemContent } from "react-aria-components/Tree";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { rowText } from "@/components/ui/data-table/row-text.ts";
 import { useRoutePreload } from "@/hooks/use-route-preload.ts";
 
 import type { Group } from "@/components/ui/data-table/grouping.ts";
@@ -209,18 +210,16 @@ type RowProps<TData extends RowData> = {
   isSelectable: boolean;
 };
 
-// What typeahead matches and a screen reader announces of a row: its title's value.
-function rowText<TData extends RowData>(row: DataTableRow<TData>): string {
-  const titleCell = row
-    .getVisibleCells()
-    .find((cell) => cell.column.columnDef.meta?.placement === "title");
-  const value = titleCell?.getValue();
-  return typeof value === "string" || typeof value === "number" ? String(value) : row.id;
-}
-
-// The attributes of a row's item that its styles read.
-function rowAttributes<TData extends RowData>({ isActive, href, onRowAction }: RowProps<TData>) {
+// The attributes of a row's item that its styles read, and its id, which finds the row of a
+// right-click or of a key that opens its context menu.
+function rowAttributes<TData extends RowData>({
+  row,
+  isActive,
+  href,
+  onRowAction,
+}: RowProps<TData>) {
   return {
+    "data-row-id": row.id,
     "data-active": isActive || undefined,
     "data-actionable": Boolean(onRowAction ?? href) || undefined,
   };

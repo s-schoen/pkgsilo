@@ -7,6 +7,11 @@
   margin-inline: calc(-1 * var(--app-layout-page-inset, 0));
 }
 
+/* The rows and the states in their place, which only listens to the rows' context menu. */
+.body {
+  display: contents;
+}
+
 /* The toolbar sticks to the top of the window, which scrolls the page, over the rows that pass
    below it: it's positioned, and they aren't. */
 .toolbar {
