@@ -33,7 +33,8 @@ type ApiKey = {
   // The owner's id, where two owners share a name.
   ownerId?: string;
   scopes: number;
-  created: string;
+  // Missing where the API leaves it out.
+  created?: string;
 };
 
 // The sample's texts, where a page passes messages.
@@ -211,7 +212,7 @@ const columns: Array<DataTableColumnDef<ApiKey>> = [
     meta: { label: () => text.created, placement: "property" },
     cell: ({ row }) => (
       <Badge variant="property" icon={IconCalendar}>
-        {row.original.created}
+        {String(row.original.created)}
       </Badge>
     ),
   },
@@ -1534,5 +1535,17 @@ export const ContextMenuGerman = meta.story({
     ]);
     await userEvent.keyboard("{Escape}");
     await waitForMenuToClose();
+  },
+});
+
+// A row whose property has no value, as a field that the API leaves out, shows no chip for it.
+export const MissingProperty = meta.story({
+  args: {
+    rows: [{ id: "k0", name: "no-created", status: "active", owner: "alice", scopes: 1 }, ...keys],
+  },
+  play: async ({ canvas }) => {
+    const row = canvas.getByRole("row", { name: "no-created" });
+    await expect(within(row).queryByText(`${text.created}:`)).not.toBeInTheDocument();
+    await expect(within(row).getByText(`${text.owner}:`)).toBeInTheDocument();
   },
 });
