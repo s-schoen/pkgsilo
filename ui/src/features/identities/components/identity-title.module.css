@@ -1,0 +1,14 @@
+.title {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  max-inline-size: 100%;
+  vertical-align: middle;
+}
+
+.name {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

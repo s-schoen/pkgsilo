@@ -1,0 +1,24 @@
+.card {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--font-size-md);
+}
+
+.names {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.name {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.username {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  overflow-wrap: anywhere;
+}
