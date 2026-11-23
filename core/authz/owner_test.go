@@ -36,6 +36,11 @@ func (*recordingDecider) Hint(action Action, _ Resource) (bool, error) {
 	panic("unexpected hint " + action.Name())
 }
 
+// CanSome panics: an owner's read must be enforced.
+func (*recordingDecider) CanSome(action Action, _ string) (bool, error) {
+	panic("unexpected CanSome " + action.Name())
+}
+
 func TestOwners_ReadableOwner(t *testing.T) {
 	t.Parallel()
 	db := databasetest.New(t)

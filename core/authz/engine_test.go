@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -329,7 +330,7 @@ func TestEngine_FailingForbid(t *testing.T) {
 }
 
 // TestEngine_CountsDecisions checks that every decision is counted by its purpose and result only: enforce
-// for Can and hint for Hint, and allow, deny, or error for a forbid that fails to evaluate.
+// for Can and hint for Hint and CanSome, and allow, deny, or error for a forbid that fails to evaluate.
 func TestEngine_CountsDecisions(t *testing.T) {
 	t.Parallel()
 	db := databasetest.New(t)
@@ -358,6 +359,9 @@ func TestEngine_CountsDecisions(t *testing.T) {
 	can, err := decider.Hint(testAction, identityResource(bob))
 	require.NoError(t, err)
 	require.True(t, can)
+	can, err = decider.CanSome(testAction, IdentityType)
+	require.NoError(t, err)
+	require.True(t, can)
 
 	got := map[string]int64{}
 	for _, point := range metrics.SumPoints[int64](t, "pkgsilo.authz.decisions") {
@@ -368,7 +372,7 @@ func TestEngine_CountsDecisions(t *testing.T) {
 	}
 	assert.Equal(t, map[string]int64{
 		"enforce allow": 2, "enforce deny": 1, "enforce error": 1,
-		"hint allow": 3, "hint deny": 1, "hint error": 1,
+		"hint allow": 4, "hint deny": 1, "hint error": 1,
 	}, got)
 }
 
@@ -468,4 +472,161 @@ func TestEngine_DatabaseFails(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+}
+
+// TestEngine_CanSome checks which policies allow an action on some resource of a type. A forbid scoped to
+// some resources must not deny them all, so that the answer errs only toward yes, while the principal's
+// scope and conditions are evaluated exactly. It pins the behavior of cedar-go's experimental batch package,
+// so that an upgrade that changes it fails here. In the sources, $group is a group that the member is in,
+// and $identity is another identity.
+func TestEngine_CanSome(t *testing.T) {
+	t.Parallel()
+	const permitAll = `permit (principal, action, resource);`
+
+	tests := []struct {
+		name        string
+		source      string
+		wantMember  bool
+		wantOutside bool
+	}{
+		{
+			"no policy",
+			``,
+			false, false,
+		},
+		{
+			"a plain permit",
+			permitAll,
+			true, true,
+		},
+		{
+			"a permit on another type",
+			`permit (principal, action, resource is Group);`,
+			true, true,
+		},
+		{
+			"a permit on another action",
+			`permit (principal, action == Action::"identity:delete", resource);`,
+			false, false,
+		},
+		{
+			"a permit in an action group",
+			`permit (principal, action in Action::"read", resource);`,
+			true, true,
+		},
+		{
+			"a permit on the owner",
+			`permit (principal, action, resource) when { resource.owner == principal };`,
+			true, true,
+		},
+		{
+			"a permit on the resource itself",
+			`permit (principal, action, resource) when { resource == principal };`,
+			true, true,
+		},
+		{
+			"a permit scoped to a group of the principal",
+			`permit (principal in Group::"$group", action, resource);`,
+			true, false,
+		},
+		{
+			"a permit on a group of the principal",
+			`permit (principal, action, resource) when { principal in Group::"$group" };`,
+			true, false,
+		},
+		{
+			"a forbid on one resource",
+			permitAll + `forbid (principal, action, resource == Identity::"$identity");`,
+			true, true,
+		},
+		{
+			"a forbid on a group's resources",
+			permitAll + `forbid (principal, action, resource in Group::"$group");`,
+			true, true,
+		},
+		{
+			"a forbid on another type",
+			permitAll + `forbid (principal, action, resource is Group);`,
+			true, true,
+		},
+		{
+			"a forbid on the type",
+			permitAll + `forbid (principal, action, resource is Identity);`,
+			false, false,
+		},
+		{
+			"an unscoped forbid",
+			permitAll + `forbid (principal, action, resource);`,
+			false, false,
+		},
+		{
+			"a forbid in an action group",
+			permitAll + `forbid (principal, action in Action::"read", resource);`,
+			false, false,
+		},
+		{
+			"a forbid on the resource itself",
+			permitAll + `forbid (principal, action, resource) when { resource == principal };`,
+			true, true,
+		},
+		{
+			"a forbid on a group of the principal",
+			permitAll + `forbid (principal, action, resource) when { principal in Group::"$group" };`,
+			false, true,
+		},
+		{
+			"a permit that fails to evaluate",
+			`permit (principal, action, resource) when { principal.missing };`,
+			false, false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := databasetest.New(t)
+			removeSeededPolicies(t, db)
+			member, outsider := insertIdentity(t, db), insertIdentity(t, db)
+			group := insertGroup(t, db, member)
+			if tt.source != "" {
+				addPolicy(t, db, strings.NewReplacer("$group", group.String(), "$identity", member.String()).
+					Replace(tt.source))
+			}
+			engine := newEngine(db)
+
+			assertCanSome(t, tt.wantMember, engine, member)
+			assertCanSome(t, tt.wantOutside, engine, outsider)
+		})
+	}
+}
+
+// assertCanSome asserts the decision of a new Decider for the actor about testAction on some identity.
+func assertCanSome(t *testing.T, want bool, engine *Engine, actor uuid.UUID) {
+	t.Helper()
+
+	decider, err := engine.For(t.Context(), actor)
+	require.NoError(t, err)
+
+	can, err := decider.CanSome(testAction, IdentityType)
+	require.NoError(t, err)
+	assert.Equal(t, want, can)
+}
+
+// TestEngine_CanSomeFailingForbid checks that a forbid that fails to evaluate fails the decision, as in Can.
+func TestEngine_CanSomeFailingForbid(t *testing.T) {
+	t.Parallel()
+	db := databasetest.New(t)
+	removeSeededPolicies(t, db)
+	policy := addPolicy(t, db, `
+		permit (principal, action, resource);
+		forbid (principal, action, resource) when { principal.missing };`)
+	ada := insertIdentity(t, db)
+
+	decider, err := newEngine(db).For(t.Context(), ada)
+	require.NoError(t, err)
+
+	can, err := decider.CanSome(testAction, IdentityType)
+
+	assert.False(t, can, "a forbid that fails to evaluate must never result in access")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), policy.String()+"#1", "the error must name the policy and the statement")
 }

@@ -218,6 +218,72 @@ func (_c *MockDecider_Can_Call) RunAndReturn(run func(action authz.Action, resou
 	return _c
 }
 
+// CanSome provides a mock function for the type MockDecider
+func (_mock *MockDecider) CanSome(action authz.Action, resourceType string) (bool, error) {
+	ret := _mock.Called(action, resourceType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CanSome")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(authz.Action, string) (bool, error)); ok {
+		return returnFunc(action, resourceType)
+	}
+	if returnFunc, ok := ret.Get(0).(func(authz.Action, string) bool); ok {
+		r0 = returnFunc(action, resourceType)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(authz.Action, string) error); ok {
+		r1 = returnFunc(action, resourceType)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDecider_CanSome_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanSome'
+type MockDecider_CanSome_Call struct {
+	*mock.Call
+}
+
+// CanSome is a helper method to define mock.On call
+//   - action authz.Action
+//   - resourceType string
+func (_e *MockDecider_Expecter) CanSome(action any, resourceType any) *MockDecider_CanSome_Call {
+	return &MockDecider_CanSome_Call{Call: _e.mock.On("CanSome", action, resourceType)}
+}
+
+func (_c *MockDecider_CanSome_Call) Run(run func(action authz.Action, resourceType string)) *MockDecider_CanSome_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 authz.Action
+		if args[0] != nil {
+			arg0 = args[0].(authz.Action)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDecider_CanSome_Call) Return(b bool, err error) *MockDecider_CanSome_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockDecider_CanSome_Call) RunAndReturn(run func(action authz.Action, resourceType string) (bool, error)) *MockDecider_CanSome_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Hint provides a mock function for the type MockDecider
 func (_mock *MockDecider) Hint(action authz.Action, resource authz.Resource) (bool, error) {
 	ret := _mock.Called(action, resource)
