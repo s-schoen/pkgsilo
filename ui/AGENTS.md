@@ -27,8 +27,9 @@ Run the tasks from the repo root: each one generates the files it needs first, w
   Start it in the background before you work on components.
 - `task ui:dev`: the Vite dev server, which proxies `/api/…` and `/mcp` to `task run` on `:8080`.
   Open the URL that Vite prints.
-- `task ui:dev:mock`: the same dev server with no backend: a service worker (`src/mocks/`) answers `/api/…` in the browser, signed in from the first request, with the generated MSW handlers' random data.
+- `task ui:dev:mock`: the same dev server with no backend: a service worker (`src/mocks/`) answers `/api/…` in the browser, signed in as `admin` from the first request, with the generated MSW handlers' random data.
   Fix a response in `src/mocks/handlers.ts` once a view needs stable data.
+  Sign out and in again with the username `reader` (may only read) or `self` (may also edit its own identity), any password, to see the UI with fewer permissions (`src/mocks/personas.ts`).
 - `task ui:test`: every test and story, with coverage, as CI runs them.
   `task ui:test:unit` runs the tests alone, without a browser; `task ui:test:watch` reruns them all on every change.
 - `task ui:lint`: oxlint with the type check, then stylelint on the CSS; every warning fails.

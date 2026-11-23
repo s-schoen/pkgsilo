@@ -1,7 +1,9 @@
 import { http, HttpResponse } from "msw";
 
 import { getGetIdentityMockHandler } from "@/api/gen/client/identities/identities.msw.ts";
+import { getListPermissionsMockHandler } from "@/api/gen/client/permissions/permissions.msw.ts";
 import { getGetCurrentSessionMockHandler } from "@/api/gen/client/sessions/sessions.msw.ts";
+import { allActions } from "@/mocks/actions.ts";
 
 // The identity that signedIn() signs in as.
 export const testIdentity = {
@@ -10,8 +12,18 @@ export const testIdentity = {
   displayName: "Ada Lovelace",
 };
 
+// The handler of the signed-in identity's permissions, with and without owner: allowedActions,
+// every action by default. A test of what a page hides overrides signedIn()'s with
+// server.use(permissions([…])).
+export function permissions(allowedActions: ReadonlyArray<string> = allActions) {
+  return getListPermissionsMockHandler({
+    data: { id: testIdentity.id, allowedActions: [...allowedActions] },
+  });
+}
+
 // The handlers of a browser that is signed in as testIdentity, for a test of a page that needs a
-// session: server.use(...signedIn()). The session ends in a day.
+// session: server.use(...signedIn()). The session ends in a day. The identity may do everything
+// (permissions()).
 export function signedIn() {
   const now = new Date();
   return [
@@ -24,6 +36,7 @@ export function signedIn() {
       },
     }),
     getGetIdentityMockHandler({ data: testIdentity }),
+    permissions(),
   ];
 }
 

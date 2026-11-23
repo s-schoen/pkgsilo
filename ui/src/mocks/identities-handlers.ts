@@ -1,8 +1,12 @@
 import { http, HttpResponse } from "msw";
 
-import type { Problem } from "@/api/gen/client/model/problem.ts";
+import { identityActions, isAllowed } from "@/mocks/personas.ts";
+import { fieldsDenied, forbidden, problemResponse } from "@/mocks/problems.ts";
+
+import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
 import type { ValidationError } from "@/api/gen/client/model/validationError.ts";
 import type { IdentitiesStore, StoreResult } from "@/mocks/identities-store.ts";
+import type { Actor } from "@/mocks/personas.ts";
 
 const collectionPath = "*/api/v1/identities";
 const resourcePath = `${collectionPath}/:id`;
@@ -11,16 +15,20 @@ const resourcePath = `${collectionPath}/:id`;
 const defaultLimit = 50;
 const maxLimit = 100;
 
-function problemResponse(problem: Problem) {
-  return HttpResponse.json(problem, {
-    status: problem.status,
-    headers: { "Content-Type": "application/problem+json" },
-  });
-}
+// The fields of an identity that a request's body may set.
+const writableFields = ["username", "displayName"] as const;
 
-// The API's answer to a result: the resource in its envelope, or the problem.
-function resourceResponse<T>(result: StoreResult<T>) {
-  return result.ok ? HttpResponse.json({ data: result.value }) : problemResponse(result.problem);
+// The fields of body that actor may not set on the identity with this id, or on a new one: each
+// needs its own create or update action.
+function deniedFields(
+  actor: Actor,
+  verb: "create" | "update",
+  body: Record<string, unknown>,
+  id?: string,
+): Array<string> {
+  return writableFields.filter(
+    (field) => body[field] !== undefined && !isAllowed(actor, `identity:${verb}:${field}`, id),
+  );
 }
 
 // The page that the query asks for, as the API reads offset and limit, or the 400 for invalid ones.
@@ -79,41 +87,94 @@ async function readBody(request: Request): Promise<StoreResult<Record<string, un
   }
 }
 
-// The handlers of the identities endpoints over store, for the mock API of `task ui:dev:mock`.
-export function createIdentitiesHandlers(store: IdentitiesStore) {
+// The handlers of the identities endpoints over store, for the mock API of `task ui:dev:mock`, as
+// actor: every identity carries the actions that actor may do to it (allowedActions), and a write
+// that actor may not do answers 403, a write of fields with fields-denied. Every identity is
+// readable to every persona. me in a path stands for actor.
+export function createIdentitiesHandlers(store: IdentitiesStore, actor: () => Actor) {
+  const withActions = (identity: IdentityResponse): IdentityResponse => ({
+    ...identity,
+    allowedActions: identityActions(actor(), identity.id),
+  });
+  // The API's answer to a result: the identity in its envelope, or the problem.
+  const identityResponse = (result: StoreResult<IdentityResponse>) =>
+    result.ok
+      ? HttpResponse.json({ data: withActions(result.value) })
+      : problemResponse(result.problem);
+  const idOf = (id: string) => (id === "me" ? actor().id : id);
+
+  // Writes body's fields to the identity id with write, unless actor may not set them.
+  const update = async (
+    id: string,
+    request: Request,
+    write: (id: string, body: Record<string, unknown>) => StoreResult<IdentityResponse>,
+  ) => {
+    const body = await readBody(request);
+    if (!body.ok) {
+      return problemResponse(body.problem);
+    }
+    const existing = store.get(id);
+    if (!existing.ok) {
+      return problemResponse(existing.problem);
+    }
+    const denied = deniedFields(actor(), "update", body.value, id);
+    return denied.length > 0
+      ? problemResponse(fieldsDenied(denied))
+      : identityResponse(write(id, body.value));
+  };
+
   return [
     http.get(collectionPath, ({ request }) => {
       const page = parsePage(new URL(request.url));
-      return page.ok ? HttpResponse.json(store.list(page.value)) : problemResponse(page.problem);
+      if (!page.ok) {
+        return problemResponse(page.problem);
+      }
+      const { data, pagination } = store.list(page.value);
+      return HttpResponse.json({ data: data.map(withActions), pagination });
     }),
 
     http.post(collectionPath, async ({ request }) => {
       const body = await readBody(request);
-      const result = body.ok ? store.create(body.value) : body;
+      if (!body.ok) {
+        return problemResponse(body.problem);
+      }
+      const denied = deniedFields(actor(), "create", body.value);
+      if (denied.length > 0) {
+        return problemResponse(fieldsDenied(denied));
+      }
+      const result = store.create(body.value);
       if (!result.ok) {
         return problemResponse(result.problem);
       }
       const location = `${new URL(request.url).pathname}/${result.value.id}`;
       return HttpResponse.json(
-        { data: result.value },
+        { data: withActions(result.value) },
         { status: 201, headers: { Location: location } },
       );
     }),
 
-    http.get<{ id: string }>(resourcePath, ({ params }) => resourceResponse(store.get(params.id))),
+    http.get<{ id: string }>(resourcePath, ({ params }) =>
+      identityResponse(store.get(idOf(params.id))),
+    ),
 
-    http.put<{ id: string }>(resourcePath, async ({ params, request }) => {
-      const body = await readBody(request);
-      return resourceResponse(body.ok ? store.replace(params.id, body.value) : body);
-    }),
+    http.put<{ id: string }>(resourcePath, ({ params, request }) =>
+      update(idOf(params.id), request, store.replace),
+    ),
 
-    http.patch<{ id: string }>(resourcePath, async ({ params, request }) => {
-      const body = await readBody(request);
-      return resourceResponse(body.ok ? store.patch(params.id, body.value) : body);
-    }),
+    http.patch<{ id: string }>(resourcePath, ({ params, request }) =>
+      update(idOf(params.id), request, store.patch),
+    ),
 
     http.delete<{ id: string }>(resourcePath, ({ params }) => {
-      const result = store.remove(params.id);
+      const id = idOf(params.id);
+      const existing = store.get(id);
+      if (!existing.ok) {
+        return problemResponse(existing.problem);
+      }
+      if (!isAllowed(actor(), "identity:delete", id)) {
+        return problemResponse(forbidden);
+      }
+      const result = store.remove(id);
       return result.ok ? new HttpResponse(null, { status: 204 }) : problemResponse(result.problem);
     }),
   ];

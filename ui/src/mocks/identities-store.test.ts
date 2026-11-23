@@ -26,7 +26,12 @@ const grace: IdentityResponse = {
 };
 
 function storeOf(identities: Array<IdentityResponse> = [ada, grace]) {
-  return createIdentitiesStore({ identities, actorId, now: () => at, newId: () => newId });
+  return createIdentitiesStore({
+    identities,
+    actorId: () => actorId,
+    now: () => at,
+    newId: () => newId,
+  });
 }
 
 // The value of a result that must have succeeded.
@@ -60,7 +65,7 @@ describe("fixedIdentities", () => {
   });
 
   it("starts a store", () => {
-    const store = createIdentitiesStore({ actorId: adminId });
+    const store = createIdentitiesStore({ actorId: () => adminId });
 
     expect(valueOf(store.get(adminId))).toMatchObject({ username: "admin" });
   });

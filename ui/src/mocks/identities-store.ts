@@ -26,8 +26,9 @@ export type IdentitiesStore = {
 export type IdentitiesStoreOptions = {
   // The identities that the store starts with: fixedIdentities by default.
   identities?: ReadonlyArray<IdentityResponse>;
-  // The identity whose changes the store records in createdBy and updatedBy.
-  actorId: string;
+  // The identity whose changes the store records in createdBy and updatedBy: the signed-in one,
+  // which a sign-in changes.
+  actorId: () => string;
   // The time of a change: the clock by default.
   now?: () => Date;
   // The id of a new identity: a random UUID by default.
@@ -111,8 +112,9 @@ function validate(body: IdentityBody, required: boolean): Array<ValidationError>
 }
 
 // An in-memory store of identities that answers as the API's identities do, for the mock API of
-// `task ui:dev:mock`. The signed-in actor may do everything, so no field is ever absent. It keeps
-// the order of creation, as the API lists them.
+// `task ui:dev:mock`. Every persona may read every field, so no field is ever absent; what a persona
+// may write, the handlers check (identities-handlers.ts). It keeps the order of creation, as the
+// API lists them.
 export function createIdentitiesStore(options: IdentitiesStoreOptions): IdentitiesStore {
   const { actorId, now = () => new Date(), newId = () => crypto.randomUUID() } = options;
   const identities = new Map<string, IdentityResponse>(
@@ -130,7 +132,7 @@ export function createIdentitiesStore(options: IdentitiesStoreOptions): Identiti
     if (current === undefined) {
       return { ok: false, problem: identityNotFound };
     }
-    const changed: IdentityResponse = { ...current, updatedBy: actorId };
+    const changed: IdentityResponse = { ...current, updatedBy: actorId() };
     for (const field of fields) {
       const value = body[field];
       if (typeof value === "string") {
@@ -176,8 +178,8 @@ export function createIdentitiesStore(options: IdentitiesStoreOptions): Identiti
         id: newId(),
         username,
         displayName: String(body.displayName),
-        createdBy: actorId,
-        updatedBy: actorId,
+        createdBy: actorId(),
+        updatedBy: actorId(),
         createdAt: at,
         updatedAt: at,
       };

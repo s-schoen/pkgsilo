@@ -8,10 +8,29 @@ import {
   patchIdentity,
   replaceIdentity,
 } from "@/api/gen/client/identities/identities.ts";
-import { adminId, fixedIdentities } from "@/mocks/identities-data.ts";
+import { adminId, fixedIdentities, readerId, selfId } from "@/mocks/identities-data.ts";
 import { createIdentitiesHandlers } from "@/mocks/identities-handlers.ts";
 import { createIdentitiesStore } from "@/mocks/identities-store.ts";
 import { server } from "@/test/server.ts";
+
+import type { Actor } from "@/mocks/personas.ts";
+
+const admin: Actor = { id: adminId, persona: "admin" };
+const reader: Actor = { id: readerId, persona: "reader" };
+const self: Actor = { id: selfId, persona: "self" };
+
+// Serves the fixed identities to actor.
+function serveAs(actor: Actor) {
+  server.use(
+    ...createIdentitiesHandlers(createIdentitiesStore({ actorId: () => actor.id }), () => actor),
+  );
+}
+
+const everyIdentityAction = [
+  "identity:delete",
+  "identity:update:username",
+  "identity:update:displayName",
+];
 
 // The error that the generated client rejects with: the response's status and its problem.
 async function errorOf(promise: Promise<unknown>) {
@@ -27,14 +46,18 @@ async function errorOf(promise: Promise<unknown>) {
 // them.
 describe("createIdentitiesHandlers", () => {
   beforeEach(() => {
-    server.use(...createIdentitiesHandlers(createIdentitiesStore({ actorId: adminId })));
+    serveAs(admin);
   });
 
-  it("lists a page in the collection envelope", async () => {
+  it("lists a page in the collection envelope, with the actions that the admin may do", async () => {
     const response = await listIdentities({ offset: 0, limit: 5 });
 
     expect(response.status).toBe(200);
-    expect(response.data.data).toEqual(fixedIdentities.slice(0, 5));
+    expect(response.data.data).toEqual(
+      fixedIdentities
+        .slice(0, 5)
+        .map((identity) => ({ ...identity, allowedActions: everyIdentityAction })),
+    );
     expect(response.data.pagination).toEqual({ offset: 0, limit: 5, nextOffset: 5 });
   });
 
@@ -123,5 +146,77 @@ describe("createIdentitiesHandlers", () => {
     expect(error.status).toBe(404);
     expect(error.info).toMatchObject({ type: "https://pkgsilo/problems/identity-not-found" });
     expect((await errorOf(deleteIdentity(adminId))).status).toBe(404);
+  });
+
+  it("takes me for the actor", async () => {
+    const fetched = await getIdentity("me");
+
+    expect(fetched.data.data).toMatchObject({ id: adminId, username: "admin" });
+  });
+});
+
+describe("createIdentitiesHandlers for the reader", () => {
+  beforeEach(() => {
+    serveAs(reader);
+  });
+
+  it("allows no action on any identity", async () => {
+    const response = await listIdentities({ offset: 0, limit: 100 });
+
+    expect(response.data.data.map(({ allowedActions }) => allowedActions)).toEqual(
+      fixedIdentities.map(() => []),
+    );
+  });
+
+  it("denies every write", async () => {
+    const created = await errorOf(createIdentity({ username: "new.user", displayName: "New" }));
+    const patched = await errorOf(patchIdentity(readerId, { displayName: "Me" }));
+    const deleted = await errorOf(deleteIdentity(adminId));
+
+    expect(created).toMatchObject({
+      status: 403,
+      info: {
+        type: "https://pkgsilo/problems/fields-denied",
+        errors: [{ pointer: "/username" }, { pointer: "/displayName" }],
+      },
+    });
+    expect(patched).toMatchObject({
+      status: 403,
+      info: {
+        type: "https://pkgsilo/problems/fields-denied",
+        errors: [{ pointer: "/displayName" }],
+      },
+    });
+    expect(deleted).toMatchObject({ status: 403, info: { type: "about:blank" } });
+    expect((await getIdentity(adminId)).data.data.displayName).toBe("Administrator");
+  });
+});
+
+describe("createIdentitiesHandlers for self", () => {
+  beforeEach(() => {
+    serveAs(self);
+  });
+
+  it("allows editing only its own identity", async () => {
+    const own = await getIdentity(selfId);
+    const other = await getIdentity(adminId);
+
+    expect(own.data.data.allowedActions).toEqual([
+      "identity:update:username",
+      "identity:update:displayName",
+    ]);
+    expect(other.data.data.allowedActions).toEqual([]);
+  });
+
+  it("edits its own identity, and no other one", async () => {
+    const patched = await patchIdentity("me", { displayName: "Me" });
+    const denied = await errorOf(patchIdentity(adminId, { displayName: "Me" }));
+
+    expect(patched.data.data).toMatchObject({ id: selfId, displayName: "Me", updatedBy: selfId });
+    expect(denied).toMatchObject({
+      status: 403,
+      info: { type: "https://pkgsilo/problems/fields-denied" },
+    });
+    expect((await errorOf(deleteIdentity(selfId))).status).toBe(403);
   });
 });

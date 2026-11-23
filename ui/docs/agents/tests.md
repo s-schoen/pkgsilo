@@ -15,6 +15,7 @@ The CI job `ui-test` runs them on every push and uploads the coverage and the JU
 - Find the text that the user reads through its message, as in `getByText(m.welcome())` or `getByRole("link", { name: m.goHome() })`, never as a literal, so that rewording a message breaks no test.
   A test of the locale passes it (`{ locale: "en" }`): without it, the message follows the same locale as the component and can't tell a wrong one.
   No lint rule checks this.
+- `signedIn()` from `@/test/session` signs in as `testIdentity`, who may do everything; a test of what a page hides replaces the permissions after it, in a later `server.use(permissions(["identity:read"]))`: MSW takes the handler registered last first.
 - MSW mocks the API: register the handlers a test needs with `server.use(…)`, `server` from `@/test/server`.
   They're removed after each test.
   Take a handler from the generated `src/api/gen/client/<tag>/<tag>.msw.ts`, such as `getGetGroupMockHandler({ data: { id: "…" } })`, which answers with faker data for the members that the argument leaves out, or pass a function to build the response from the request.

@@ -1,7 +1,13 @@
 import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
 
-// The identity that the mock API is signed in as: the administrator, whom pkgsilo created.
+// The identity that the mock API is signed in as from the start: the administrator, whom pkgsilo
+// created. It's the admin persona's (personas.ts).
 export const adminId = "00000000-0000-4000-8000-000000000002";
+
+// The identities of the other personas, which a sign-in with their username picks: reader, who may
+// only read, and self, who may also edit its own identity.
+export const readerId = "00000000-0000-4000-8000-000000000003";
+export const selfId = "00000000-0000-4000-8000-000000000004";
 
 // The nil UUID, as createdBy and updatedBy: pkgsilo itself made the change.
 export const pkgsiloId = "00000000-0000-0000-0000-000000000000";
@@ -30,8 +36,8 @@ const ids = {
   john: "00000000-0000-4000-8000-000000000119",
 };
 
-// The identities that the mock API starts with, on every page load: the admin, people that the
-// admin or Grace created, and two machine accounts that pkgsilo created. Some were changed since,
+// The identities that the mock API starts with, on every page load: the admin, the other personas,
+// people that the admin or Grace created, and two machine accounts that pkgsilo created. Some were changed since,
 // by themselves or someone else. They're in the order the API lists them: by creation.
 export const fixedIdentities: ReadonlyArray<IdentityResponse> = [
   {
@@ -42,6 +48,24 @@ export const fixedIdentities: ReadonlyArray<IdentityResponse> = [
     updatedBy: pkgsiloId,
     createdAt: "2026-01-05T09:00:00Z",
     updatedAt: "2026-01-05T09:00:00Z",
+  },
+  {
+    id: readerId,
+    username: "reader",
+    displayName: "Read-only Reader",
+    createdBy: adminId,
+    updatedBy: adminId,
+    createdAt: "2026-01-05T09:05:00Z",
+    updatedAt: "2026-01-05T09:05:00Z",
+  },
+  {
+    id: selfId,
+    username: "self",
+    displayName: "Self-Service User",
+    createdBy: adminId,
+    updatedBy: selfId,
+    createdAt: "2026-01-05T09:06:00Z",
+    updatedAt: "2026-02-10T08:30:00Z",
   },
   {
     id: ids.grace,
