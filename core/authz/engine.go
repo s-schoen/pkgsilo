@@ -49,7 +49,7 @@ type policyRecord struct {
 }
 
 // New returns an Engine that reads the policies and the actors' groups from db, and counts its decisions
-// with meterProvider in pkgsilo.authz.decisions, by result only. For runs its queries in a span from
+// with meterProvider in pkgsilo.authz.decisions, by purpose and result. For runs its queries in a span from
 // tracerProvider.
 func New(db database.Querier, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) *Engine {
 	return &Engine{db: db, decisions: newDecisions(meterProvider), tracer: tracerProvider.Tracer(tracerName)}
@@ -146,10 +146,20 @@ type decider struct {
 
 var _ Decider = (*decider)(nil)
 
-// Can reports whether the policies allow the principal the action on the resource, and counts the decision.
+// Can reports whether the policies allow the principal the action on the resource, and counts the decision
+// as enforced.
 func (d *decider) Can(action Action, resource Resource) (bool, error) {
 	allowed, err := d.decide(action, resource)
-	d.decisions.record(allowed, err)
+	d.decisions.record(purposeEnforce, allowed, err)
+
+	return allowed, err
+}
+
+// Hint reports whether the policies allow the principal the action on the resource, and counts the decision
+// as a hint.
+func (d *decider) Hint(action Action, resource Resource) (bool, error) {
+	allowed, err := d.decide(action, resource)
+	d.decisions.record(purposeHint, allowed, err)
 
 	return allowed, err
 }

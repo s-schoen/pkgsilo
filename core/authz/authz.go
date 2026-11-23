@@ -4,7 +4,9 @@
 // on it from the authz tags of the feature's types, and enforces them in its service: it gets a Decider for
 // the request's actor from an Authorizer and asks it about each resource. The fields of a readable object
 // have read actions of their own, and a service reveals only those that the actor may read, as a Field,
-// with a Mapper from the object's record. Everything that no policy permits is denied.
+// with a Mapper from the object's record. Each object also tells which of the other actions on it the actor
+// may do, its AllowedActions, which only guide a client: they're decided as hints, not enforced. Everything
+// that no policy permits is denied.
 //
 // Its model has two types of its own: Identity, the principal of every decision and the owner of owned
 // resources, and Group, which identities and other resources are members of. Their features declare their
@@ -75,6 +77,11 @@ func NewAction(name string, groups ...string) Action {
 	}}
 }
 
+// Name returns the action's name, such as identity:read.
+func (a Action) Name() string {
+	return string(a.entity.UID.ID)
+}
+
 // Resource is what an action is done to.
 type Resource struct {
 	// Type is the resource's Cedar entity type.
@@ -111,6 +118,10 @@ type Decider interface {
 	// otherwise allow what it should deny. A permit that fails to evaluate grants nothing, without an error,
 	// so that one broken permit can't fail every decision.
 	Can(action Action, resource Resource) (bool, error)
+	// Hint decides like Can, for an answer that only guides a client about what it may do, such as the
+	// allowed actions of an object, and is counted as a hint rather than as a check that a request passes
+	// or fails by. It must never decide whether a request is allowed.
+	Hint(action Action, resource Resource) (bool, error)
 }
 
 // AllowAll returns an Authorizer that allows everything to everyone. It's only for code that runs without
@@ -127,6 +138,10 @@ func (allowAll) For(context.Context, uuid.UUID) (Decider, error) {
 }
 
 func (allowAll) Can(Action, Resource) (bool, error) {
+	return true, nil
+}
+
+func (allowAll) Hint(Action, Resource) (bool, error) {
 	return true, nil
 }
 

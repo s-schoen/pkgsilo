@@ -81,7 +81,8 @@ func TestMetrics(t *testing.T) {
 	} {
 		assert.Regexp(t, `(?m)^pkgsilo_authn_attempts_total\{[^}]*`+attempts+`$`, body)
 	}
-	assert.Regexp(t, `(?m)^pkgsilo_authz_decisions_total\{[^}]*pkgsilo_authz_decision="allow"\} [1-9]\d*$`, body)
+	assert.Regexp(t, `(?m)^pkgsilo_authz_decisions_total\{[^}]*`+
+		`pkgsilo_authz_decision="allow",pkgsilo_authz_purpose="enforce"[^}]*\} [1-9]\d*$`, body)
 }
 
 // TestTracing checks that the app creates the spans of a request with the tracer provider it's given:
