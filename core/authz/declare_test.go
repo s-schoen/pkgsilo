@@ -59,6 +59,38 @@ func TestDeclareType(t *testing.T) {
 	assert.Equal(t,
 		[]string{"apikey:delete", "apikey:update:name", "apikey:update:ownerId", "apikey:rotate", "apikey:readUsage"},
 		got.Allowable(), "no read of the object or a field, and no create")
+	assert.Equal(t, []string{
+		"apikey:read", "apikey:delete", "apikey:rotate", "apikey:readUsage",
+		"apikey:read:name", "apikey:read:ownerId", "apikey:read:createdAt",
+		"apikey:create:name", "apikey:create:ownerId",
+		"apikey:update:name", "apikey:update:ownerId",
+	}, actionNames(got.Actions()), "every action, but no action group")
+	assert.True(t, got.Owned())
+	assert.False(t, got.OnePerOwner())
+}
+
+// TestTypeActions_OnePerOwner checks that a type tells whether it's OnePerOwner and Owned.
+func TestTypeActions_OnePerOwner(t *testing.T) {
+	t.Parallel()
+	model := reflect.TypeFor[testModel]()
+
+	password := DeclareType(TypeSpec{Type: "Password", Owned: true, OnePerOwner: true, Model: model})
+	policy := DeclareType(TypeSpec{Type: "Policy", Model: model})
+
+	assert.True(t, password.Owned())
+	assert.True(t, password.OnePerOwner())
+	assert.False(t, policy.Owned())
+	assert.False(t, policy.OnePerOwner())
+}
+
+// actionNames returns the names of the actions, in their order.
+func actionNames(actions []Action) []string {
+	names := make([]string, len(actions))
+	for i, action := range actions {
+		names[i] = action.Name()
+	}
+
+	return names
 }
 
 // TestDeclareType_WithoutWrites checks that a type without Create and Update has no field actions for
