@@ -63,3 +63,6 @@ packages:
   pkgsilo/feature/session/service:
     interfaces:
       SessionService: {}
+  pkgsilo/feature/permission/service:
+    interfaces:
+      PermissionService: {}

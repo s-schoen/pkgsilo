@@ -38,6 +38,9 @@ import (
 	passwordrepo "pkgsilo/feature/password/repository"
 	passwordservice "pkgsilo/feature/password/service"
 	passwordtools "pkgsilo/feature/password/tools"
+	permissionapi "pkgsilo/feature/permission/api"
+	permissionservice "pkgsilo/feature/permission/service"
+	permissiontools "pkgsilo/feature/permission/tools"
 	policyapi "pkgsilo/feature/policy/api"
 	policyrepo "pkgsilo/feature/policy/repository"
 	policyservice "pkgsilo/feature/policy/service"
@@ -56,6 +59,7 @@ const (
 	identitiesPath = "/identities"
 	apiKeysPath    = "/identities/{identityID}/api-keys"
 	passwordPath   = "/identities/{identityID}/password"
+	permissionPath = "/identities/{identityID}/permissions"
 	sessionsPath   = "/sessions"
 	groupsPath     = "/groups"
 	policiesPath   = "/policies"
@@ -96,6 +100,7 @@ func NewHandler(
 	// changes.
 	passwords := passwordservice.NewPasswordService(passwordRepo, authorizer, owners, sessions)
 	policies := policyservice.NewPolicyService(policyrepo.NewPostgresPolicyRepository(db), authorizer, schema())
+	permissions := permissionservice.NewPermissionService(typeActions(), authorizer, owners)
 
 	opts.UnmeasuredPaths = slices.Concat(opts.UnmeasuredPaths, []string{apiPath + healthPath})
 	// API keys first, so that an API key wins when a request carries a session cookie too. Only the API takes
@@ -111,6 +116,7 @@ func NewHandler(
 		policytools.New(policies),
 		apikeytools.New(apiKeys),
 		passwordtools.New(passwords),
+		permissiontools.New(permissions),
 	))
 	r.Route(apiPath, func(r chi.Router) {
 		// Only the API: MCP clients aren't browsers, and the session cookie authenticates only the API.
@@ -124,6 +130,7 @@ func NewHandler(
 			r.Mount(identitiesPath, identityapi.NewHandler(identities, logger).Routes())
 			r.Mount(apiKeysPath, apikeyapi.NewHandler(apiKeys, logger).Routes())
 			r.Mount(passwordPath, passwordapi.NewHandler(passwords, logger).Routes())
+			r.Mount(permissionPath, permissionapi.NewHandler(permissions, logger).Routes())
 			r.Mount(groupsPath, groupapi.NewHandler(groups, logger).Routes())
 			r.Mount(policiesPath, policyapi.NewHandler(policies, logger).Routes())
 		})
@@ -159,6 +166,7 @@ func Docs() *openapi.Document {
 	spec.Mount(apiPath+identitiesPath, identityapi.Docs())
 	spec.Mount(apiPath+apiKeysPath, apikeyapi.Docs())
 	spec.Mount(apiPath+passwordPath, passwordapi.Docs())
+	spec.Mount(apiPath+permissionPath, permissionapi.Docs())
 	spec.Mount(apiPath+sessionsPath, sessionapi.Docs())
 	spec.Mount(apiPath+groupsPath, groupapi.Docs())
 	spec.Mount(apiPath+policiesPath, policyapi.Docs())
@@ -174,11 +182,23 @@ func Docs() *openapi.Document {
 // schema returns the Cedar schema that saved policies are validated against: the resource types and
 // actions that the features declare.
 func schema() string {
-	return authz.Schema(
-		identityservice.Actions().Declaration(),
-		groupservice.Actions().Declaration(),
-		apikeyservice.Actions().Declaration(),
-		passwordservice.Actions().Declaration(),
-		policyservice.Actions().Declaration(),
-	)
+	types := typeActions()
+	declarations := make([]authz.Declaration, len(types))
+	for i, t := range types {
+		declarations[i] = t.Declaration()
+	}
+
+	return authz.Schema(declarations...)
+}
+
+// typeActions returns the resource types that the features declare, with their actions, for the schema and
+// for the permissions that an identity may list.
+func typeActions() []authz.TypeActions {
+	return []authz.TypeActions{
+		identityservice.Actions(),
+		groupservice.Actions(),
+		apikeyservice.Actions(),
+		passwordservice.Actions(),
+		policyservice.Actions(),
+	}
 }
