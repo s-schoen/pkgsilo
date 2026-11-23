@@ -9,7 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// testRecord is the record of testModel, with a member that the model lacks.
+// testRecord is the record of testModel, with a member that the model lacks, and without AllowedActions,
+// which comes from the access.
 type testRecord struct {
 	ID        string
 	Secret    []byte
@@ -26,14 +27,15 @@ var (
 	}
 )
 
-// readable returns the read fields of testActions, of which only those with the given names are readable.
-func readable(names ...string) ReadableFields {
-	fields := testActions.ReadFields().NoneReadable()
-	for i, name := range fields.fields {
-		fields.readable[i] = slices.Contains(names, name)
+// readable returns the access to an object of testActions, of which only the fields with the given names
+// are readable, and no action is allowed.
+func readable(names ...string) Access {
+	access := testActions.NoAccess()
+	for i, name := range access.fields.fields {
+		access.fields.readable[i] = slices.Contains(names, name)
 	}
 
-	return fields
+	return access
 }
 
 func TestMapper_Map(t *testing.T) {
@@ -78,12 +80,26 @@ func TestMapper_Map_ZeroValue(t *testing.T) {
 	assert.Equal(t, Visible(""), got.Name)
 }
 
+// TestMapper_Map_AllowedActions checks that the model gets the allowed actions of the access, as a copy.
+func TestMapper_Map_AllowedActions(t *testing.T) {
+	t.Parallel()
+	mapper := NewMapper[testRecord, testModel](testActions)
+	access := readable("name")
+	access.allowed = AllowedActions{"thing:delete"}
+
+	got := mapper.Map(storedThing, access)
+	got.AllowedActions[0] = "changed"
+
+	assert.Equal(t, AllowedActions{"thing:delete"}, access.allowed)
+	assert.Equal(t, testModel{ID: "t1", Name: Visible("Ada"), AllowedActions: AllowedActions{"changed"}}, got)
+}
+
 // TestMapper_Map_OtherFields checks that the readable fields of another type are a bug that fails loudly,
 // instead of revealing the fields at the same positions.
 func TestMapper_Map_OtherFields(t *testing.T) {
 	t.Parallel()
 	mapper := NewMapper[testRecord, testModel](testActions)
-	other := NewReadFieldActions("thing", "name", "createdAt", "ownerId").NoneReadable()
+	other := FieldsOnly(NewReadFieldActions("thing", "name", "createdAt", "ownerId").NoneReadable())
 
 	assert.Panics(t, func() { mapper.Map(storedThing, other) })
 }

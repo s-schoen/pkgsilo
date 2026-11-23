@@ -12,6 +12,9 @@ import (
 // such as `authz:"username"` for identity:read:username.
 const fieldTag = "authz"
 
+// allowedActionsMember is the name of the member of every model that holds its AllowedActions.
+const allowedActionsMember = "AllowedActions"
+
 // fieldName is the format of a field name: an action name holds it after a colon, so it can't hold one.
 var fieldName = regexp.MustCompile(`^[a-z][A-Za-z0-9]*$`)
 
@@ -23,8 +26,9 @@ type TypeSpec struct {
 	Type string
 	// Owned declares that each resource belongs to an identity, as Declaration.Owned does.
 	Owned bool
-	// Model is the domain model as an actor sees it: every member but ID is a Field, tagged with the name of
-	// the field, such as `authz:"username"`. Each one gets an action <type>:read:<field>.
+	// Model is the domain model as an actor sees it: every member but ID and AllowedActions is a Field,
+	// tagged with the name of the field, such as `authz:"username"`. Each one gets an action
+	// <type>:read:<field>. Its member AllowedActions, of the type AllowedActions, is required.
 	Model reflect.Type
 	// Create is the input that creating a resource sets, if creating it sets fields: every member is tagged
 	// with the name of the field, and gets an action <type>:create:<field>.
@@ -47,6 +51,8 @@ type TypeActions struct {
 	readFields   FieldActions
 	createFields FieldActions
 	updateFields FieldActions
+	// allowable are the actions that an object's AllowedActions can hold.
+	allowable []Action
 }
 
 // DeclareType declares the resource type of spec and the actions on it: <type>:read, as a member of the
@@ -70,6 +76,8 @@ func DeclareType(spec TypeSpec) TypeActions {
 	if spec.Patch != nil {
 		checkPatch(spec.Patch, spec.Update)
 	}
+
+	actions.allowable = append(append([]Action{actions.delete}, actions.updateFields.actions...), spec.Actions...)
 
 	actions.declaration = Declaration{
 		Type:    spec.Type,
@@ -136,14 +144,17 @@ func SetFields(v any) []string {
 	return set
 }
 
-// modelFields returns the names of the fields of the domain model t, every member but ID, each of which
-// must be a Field.
+// modelFields returns the names of the fields of the domain model t, every member but ID and
+// AllowedActions, each of which must be a Field. AllowedActions must be there, so that no model can lack it.
 func modelFields(t reflect.Type) []string {
 	checkStruct(t)
 
 	var names []string
 	for member := range t.Fields() {
 		if member.Name == "ID" {
+			continue
+		}
+		if isAllowedActions(member) {
 			continue
 		}
 		if !isField(member.Type) {
@@ -153,7 +164,19 @@ func modelFields(t reflect.Type) []string {
 		names = append(names, tagName(t, member))
 	}
 
+	if member, ok := t.FieldByName(allowedActionsMember); !ok || !isAllowedActions(member) {
+		panic(fmt.Sprintf("authz: %s has no member %s of type authz.AllowedActions, so it can't tell what the "+
+			"actor may do", t, allowedActionsMember))
+	}
+
 	return checkUnique(t, names)
+}
+
+// isAllowedActions reports whether the member of a model is its AllowedActions. A member of the type with
+// another name isn't, so that every model names it the same.
+func isAllowedActions(member reflect.StructField) bool {
+	return member.Name == allowedActionsMember && member.Type == reflect.TypeFor[AllowedActions]() &&
+		len(member.Index) == 1
 }
 
 // isField reports whether t is a Field.

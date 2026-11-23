@@ -123,7 +123,7 @@ func (s *apiKeyService) Create(
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", translateError(err))
 	}
 
-	return CreatedAPIKey{APIKey: toAPIKey.Map(rec, fields), Key: key}, nil
+	return CreatedAPIKey{APIKey: toAPIKey.Map(rec, authz.FieldsOnly(fields)), Key: key}, nil
 }
 
 func (s *apiKeyService) Get(ctx context.Context, actor, identityID, id uuid.UUID) (APIKey, error) {
@@ -147,7 +147,7 @@ func (s *apiKeyService) Get(ctx context.Context, actor, identityID, id uuid.UUID
 		return APIKey{}, fmt.Errorf("get api key: %w", err)
 	}
 
-	return toAPIKey.Map(rec, fields), nil
+	return toAPIKey.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *apiKeyService) List(
@@ -183,7 +183,7 @@ func (s *apiKeyService) List(
 		if err != nil {
 			return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
 		}
-		keys[i] = toAPIKey.Map(rec, fields)
+		keys[i] = toAPIKey.Map(rec, authz.FieldsOnly(fields))
 	}
 
 	return pagination.Page[APIKey]{Items: keys, HasMore: page.HasMore}, nil

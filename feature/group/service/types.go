@@ -35,6 +35,8 @@ type Group struct {
 	UpdatedBy authz.Field[uuid.UUID] `authz:"updatedBy"`
 	CreatedAt authz.Field[time.Time] `authz:"createdAt"`
 	UpdatedAt authz.Field[time.Time] `authz:"updatedAt"`
+	// AllowedActions are the actions that the actor may do to the group.
+	AllowedActions authz.AllowedActions
 }
 
 // GroupInput holds the group fields set by callers when creating or replacing a group. The authz tag of a

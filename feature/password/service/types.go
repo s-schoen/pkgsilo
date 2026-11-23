@@ -15,6 +15,8 @@ import (
 type Password struct {
 	// SetAt is when the password was last set.
 	SetAt authz.Field[time.Time] `authz:"setAt"`
+	// AllowedActions are the actions that the actor may do to the password.
+	AllowedActions authz.AllowedActions
 }
 
 // Verified is a username and password that a Verifier accepted.

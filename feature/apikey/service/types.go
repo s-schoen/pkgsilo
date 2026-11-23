@@ -23,6 +23,8 @@ type APIKey struct {
 	// CreatedBy is the identity, or audit.SystemActor, that created the API key.
 	CreatedBy authz.Field[uuid.UUID] `authz:"createdBy"`
 	CreatedAt authz.Field[time.Time] `authz:"createdAt"`
+	// AllowedActions are the actions that the actor may do to the API key.
+	AllowedActions authz.AllowedActions
 }
 
 // AuthenticatedKey is the API key that a presented key belongs to, as far as a request needs it once it's
