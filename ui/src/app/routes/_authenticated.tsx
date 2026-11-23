@@ -3,6 +3,8 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { getGetIdentityQueryOptions } from "@/api/gen/client/identities/identities.ts";
 import { getGetCurrentSessionQueryOptions } from "@/api/gen/client/sessions/sessions.ts";
 import { AuthenticatedLayout } from "@/app/authenticated-layout.tsx";
+import { NotFound } from "@/components/errors/not-found.tsx";
+import { permissionsQueryOptions } from "@/features/permissions/api/permissions-query.ts";
 import { isUnauthorized } from "@/features/session/utils/unauthorized.ts";
 
 // The pages that need a session, in the app's frame: every route below routes/_authenticated/.
@@ -10,13 +12,20 @@ import { isUnauthorized } from "@/features/session/utils/unauthorized.ts";
 // sign-in leads back to it. A session ending later on a page leads there too
 // (redirectOnUnauthorized in router.tsx). The check doesn't retry an error, which would keep the
 // page blank for seconds before the error shows.
+//
+// The signed-in identity's permissions load together with the session, so that no page renders
+// without them: the pages hide what the policies deny (usePermissions). A route that the identity
+// may not use renders NotFound in the app's frame (requirePermission).
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ context, location }) => {
     try {
-      const session = await context.queryClient.ensureQueryData({
-        ...getGetCurrentSessionQueryOptions(),
-        retry: false,
-      });
+      const [session] = await Promise.all([
+        context.queryClient.ensureQueryData({
+          ...getGetCurrentSessionQueryOptions(),
+          retry: false,
+        }),
+        context.queryClient.ensureQueryData({ ...permissionsQueryOptions(), retry: false }),
+      ]);
       return { identityId: session.data.data.identityId };
     } catch (error) {
       if (isUnauthorized(error)) {
@@ -33,4 +42,5 @@ export const Route = createFileRoute("/_authenticated")({
     }
   },
   component: AuthenticatedLayout,
+  notFoundComponent: NotFound,
 });

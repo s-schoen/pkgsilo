@@ -5,6 +5,7 @@ import { Outlet, useNavigate } from "@tanstack/react-router";
 import { AppNavigation } from "@/app/app-navigation.tsx";
 import { AppLayout } from "@/components/layouts/app-layout.tsx";
 import { ColorSchemeMenu } from "@/features/appearance/components/color-scheme-menu.tsx";
+import { useInvalidateOnForbidden } from "@/features/permissions/hooks/use-invalidate-on-forbidden.ts";
 import { AccountMenu } from "@/features/session/components/account-menu.tsx";
 import { useSessionExpiry } from "@/features/session/hooks/use-session-expiry.ts";
 import { clearSessionData } from "@/features/session/utils/clear-session-data.ts";
@@ -13,12 +14,14 @@ import { clearSessionData } from "@/features/session/utils/clear-session-data.ts
 // session, with the navigation, the color scheme's menu and the account. It checks the session
 // again once it ends (useSessionExpiry). A sign-out leads to the sign-in page, which replaces the
 // page in the history, since Back would only lead to the sign-in page again, and then removes what
-// the clients hold of the session that ended (clearSessionData).
+// the clients hold of the session that ended (clearSessionData). A denied request refreshes the
+// permissions and the collection it was about (useInvalidateOnForbidden).
 export function AuthenticatedLayout() {
   const queryClient = useQueryClient();
   const dbClient = useDbClient();
   const navigate = useNavigate();
   useSessionExpiry();
+  useInvalidateOnForbidden();
 
   return (
     <AppLayout
