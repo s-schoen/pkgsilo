@@ -364,6 +364,49 @@ func TestAPIKeys_ManageOwn(t *testing.T) {
 		AssertStatus(http.StatusOK)
 }
 
+// TestAPIKeys_Me checks that "me" in the path stands for the caller's own identity, whether it authenticates
+// with an API key or a session:
+//
+//  1. Create ada with an API key, reset her password as admin, and log in as her: a session.
+//  2. With her session, create an API key under /identities/me/api-keys: 201, owned by ada, its Location under
+//     the same path.
+//  3. With her API key, list /identities/me/api-keys: both keys. Get the new one through its Location: the
+//     created key.
+//  4. With her session, delete it: 204, and as admin, ada's keys are her first one alone.
+//  5. As admin, list /identities/me/api-keys: admin's own keys, without ada's.
+func TestAPIKeys_Me(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	const meKeysPath = identitiesPath + "/me/api-keys"
+
+	// 1. Create and log in.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	initial := keyIDs(api, keysPathOf(ada.ID))
+	require.Len(t, initial, 1)
+	apptest.SetPassword(api, ada.ID, "correct horse")
+	_, adaSession := apptest.LogIn(t, api, "ada", "correct horse")
+
+	// 2. Create.
+	resp := adaSession.Post(meKeysPath, `{"name":"laptop"}`)
+	created := resp.DecodeResource[createdAPIKey](http.StatusCreated)
+	assert.Equal(t, envelope.Visible(ada.ID), created.IdentityID)
+	createdPath := meKeysPath + "/" + created.ID.String()
+	assert.Equal(t, createdPath, resp.Header().Get("Location"))
+
+	// 3. List and get.
+	assert.Equal(t, []uuid.UUID{initial[0], created.ID}, keyIDs(asAda, meKeysPath))
+	assert.Equal(t, created.KeyResponse, asAda.Get(createdPath).DecodeResource[apiKey](http.StatusOK))
+
+	// 4. Delete.
+	adaSession.Delete(createdPath).AssertNoContent()
+	assert.Equal(t, initial, keyIDs(api, keysPathOf(ada.ID)))
+
+	// 5. As admin.
+	for _, key := range listKeys(api, meKeysPath) {
+		assert.NotEqual(t, envelope.Visible(ada.ID), key.IdentityID)
+	}
+}
+
 // TestAPIKeys_OfHiddenIdentity checks that ada, by the seeded policies, can't use the API keys of grace,
 // whom she can't read, and can't tell grace from an identity that doesn't exist:
 //

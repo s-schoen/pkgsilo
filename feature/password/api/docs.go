@@ -15,7 +15,7 @@ const sessionsEnd = "Every session of the identity ends, so that it's logged out
 // Docs describes the password endpoints of Routes in the OpenAPI document. The routes are mounted at a path
 // with the identityID parameter.
 func Docs() openapi.Section {
-	identityID := openapi.PathID("identityID", "The ID of the identity that the password belongs to.")
+	identityID := openapi.PathIdentityID("identityID", "The ID of the identity that the password belongs to.")
 
 	return openapi.Section{
 		Name: "Passwords",

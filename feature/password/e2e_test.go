@@ -258,6 +258,40 @@ func TestPasswords_ResetOwn(t *testing.T) {
 	api.Put(path, `{"newPassword":"battery staple"}`).AssertStatus(http.StatusOK)
 }
 
+// TestPasswords_Me checks that "me" in the path stands for the caller's own identity, whether it authenticates
+// with an API key or a session:
+//
+//  1. Create ada with an API key, reset her password as admin, and log in as her: a session.
+//  2. With her API key and with her session, get /identities/me/password: her password, as by her ID, with
+//     changing it allowed.
+//  3. With her session, change /identities/me/password: 200, and the response deletes the session cookie.
+//  4. With her API key, delete /identities/me/password: 403 Forbidden. Log in with the new password: 201.
+func TestPasswords_Me(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	const mePath = "/api/v1/identities/me/password"
+
+	// 1. Create and log in.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	apptest.SetPassword(api, ada.ID, "correct horse")
+	_, adaSession := apptest.LogIn(t, api, "ada", "correct horse")
+
+	// 2. Get.
+	own := asAda.Get(passwordPathOf(ada.ID)).DecodeResource[password](http.StatusOK)
+	assert.Equal(t, withActions(own, "password:change"), own)
+	assert.Equal(t, own, asAda.Get(mePath).DecodeResource[password](http.StatusOK))
+	assert.Equal(t, own, adaSession.Get(mePath).DecodeResource[password](http.StatusOK))
+
+	// 3. Change.
+	resp := adaSession.Put(mePath, `{"newPassword":"battery staple","currentPassword":"correct horse"}`)
+	resp.AssertStatus(http.StatusOK)
+	assert.Equal(t, []string{expiredCookie}, resp.Header().Values("Set-Cookie"))
+
+	// 4. Delete, denied, and log in.
+	asAda.Delete(mePath).AssertProblemType(forbidden)
+	apptest.LogIn(t, api, "ada", "battery staple")
+}
+
 // TestPasswords_OfHiddenIdentity checks that ada, by the seeded policies, can't use the password of grace,
 // whom she can't read, and can't tell grace from an identity that doesn't exist:
 //

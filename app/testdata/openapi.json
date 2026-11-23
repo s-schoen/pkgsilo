@@ -2119,11 +2119,21 @@
           {
             "name": "identityID",
             "in": "path",
-            "description": "The ID of the identity that the API keys belong to.",
+            "description": "The ID of the identity that the API keys belong to. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           },
           {
@@ -2284,11 +2294,21 @@
           {
             "name": "identityID",
             "in": "path",
-            "description": "The ID of the identity that the API keys belong to.",
+            "description": "The ID of the identity that the API keys belong to. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           }
         ],
@@ -2542,11 +2562,21 @@
           {
             "name": "identityID",
             "in": "path",
-            "description": "The ID of the identity that the API keys belong to.",
+            "description": "The ID of the identity that the API keys belong to. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           },
           {
@@ -2675,11 +2705,21 @@
           {
             "name": "identityID",
             "in": "path",
-            "description": "The ID of the identity that the API keys belong to.",
+            "description": "The ID of the identity that the API keys belong to. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           },
           {
@@ -2801,11 +2841,21 @@
           {
             "name": "identityID",
             "in": "path",
-            "description": "The ID of the identity that the password belongs to.",
+            "description": "The ID of the identity that the password belongs to. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           }
         ],
@@ -2924,11 +2974,21 @@
           {
             "name": "identityID",
             "in": "path",
-            "description": "The ID of the identity that the password belongs to.",
+            "description": "The ID of the identity that the password belongs to. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           }
         ],
@@ -3038,11 +3098,21 @@
           {
             "name": "identityID",
             "in": "path",
-            "description": "The ID of the identity that the password belongs to.",
+            "description": "The ID of the identity that the password belongs to. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           }
         ],
@@ -3286,11 +3356,21 @@
           {
             "name": "id",
             "in": "path",
-            "description": "The ID of the identity.",
+            "description": "The ID of the identity. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           }
         ],
@@ -3408,11 +3488,21 @@
           {
             "name": "id",
             "in": "path",
-            "description": "The ID of the identity.",
+            "description": "The ID of the identity. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           }
         ],
@@ -3521,11 +3611,21 @@
           {
             "name": "id",
             "in": "path",
-            "description": "The ID of the identity.",
+            "description": "The ID of the identity. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           }
         ],
@@ -3791,11 +3891,21 @@
           {
             "name": "id",
             "in": "path",
-            "description": "The ID of the identity.",
+            "description": "The ID of the identity. \"me\" stands for the caller's own.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "me"
+                  ]
+                }
+              ]
             }
           }
         ],

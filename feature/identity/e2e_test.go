@@ -252,6 +252,58 @@ func TestIdentities_OwnIdentityOnly(t *testing.T) {
 	assert.Equal(t, []identity{ada, grace}, all[1:])
 }
 
+// TestIdentities_Me checks that "me" in the path stands for the caller's own identity, whether it authenticates
+// with an API key or a session, and that the policies still decide what it may do:
+//
+//  1. Create ada with an API key, reset her password as admin, and log in as her: a session.
+//  2. With her API key and with her session, get /identities/me: ada, as by her ID, with no allowed actions.
+//  3. As admin, get /identities/me: admin, the first identity, with every action allowed.
+//  4. With her session, patch /identities/me: 403 fields-denied pointing to displayName, since the seeded
+//     policies only let her read herself.
+//  5. Add a policy that lets every identity update itself. With her session, patch /identities/me: 200 with the
+//     new display name, and as admin, ada has it.
+//  6. With her API key, delete /identities/me: 403 Forbidden.
+//  7. Get /identities/Me and /identities/mine: 404 identity-not-found, like any other ID that isn't a UUID.
+func TestIdentities_Me(t *testing.T) {
+	t.Parallel()
+	api := apptest.New(t)
+	const mePath = identitiesPath + "/me"
+
+	// 1. Create and log in.
+	ada, asAda := apptest.NewIdentity(api, "ada")
+	adaPath := identitiesPath + "/" + ada.ID.String()
+	apptest.SetPassword(api, ada.ID, "correct horse")
+	_, adaSession := apptest.LogIn(t, api, "ada", "correct horse")
+
+	// 2. Get ada.
+	assert.Equal(t, withActions(ada), asAda.Get(mePath).DecodeResource[identity](http.StatusOK))
+	assert.Equal(t, withActions(ada), adaSession.Get(mePath).DecodeResource[identity](http.StatusOK))
+
+	// 3. Get admin.
+	admin := api.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data[0]
+	assert.Equal(t, envelope.Visible("admin"), admin.Username)
+	assert.Equal(t, withActions(admin, allActions...), api.Get(mePath).DecodeResource[identity](http.StatusOK))
+
+	// 4. Patch, denied.
+	assertFieldsDenied(t, adaSession.Patch(mePath, `{"displayName":"Ada Lovelace"}`), "#/displayName")
+
+	// 5. Patch, allowed.
+	addPolicy(t, api, `permit (principal, action in Action::"identity:update", resource)
+		when { resource == principal };`)
+	patched := adaSession.Patch(mePath, `{"displayName":"Ada Lovelace"}`).DecodeResource[identity](http.StatusOK)
+	assert.Equal(t, ada.ID, patched.ID)
+	assert.Equal(t, envelope.Visible("Ada Lovelace"), patched.DisplayName)
+	assert.Equal(t, envelope.Visible("Ada Lovelace"), api.Get(adaPath).DecodeResource[identity](http.StatusOK).DisplayName)
+
+	// 6. Delete, denied.
+	asAda.Delete(mePath).AssertProblemType(forbidden)
+
+	// 7. Not "me".
+	for _, target := range []string{identitiesPath + "/Me", identitiesPath + "/mine"} {
+		asAda.Get(target).AssertProblemType(identityNotFound)
+	}
+}
+
 // TestIdentities_ListPagesWithHiddenRows pages through what a policy lets an identity read, with hidden
 // identities in between, which must not show in the page sizes. It also shows that a policy applies on the
 // next request and matches through the resource's groups:

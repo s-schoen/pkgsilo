@@ -41,7 +41,7 @@ Read `docs/agents/openapi.md`.
 Write `api/{types,errors,handler,docs}.go` and `handler_test.go`, whose client checks every response against `Docs()`.
 Register the service interface in `.mockery.yml` and run `task generate`.
 
-Done when `go test ./feature/<name>/api/...` passes, with `apitest.AssertReadableMembers` on every response type and a field action for every settable request member, and `Docs()` has an operation for every route of `Routes()` whose `Problems` hold every problem type its handler answers with: the types of `errors.go`, the not-found type of each `request.UUIDParam`, and `envelope.ForbiddenProblem` and `request.FieldsDeniedType` where `writeError` answers with them.
+Done when `go test ./feature/<name>/api/...` passes, with `apitest.AssertReadableMembers` on every response type and a field action for every settable request member, and `Docs()` has an operation for every route of `Routes()` whose `Problems` hold every problem type its handler answers with: the types of `errors.go`, the not-found type of each `request.UUIDParam` or `request.IdentityParam`, and `envelope.ForbiddenProblem` and `request.FieldsDeniedType` where `writeError` answers with them.
 
 ## 5. MCP tools
 

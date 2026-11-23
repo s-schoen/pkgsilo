@@ -126,10 +126,10 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// identityID returns the ID of the API keys' identity from the request path, answering one that
-// isn't a UUID like an unknown one.
+// identityID returns the ID of the API keys' identity from the request path, a UUID or request.Me for the actor,
+// answering any other value like an unknown identity.
 func identityID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	return request.UUIDParam(w, r, "identityID", identityapi.IdentityNotFoundProblem)
+	return request.IdentityParam(w, r, "identityID", identityapi.IdentityNotFoundProblem)
 }
 
 // apiKeyID returns the API key ID from the request path, answering one that isn't a UUID like an

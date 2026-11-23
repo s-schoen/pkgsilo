@@ -160,6 +160,34 @@ func TestHandler_Delete(t *testing.T) {
 	api.Delete(passwordPath).AssertNoContent()
 }
 
+// TestHandler_Me checks that "me" in the path stands for the actor's identity.
+func TestHandler_Me(t *testing.T) {
+	t.Parallel()
+	const mePath = "/identities/me/password"
+	t.Run("get", func(t *testing.T) {
+		t.Parallel()
+		api, svc := newTestClient(t, loggertest.Discard())
+		svc.EXPECT().Get(mock.Anything, apitest.Actor, apitest.Actor).Return(adaPassword, nil)
+
+		api.Get(mePath).AssertResource(adaJSON)
+	})
+	t.Run("set", func(t *testing.T) {
+		t.Parallel()
+		api, svc := newTestClient(t, loggertest.Discard())
+		svc.EXPECT().Set(mock.Anything, apitest.Actor, apitest.Actor, service.PasswordInput{NewPassword: "battery staple"}).
+			Return(adaPassword, nil)
+
+		api.Put(mePath, `{"newPassword":"battery staple"}`).AssertResource(adaJSON)
+	})
+	t.Run("delete", func(t *testing.T) {
+		t.Parallel()
+		api, svc := newTestClient(t, loggertest.Discard())
+		svc.EXPECT().Delete(mock.Anything, apitest.Actor, apitest.Actor).Return(nil)
+
+		api.Delete(mePath).AssertNoContent()
+	})
+}
+
 func TestHandler_InvalidIdentityID(t *testing.T) {
 	t.Parallel()
 	const invalidPath = "/identities/not-a-uuid/password"

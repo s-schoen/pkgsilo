@@ -218,6 +218,44 @@ func TestHandler_Delete(t *testing.T) {
 	api.Delete(ciPath).AssertNoContent()
 }
 
+// TestHandler_Me checks that "me" in the path stands for the actor's identity.
+func TestHandler_Me(t *testing.T) {
+	t.Parallel()
+	const meKeysPath = "/identities/me/api-keys"
+	meKeyPath := meKeysPath + "/" + ciKey.ID.String()
+	t.Run("list", func(t *testing.T) {
+		t.Parallel()
+		api, svc := newTestClient(t, loggertest.Discard())
+		svc.EXPECT().List(mock.Anything, apitest.Actor, apitest.Actor, 0, 50).
+			Return(pagination.Page[service.APIKey]{Items: []service.APIKey{ciKey}}, nil)
+
+		api.Get(meKeysPath).AssertCollection(`[`+ciJSON+`]`, envelope.Pagination{Offset: 0, Limit: 50})
+	})
+	t.Run("create", func(t *testing.T) {
+		t.Parallel()
+		api, svc := newTestClient(t, loggertest.Discard())
+		svc.EXPECT().Create(mock.Anything, apitest.Actor, apitest.Actor, service.APIKeyInput{Name: "ci"}).
+			Return(service.CreatedAPIKey{ID: ciKey.ID, Key: "psk_NEWKEY"}, nil)
+
+		api.Post(meKeysPath, `{"name":"ci"}`).
+			AssertCreated(meKeyPath, `{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","key":"psk_NEWKEY"}`)
+	})
+	t.Run("get", func(t *testing.T) {
+		t.Parallel()
+		api, svc := newTestClient(t, loggertest.Discard())
+		svc.EXPECT().Get(mock.Anything, apitest.Actor, apitest.Actor, ciKey.ID).Return(ciKey, nil)
+
+		api.Get(meKeyPath).AssertResource(ciJSON)
+	})
+	t.Run("delete", func(t *testing.T) {
+		t.Parallel()
+		api, svc := newTestClient(t, loggertest.Discard())
+		svc.EXPECT().Delete(mock.Anything, apitest.Actor, apitest.Actor, ciKey.ID).Return(nil)
+
+		api.Delete(meKeyPath).AssertNoContent()
+	})
+}
+
 func TestHandler_NoUpdateRoute(t *testing.T) {
 	t.Parallel()
 	api, _ := newTestClient(t, loggertest.Discard())
