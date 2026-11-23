@@ -295,10 +295,10 @@ func (s *passwordService) getReadable(
 	return rec, nil
 }
 
-// toResource returns the owner's password as a resource of a decision. Its ID is the owner's, since an
-// identity has at most one password.
+// toResource returns the owner's password as a resource of a decision, whether it's set or not. Its ID is
+// the owner's, since the type is OnePerOwner.
 func toResource(owner *authz.Owner) authz.Resource {
-	return authz.Resource{Type: actions.Type(), ID: owner.ID, Owner: owner}
+	return actions.NewResource(owner)
 }
 
 // toPassword builds the password of a record, with the fields that the actor may read. Every other field

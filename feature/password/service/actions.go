@@ -17,10 +17,11 @@ var (
 	resetAction = authz.NewAction("password:reset")
 
 	actions = authz.DeclareType(authz.TypeSpec{
-		Type:    "Password",
-		Owned:   true,
-		Model:   reflect.TypeFor[Password](),
-		Actions: []authz.Action{changeAction, resetAction},
+		Type:        "Password",
+		Owned:       true,
+		OnePerOwner: true,
+		Model:       reflect.TypeFor[Password](),
+		Actions:     []authz.Action{changeAction, resetAction},
 	})
 )
 
