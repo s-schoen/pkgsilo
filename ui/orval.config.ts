@@ -20,8 +20,12 @@ export default defineConfig({
       httpClient: "fetch",
       clean: true,
       // An error response rejects, with its status and problem in the error's status and info, so
-      // that the hooks report it as an error instead of as data.
-      override: { fetch: { forceSuccessResponse: true } },
+      // that the hooks report it as an error instead of as data. Every request goes through
+      // apiFetch, which shows the UI every error response in one place (onErrorResponse).
+      override: {
+        fetch: { forceSuccessResponse: true },
+        mutator: { path: "src/api/fetch.ts", name: "apiFetch" },
+      },
       mock: {
         // No delay, so that the tests don't wait for the responses.
         generators: [{ type: "msw", delay: false }, { type: "faker" }],

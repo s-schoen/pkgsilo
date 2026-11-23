@@ -9,6 +9,8 @@ Orval generates the API client into `ui/src/api/gen/` from `app/testdata/openapi
   `AppProviders` (`src/app/app-providers.tsx`) provides their `QueryClient`, around the app in `main.tsx`, each test and each story.
 - A hook resolves with `{ data, status, headers }`, where `data` is the response body, so the resource is in `data.data`.
   An error response rejects: the hook's `error` has the HTTP status in `status` and the problem in `info`.
+- Every generated function sends its request through `apiFetch` (`src/api/fetch.ts`, orval's mutator), the one place that sees every response, whichever query, mutation or collection sent it: `onErrorResponse(listener)` hears every error response.
+  The permissions feature uses it to refresh the permissions and the affected collection after any `403` (`invalidateOnForbidden`); don't handle that per feature.
 - The types of the bodies are in `src/api/gen/client/model/`.
   `src/api/gen/zod/` has zod schemas of the requests and responses, for validating forms.
   They check the types and the required members, not the rules that only a `jsonschema` description states.
