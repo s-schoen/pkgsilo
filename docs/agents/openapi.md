@@ -11,6 +11,7 @@ Each feature describes its own routes in `api/docs.go`; `core/openapi` adds ever
 - `Pattern` is the chi pattern of `Routes()`, relative to the mount path.
   `Parameters` declares every path parameter of the full path with `openapi.PathID`, the mount path's ones included (see `feature/apikey/api/docs.go`).
   A parameter that names an identity takes `me` for the caller's own: the handler reads it with `request.IdentityParam` and `Docs()` declares it with `openapi.PathIdentityID`.
+  An optional query parameter that names an identity does the same with `request.IdentityQueryParam` and `openapi.QueryIdentityID`, and lists `request.InvalidQueryType` in `Problems`.
   MCP tools keep UUIDs.
 - A public route in a section whose other routes need authentication, such as a login, sets `Public`; a section whose routes are all public is mounted with `spec.MountPublic` instead.
 - `Body` and `Responses` name the api package's own types: `JSONBody`/`MergePatchBody` for what `request.DecodeJSON`/`DecodeMergePatch` read, and `Resource`, `Created`, `Collection`, `NoContent` or `JSON` for what the `envelope` writer writes.

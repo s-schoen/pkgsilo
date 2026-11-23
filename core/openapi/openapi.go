@@ -27,6 +27,7 @@ const version = "3.1.1"
 const (
 	inPath             = "path"
 	inQuery            = "query"
+	formatUUID         = "uuid"
 	typeString         = "string"
 	typeInteger        = "integer"
 	formatURIReference = "uri-reference"
@@ -102,7 +103,7 @@ type Parameter struct {
 func PathID(name, description string) Parameter {
 	return Parameter{
 		Name: name, In: inPath, Description: description, Required: true,
-		Schema: &jsonschema.Schema{Type: typeString, Format: "uuid"},
+		Schema: &jsonschema.Schema{Type: typeString, Format: formatUUID},
 	}
 }
 
@@ -111,12 +112,26 @@ func PathID(name, description string) Parameter {
 func PathIdentityID(name, description string) Parameter {
 	return Parameter{
 		Name: name, In: inPath, Description: description + ` "` + request.Me + `" stands for the caller's own.`,
-		Required: true,
-		Schema: &jsonschema.Schema{AnyOf: []*jsonschema.Schema{
-			{Type: typeString, Format: "uuid"},
-			{Type: typeString, Enum: []any{request.Me}},
-		}},
+		Required: true, Schema: identityIDSchema(),
 	}
+}
+
+// QueryIdentityID returns the optional query parameter name that holds the UUID of an identity, or request.Me
+// for the caller's own, as request.IdentityQueryParam reads it. Any other value is answered with
+// request.InvalidQueryType, which the operation lists in its Problems.
+func QueryIdentityID(name, description string) Parameter {
+	return Parameter{
+		Name: name, In: inQuery, Description: description + ` "` + request.Me + `" stands for the caller's own.`,
+		Schema: identityIDSchema(),
+	}
+}
+
+// identityIDSchema returns the schema of a parameter that names an identity: a UUID, or request.Me.
+func identityIDSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{AnyOf: []*jsonschema.Schema{
+		{Type: typeString, Format: formatUUID},
+		{Type: typeString, Enum: []any{request.Me}},
+	}}
 }
 
 // Body is a request body: a JSON object whose schema is that of a Go type.
