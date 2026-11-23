@@ -31,12 +31,6 @@ func (a Access) AllowedActions() AllowedActions {
 	return slices.Clone(a.allowed)
 }
 
-// FieldsOnly returns the access with the readable fields and no allowed actions. It only bridges the services
-// that don't fill AllowedActions yet, and goes once every service uses TypeActions.Access.
-func FieldsOnly(fields ReadableFields) Access {
-	return Access{fields: fields}
-}
-
 // Access checks what the decider allows on the resource: reading each field of the Model, and each action
 // of Allowable, which count as hints. The resource must be one that the decider allows reading at all. The
 // allowed actions are never nil, so that an object that the actor may do nothing to tells so.

@@ -99,7 +99,7 @@ func TestMapper_Map_AllowedActions(t *testing.T) {
 func TestMapper_Map_OtherFields(t *testing.T) {
 	t.Parallel()
 	mapper := NewMapper[testRecord, testModel](testActions)
-	other := FieldsOnly(NewReadFieldActions("thing", "name", "createdAt", "ownerId").NoneReadable())
+	other := Access{fields: NewReadFieldActions("thing", "name", "createdAt", "ownerId").NoneReadable()}
 
 	assert.Panics(t, func() { mapper.Map(storedThing, other) })
 }
