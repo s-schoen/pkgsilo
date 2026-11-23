@@ -103,7 +103,7 @@ func (s *apiKeyService) Create(
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded, and
 	// lose the key that the caller couldn't retrieve again.
-	fields, err := actions.ReadFields().ReadableIf(decider, actions.Read(), resource)
+	access, err := actions.AccessIf(decider, resource)
 	if err != nil {
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
 	}
@@ -123,7 +123,7 @@ func (s *apiKeyService) Create(
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", translateError(err))
 	}
 
-	return CreatedAPIKey{APIKey: toAPIKey.Map(rec, authz.FieldsOnly(fields)), Key: key}, nil
+	return CreatedAPIKey{APIKey: toAPIKey.Map(rec, access), Key: key}, nil
 }
 
 func (s *apiKeyService) Get(ctx context.Context, actor, identityID, id uuid.UUID) (APIKey, error) {
@@ -142,12 +142,12 @@ func (s *apiKeyService) Get(ctx context.Context, actor, identityID, id uuid.UUID
 		return APIKey{}, fmt.Errorf("get api key: %w", err)
 	}
 
-	fields, err := actions.ReadFields().Readable(decider, toResource(id, owner))
+	access, err := actions.Access(decider, toResource(id, owner))
 	if err != nil {
 		return APIKey{}, fmt.Errorf("get api key: %w", err)
 	}
 
-	return toAPIKey.Map(rec, authz.FieldsOnly(fields)), nil
+	return toAPIKey.Map(rec, access), nil
 }
 
 func (s *apiKeyService) List(
@@ -179,11 +179,11 @@ func (s *apiKeyService) List(
 	page := pagination.FromAll(readable, offset, limit)
 	keys := make([]APIKey, len(page.Items))
 	for i, rec := range page.Items {
-		fields, err := actions.ReadFields().Readable(decider, toResource(rec.ID, owner))
+		access, err := actions.Access(decider, toResource(rec.ID, owner))
 		if err != nil {
 			return pagination.Page[APIKey]{}, fmt.Errorf("list api keys: %w", err)
 		}
-		keys[i] = toAPIKey.Map(rec, authz.FieldsOnly(fields))
+		keys[i] = toAPIKey.Map(rec, access)
 	}
 
 	return pagination.Page[APIKey]{Items: keys, HasMore: page.HasMore}, nil

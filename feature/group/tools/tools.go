@@ -29,7 +29,8 @@ const (
 	// masking says what the output holds.
 	masking = "Fields that the policies do not allow you to read are absent from the output. createdBy and " +
 		"updatedBy are the nil UUID for changes that pkgsilo made itself, such as creating the " +
-		"administrators group. "
+		"administrators group. allowedActions lists what the policies allow you to do to the group, such " +
+		"as group:delete, group:update:name or group:addMember, so that you can skip what would be denied. "
 	// notFound says what group_not_found means.
 	notFound = "Fails with group_not_found if the group does not exist, or if the policies do not allow you " +
 		"to read it: the two cases look the same. "

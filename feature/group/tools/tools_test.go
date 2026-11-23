@@ -26,12 +26,13 @@ import (
 
 var (
 	maintainers = service.Group{
-		ID:        uuid.MustParse("3f4a5b6c-7d8e-4f9a-8b0c-1d2e3f4a5b6c"),
-		Name:      authz.Visible("maintainers"),
-		CreatedBy: authz.Visible(audit.SystemActor()),
-		UpdatedBy: authz.Visible(apitest.Actor),
-		CreatedAt: authz.Visible(time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC)),
-		UpdatedAt: authz.Visible(time.Date(2026, time.October, 24, 11, 30, 0, 123456000, time.UTC)),
+		ID:             uuid.MustParse("3f4a5b6c-7d8e-4f9a-8b0c-1d2e3f4a5b6c"),
+		Name:           authz.Visible("maintainers"),
+		CreatedBy:      authz.Visible(audit.SystemActor()),
+		UpdatedBy:      authz.Visible(apitest.Actor),
+		CreatedAt:      authz.Visible(time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC)),
+		UpdatedAt:      authz.Visible(time.Date(2026, time.October, 24, 11, 30, 0, 123456000, time.UTC)),
+		AllowedActions: authz.AllowedActions{"group:delete", "group:addMember"},
 	}
 	maintainersJSON = `{
 		"id": "3f4a5b6c-7d8e-4f9a-8b0c-1d2e3f4a5b6c",
@@ -39,14 +40,16 @@ var (
 		"createdBy": "00000000-0000-0000-0000-000000000000",
 		"updatedBy": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
 		"createdAt": "2026-10-24T10:00:00Z",
-		"updatedAt": "2026-10-24T11:30:00.123456Z"
+		"updatedAt": "2026-10-24T11:30:00.123456Z",
+		"allowedActions": ["group:delete", "group:addMember"]
 	}`
-	// reviewers is a group that the actor may read only the name of.
+	// reviewers is a group that the actor may read only the name of, and do nothing to.
 	reviewers = service.Group{
-		ID:   uuid.MustParse("9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d"),
-		Name: authz.Visible("reviewers"),
+		ID:             uuid.MustParse("9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d"),
+		Name:           authz.Visible("reviewers"),
+		AllowedActions: authz.AllowedActions{},
 	}
-	reviewersJSON = `{"id":"9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d","name":"reviewers"}`
+	reviewersJSON = `{"id":"9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d","name":"reviewers","allowedActions":[]}`
 
 	ada = service.Member{
 		IdentityID: uuid.MustParse("7c8d9e0f-1a2b-4c3d-9e4f-5a6b7c8d9e0f"),
@@ -87,6 +90,25 @@ func TestTools_ReadableMembers(t *testing.T) {
 	t.Parallel()
 
 	mcptest.AssertReadableMembers(t, reflect.TypeFor[GroupOutput](), service.Actions().ReadFields().Fields())
+}
+
+// TestTools_AllowedActions checks that the output lists the allowed actions, with the actions on groups
+// as the enum in the output schema of every tool that returns a group.
+func TestTools_AllowedActions(t *testing.T) {
+	t.Parallel()
+	mcptest.AssertAllowedActionsMember(t, reflect.TypeFor[GroupOutput](), service.Actions().Allowable())
+
+	mcp, _ := newTestClient(t)
+	for _, name := range []string{"group_create", "group_get", "group_list", "group_update"} {
+		schema := mcp.OutputSchema(name)
+		if name == "group_list" {
+			schema = schema.Properties["items"].Items
+		}
+
+		assert.Equal(t, []any{
+			"group:delete", "group:update:name", "group:readMembers", "group:addMember", "group:removeMember",
+		}, schema.Properties["allowedActions"].Items.Enum, name)
+	}
 }
 
 // TestTools_SettableMembers checks that every member that group_create and group_update set has an action

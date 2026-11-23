@@ -92,23 +92,34 @@ type SchemaOutput struct {
 // actor may not read is absent. The members' descriptions are part of the output schema, which describes
 // them to agents.
 type PolicyOutput struct {
-	ID        uuid.UUID                 `json:"id" jsonschema:"The policy's ID."`
-	Name      envelope.Field[string]    `json:"name,omitzero" jsonschema:"The unique name it is known by."`
-	Source    envelope.Field[string]    `json:"source,omitzero" jsonschema:"Its Cedar statements."`
-	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy,omitzero" jsonschema:"The identity that created it."`
-	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy,omitzero" jsonschema:"The identity that last changed it."`
-	CreatedAt envelope.Field[time.Time] `json:"createdAt,omitzero" jsonschema:"When it was created."`
-	UpdatedAt envelope.Field[time.Time] `json:"updatedAt,omitzero" jsonschema:"When it was last changed."`
+	ID             uuid.UUID                      `json:"id" jsonschema:"The policy's ID."`
+	Name           envelope.Field[string]         `json:"name,omitzero" jsonschema:"The unique name it is known by."`
+	Source         envelope.Field[string]         `json:"source,omitzero" jsonschema:"Its Cedar statements."`
+	CreatedBy      envelope.Field[uuid.UUID]      `json:"createdBy,omitzero" jsonschema:"The identity that created it."`
+	UpdatedBy      envelope.Field[uuid.UUID]      `json:"updatedBy,omitzero" jsonschema:"The identity that last changed it."`
+	CreatedAt      envelope.Field[time.Time]      `json:"createdAt,omitzero" jsonschema:"When it was created."`
+	UpdatedAt      envelope.Field[time.Time]      `json:"updatedAt,omitzero" jsonschema:"When it was last changed."`
+	AllowedActions envelope.Field[[]PolicyAction] `json:"allowedActions,omitzero" jsonschema:"The actions that the policies allow you to do to it, such as policy:delete, or policy:update:source to change its source with policy_update. Absent only from a new policy that you may not read."`
+}
+
+// PolicyAction is the name of an action that the actor may do to a policy, as PolicyOutput lists
+// them: one of service.Actions().Allowable().
+type PolicyAction string
+
+// EnumValues returns the names of the actions that PolicyOutput can list, the enum of its schema.
+func (PolicyAction) EnumValues() []string {
+	return service.Actions().Allowable()
 }
 
 func toPolicyOutput(p service.Policy) PolicyOutput {
 	return PolicyOutput{
-		ID:        p.ID,
-		Name:      envelope.NewField(p.Name.Get()),
-		Source:    envelope.NewField(p.Source.Get()),
-		CreatedBy: envelope.NewField(p.CreatedBy.Get()),
-		UpdatedBy: envelope.NewField(p.UpdatedBy.Get()),
-		CreatedAt: envelope.NewField(p.CreatedAt.Get()),
-		UpdatedAt: envelope.NewField(p.UpdatedAt.Get()),
+		ID:             p.ID,
+		Name:           envelope.NewField(p.Name.Get()),
+		Source:         envelope.NewField(p.Source.Get()),
+		CreatedBy:      envelope.NewField(p.CreatedBy.Get()),
+		UpdatedBy:      envelope.NewField(p.UpdatedBy.Get()),
+		CreatedAt:      envelope.NewField(p.CreatedAt.Get()),
+		UpdatedAt:      envelope.NewField(p.UpdatedAt.Get()),
+		AllowedActions: envelope.NewActions[PolicyAction](p.AllowedActions),
 	}
 }

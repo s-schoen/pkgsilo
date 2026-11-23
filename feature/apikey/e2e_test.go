@@ -48,6 +48,22 @@ type (
 	group         = groupapi.GroupResponse
 )
 
+// allActions are the actions that an API key's allowedActions can hold, all of which the administrators
+// group allows, written out independently of the code: clients rely on their names.
+var allActions = []apikeyapi.KeyAction{"apikey:delete"}
+
+// withActions returns the API keys as a caller sees them who may do the given actions to each, and nothing
+// else.
+func withActions(keys []apiKey, actions ...apikeyapi.KeyAction) []apiKey {
+	seen := make([]apiKey, len(keys))
+	for i, k := range keys {
+		k.AllowedActions = envelope.Visible(append([]apikeyapi.KeyAction{}, actions...))
+		seen[i] = k
+	}
+
+	return seen
+}
+
 // assertUnauthorized asserts the answer to a request without a valid credential, which doesn't say why
 // it's rejected and tells which method is expected.
 func assertUnauthorized(t *testing.T, resp *apitest.Response) {
@@ -143,7 +159,8 @@ func assertLikeMissing(
 // TestAPIKeys_Lifecycle takes one API key of ada through every endpoint:
 //
 //  1. Create ada, then an API key of hers that expires: 201 with the key, its suffix and its fields
-//     set by the server, its Location under her API keys, and a response that mustn't be cached.
+//     set by the server, every action allowed, through the administrators group, its Location under her API
+//     keys, and a response that mustn't be cached.
 //  2. Get it through the Location: the created API key, without the key.
 //  3. List her API keys: that API key alone, without the key.
 //  4. Delete it: 204.
@@ -168,6 +185,7 @@ func TestAPIKeys_Lifecycle(t *testing.T) {
 	assert.Equal(t, expiresAt, *created.ExpiresAt.Value)
 	assert.Equal(t, envelope.Visible[*time.Time](nil), created.LastUsedAt)
 	assert.WithinDuration(t, time.Now(), created.CreatedAt.Value, time.Minute)
+	assert.Equal(t, envelope.Visible(allActions), created.AllowedActions)
 
 	// 2. Get. Decoding fails on a key in the response, which has no member for it.
 	assert.Equal(t, created.KeyResponse, api.Get(location).DecodeResource[apiKey](http.StatusOK))
@@ -382,8 +400,8 @@ func TestAPIKeys_OfHiddenIdentity(t *testing.T) {
 //
 //  1. Create ada and grace with an API key each, and the group auditors with ada as a member: 201 and 204.
 //  2. Add a policy that lets auditors read everything: 201.
-//  3. As ada, list grace's API keys: the same as admin, with every field. Get grace's API key: 200 with
-//     every field.
+//  3. As ada, list grace's API keys: the same as admin, with every field, but with no allowed action. Get
+//     grace's API key: 200, the same.
 //  4. As ada, delete grace's API key: 403 Forbidden. Create an API key of grace with an expiry: 403
 //     fields-denied pointing to name and expiresAt.
 //  5. As admin, list grace's API keys: nothing was written.
@@ -403,9 +421,9 @@ func TestAPIKeys_ReadOnlyAudit(t *testing.T) {
 	// 3. Read.
 	graceKeys := listKeys(api, graceKeysPath)
 	require.Len(t, graceKeys, 1)
-	assert.Equal(t, graceKeys, listKeys(asAda, graceKeysPath))
+	assert.Equal(t, withActions(graceKeys), listKeys(asAda, graceKeysPath))
 	graceKeyPath := graceKeysPath + "/" + graceKeys[0].ID.String()
-	assert.Equal(t, graceKeys[0], asAda.Get(graceKeyPath).DecodeResource[apiKey](http.StatusOK))
+	assert.Equal(t, withActions(graceKeys)[0], asAda.Get(graceKeyPath).DecodeResource[apiKey](http.StatusOK))
 
 	// 4. Write.
 	asAda.Delete(graceKeyPath).AssertProblemType(forbidden)
@@ -463,7 +481,7 @@ func TestAPIKeys_ForbidOneKey(t *testing.T) {
 //  1. Create ada with an API key, grace and carol with an API key each, and the group secret with grace as a
 //     member: 201 and 204.
 //  2. Add a policy that lets ada read everything, but not the API keys of the members of secret: 201.
-//  3. As ada, list grace's API keys: an empty 200. List carol's: her API key.
+//  3. As ada, list grace's API keys: an empty 200. List carol's: her API key, with no allowed action.
 func TestAPIKeys_OwnerGroups(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
@@ -482,7 +500,7 @@ func TestAPIKeys_OwnerGroups(t *testing.T) {
 
 	// 3. List.
 	assert.Empty(t, listKeys(asAda, keysPathOf(grace.ID)))
-	assert.Equal(t, listKeys(api, keysPathOf(carol.ID)), listKeys(asAda, keysPathOf(carol.ID)))
+	assert.Equal(t, withActions(listKeys(api, keysPathOf(carol.ID))), listKeys(asAda, keysPathOf(carol.ID)))
 }
 
 // TestAPIKeys_CreateFields checks that creating an API key checks only the fields that the request sets:

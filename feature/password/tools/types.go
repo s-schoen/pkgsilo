@@ -25,9 +25,22 @@ func (PasswordInput) Validate() error {
 // holds the password or its hash. A field that the actor may not read is absent. The members' descriptions
 // are part of the output schema, which describes them to agents.
 type PasswordOutput struct {
-	SetAt envelope.Field[time.Time] `json:"setAt,omitzero" jsonschema:"When the password was last set."`
+	SetAt          envelope.Field[time.Time]        `json:"setAt,omitzero" jsonschema:"When the password was last set."`
+	AllowedActions envelope.Field[[]PasswordAction] `json:"allowedActions,omitzero" jsonschema:"The actions that the policies allow you to do to it, such as password:reset to set it without the current one, or password:change to set it with the current one. Absent only from a password that you set but may not read."`
+}
+
+// PasswordAction is the name of an action that the actor may do to a password, as PasswordOutput lists
+// them: one of service.Actions().Allowable().
+type PasswordAction string
+
+// EnumValues returns the names of the actions that PasswordOutput can list, the enum of its schema.
+func (PasswordAction) EnumValues() []string {
+	return service.Actions().Allowable()
 }
 
 func toPasswordOutput(p service.Password) PasswordOutput {
-	return PasswordOutput{SetAt: envelope.NewField(p.SetAt.Get())}
+	return PasswordOutput{
+		SetAt:          envelope.NewField(p.SetAt.Get()),
+		AllowedActions: envelope.NewActions[PasswordAction](p.AllowedActions),
+	}
 }

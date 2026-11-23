@@ -30,7 +30,9 @@ const (
 		"keySuffix, the key's last characters, tells which API key a key belongs to. "
 	// masking says what the output holds.
 	masking = "Fields that the policies do not allow you to read are absent from the output. createdBy is the " +
-		"nil UUID for an API key that pkgsilo created itself, such as the bootstrap key of the first start. "
+		"nil UUID for an API key that pkgsilo created itself, such as the bootstrap key of the first start. " +
+		"allowedActions lists what the policies allow you to do to the API key, such as apikey:delete, so " +
+		"that you can skip what would be denied. "
 	// identityNotFound says what identity_not_found means.
 	identityNotFound = "Fails with identity_not_found if the identity does not exist, or if the policies do not " +
 		"allow you to read it: the two cases look the same. "

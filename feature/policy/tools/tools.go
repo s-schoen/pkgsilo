@@ -34,7 +34,8 @@ const (
 	// masking says what the output holds.
 	masking = "Fields that the policies do not allow you to read are absent from the output. createdBy and " +
 		"updatedBy are the nil UUID for changes that pkgsilo made itself, such as creating the administrators " +
-		"policy. "
+		"policy. allowedActions lists what the policies allow you to do to the policy, such as " +
+		"policy:delete or policy:update:source, so that you can skip what would be denied. "
 	// notFound says what policy_not_found means.
 	notFound = "Fails with policy_not_found if the policy does not exist, or if the policies do not allow you " +
 		"to read it: the two cases look the same. "

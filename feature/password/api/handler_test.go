@@ -28,8 +28,10 @@ var (
 	adaID = uuid.MustParse("7a2d3b4c-5e6f-4071-8b8c-0d1e2f3a4b5c")
 	setAt = time.Date(2026, time.November, 17, 11, 30, 0, 123456000, time.UTC)
 
-	adaPassword = service.Password{SetAt: authz.Visible(setAt)}
-	adaJSON     = `{"setAt":"2026-11-17T11:30:00.123456Z"}`
+	adaPassword = service.Password{
+		SetAt: authz.Visible(setAt), AllowedActions: authz.AllowedActions{"password:delete", "password:change"},
+	}
+	adaJSON = `{"setAt":"2026-11-17T11:30:00.123456Z","allowedActions":["password:delete","password:change"]}`
 
 	passwordPath = "/identities/7a2d3b4c-5e6f-4071-8b8c-0d1e2f3a4b5c/password"
 )
@@ -54,13 +56,25 @@ func TestHandler_Get(t *testing.T) {
 	api.Get(passwordPath).AssertResource(adaJSON)
 }
 
-// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response.
+// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response, and that a password
+// that the caller may do nothing to has an empty list of allowed actions.
 func TestHandler_Get_HiddenFields(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
-	svc.EXPECT().Get(mock.Anything, apitest.Actor, adaID).Return(service.Password{}, nil)
+	svc.EXPECT().Get(mock.Anything, apitest.Actor, adaID).
+		Return(service.Password{AllowedActions: authz.AllowedActions{}}, nil)
 
-	api.Get(passwordPath).AssertResource(`{}`)
+	api.Get(passwordPath).AssertResource(`{"allowedActions":[]}`)
+}
+
+// TestHandler_Set_Unreadable checks that a password that the caller set but may not read is answered
+// without fields and without allowed actions.
+func TestHandler_Set_Unreadable(t *testing.T) {
+	t.Parallel()
+	api, svc := newTestClient(t, loggertest.Discard())
+	svc.EXPECT().Set(mock.Anything, apitest.Actor, adaID, mock.Anything).Return(service.Password{}, nil)
+
+	api.Put(passwordPath, `{"newPassword":"battery staple"}`).AssertResource(`{}`)
 }
 
 // TestHandler_ReadableMembers checks that every member of the response can be hidden and has an action for
@@ -69,6 +83,14 @@ func TestHandler_ReadableMembers(t *testing.T) {
 	t.Parallel()
 
 	apitest.AssertReadableMembers(t, reflect.TypeFor[PasswordResponse](), service.Actions().ReadFields().Fields())
+}
+
+// TestHandler_AllowedActionsMember checks that the response lists the allowed actions, with the actions on
+// passwords as the enum of its schema.
+func TestHandler_AllowedActionsMember(t *testing.T) {
+	t.Parallel()
+
+	apitest.AssertAllowedActionsMember(t, reflect.TypeFor[PasswordResponse](), service.Actions().Allowable())
 }
 
 func TestHandler_Set(t *testing.T) {

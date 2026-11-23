@@ -79,7 +79,7 @@ func (s *groupService) Create(ctx context.Context, actor uuid.UUID, in GroupInpu
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
-	fields, err := actions.ReadFields().ReadableIf(decider, actions.Read(), toResource(id))
+	access, err := actions.AccessIf(decider, toResource(id))
 	if err != nil {
 		return Group{}, fmt.Errorf("create group: %w", err)
 	}
@@ -97,7 +97,7 @@ func (s *groupService) Create(ctx context.Context, actor uuid.UUID, in GroupInpu
 		return Group{}, fmt.Errorf("create group: %w", translateError(err))
 	}
 
-	return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
+	return toGroup.Map(rec, access), nil
 }
 
 func (s *groupService) Get(ctx context.Context, actor, id uuid.UUID) (Group, error) {
@@ -111,12 +111,12 @@ func (s *groupService) Get(ctx context.Context, actor, id uuid.UUID) (Group, err
 		return Group{}, fmt.Errorf("get group: %w", err)
 	}
 
-	fields, err := actions.ReadFields().Readable(decider, toResource(id))
+	access, err := actions.Access(decider, toResource(id))
 	if err != nil {
 		return Group{}, fmt.Errorf("get group: %w", err)
 	}
 
-	return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
+	return toGroup.Map(rec, access), nil
 }
 
 func (s *groupService) List(ctx context.Context, actor uuid.UUID, offset, limit int) (pagination.Page[Group], error) {
@@ -141,11 +141,11 @@ func (s *groupService) List(ctx context.Context, actor uuid.UUID, offset, limit 
 	page := pagination.FromAll(readable, offset, limit)
 	groups := make([]Group, len(page.Items))
 	for i, rec := range page.Items {
-		fields, err := actions.ReadFields().Readable(decider, toResource(rec.ID))
+		access, err := actions.Access(decider, toResource(rec.ID))
 		if err != nil {
 			return pagination.Page[Group]{}, fmt.Errorf("list groups: %w", err)
 		}
-		groups[i] = toGroup.Map(rec, authz.FieldsOnly(fields))
+		groups[i] = toGroup.Map(rec, access)
 	}
 
 	return pagination.Page[Group]{Items: groups, HasMore: page.HasMore}, nil
@@ -167,7 +167,7 @@ func (s *groupService) Replace(ctx context.Context, actor, id uuid.UUID, in Grou
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
-	fields, err := actions.ReadFields().Readable(decider, toResource(id))
+	access, err := actions.Access(decider, toResource(id))
 	if err != nil {
 		return Group{}, fmt.Errorf("replace group: %w", err)
 	}
@@ -182,7 +182,7 @@ func (s *groupService) Replace(ctx context.Context, actor, id uuid.UUID, in Grou
 		return Group{}, fmt.Errorf("replace group: %w", translateError(err))
 	}
 
-	return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
+	return toGroup.Map(rec, access), nil
 }
 
 func (s *groupService) Patch(ctx context.Context, actor, id uuid.UUID, patch GroupPatch) (Group, error) {
@@ -202,13 +202,13 @@ func (s *groupService) Patch(ctx context.Context, actor, id uuid.UUID, patch Gro
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
-	fields, err := actions.ReadFields().Readable(decider, toResource(id))
+	access, err := actions.Access(decider, toResource(id))
 	if err != nil {
 		return Group{}, fmt.Errorf("patch group: %w", err)
 	}
 
 	if len(authz.SetFields(patch)) == 0 {
-		return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
+		return toGroup.Map(rec, access), nil
 	}
 
 	rec, err = s.repo.Patch(ctx, repository.GroupPatch{
@@ -221,7 +221,7 @@ func (s *groupService) Patch(ctx context.Context, actor, id uuid.UUID, patch Gro
 		return Group{}, fmt.Errorf("patch group: %w", translateError(err))
 	}
 
-	return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
+	return toGroup.Map(rec, access), nil
 }
 
 func (s *groupService) Delete(ctx context.Context, actor, id uuid.UUID) error {

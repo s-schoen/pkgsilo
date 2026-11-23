@@ -31,6 +31,8 @@ var (
 	passwordResource = authz.Resource{
 		Type: "Password", ID: identityID, Owner: &authz.Owner{ID: identityID, Groups: identityGroups},
 	}
+	// allActions are the actions on a password that AllowAll allows.
+	allActions = authz.AllowedActions(actions.Allowable())
 
 	errDB = errors.New("connection refused")
 )
@@ -177,7 +179,7 @@ func TestPasswordService_Get(t *testing.T) {
 	got, err := svc.Get(t.Context(), actor, identityID)
 	require.NoError(t, err)
 
-	assert.Equal(t, Password{SetAt: authz.Visible(stored.SetAt)}, got)
+	assert.Equal(t, Password{SetAt: authz.Visible(stored.SetAt), AllowedActions: allActions}, got)
 }
 
 func TestPasswordService_Get_HiddenFields(t *testing.T) {
@@ -187,11 +189,29 @@ func TestPasswordService_Get_HiddenFields(t *testing.T) {
 	expectStored(repo, true)
 	expectCan(decider, actions.Read(), true)
 	servicetest.ExpectReadableFields(decider, actions.ReadFields(), passwordResource)
+	servicetest.ExpectAllowedActions(decider, actions, passwordResource, "password:change")
 
 	got, err := svc.Get(t.Context(), actor, identityID)
 	require.NoError(t, err)
 
-	assert.Equal(t, Password{}, got)
+	assert.Equal(t, Password{AllowedActions: authz.AllowedActions{"password:change"}}, got)
+}
+
+// TestPasswordService_Get_NothingAllowed checks that a password that the actor may read but do nothing to
+// tells so with an empty list of allowed actions.
+func TestPasswordService_Get_NothingAllowed(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	svc, repo, _ := newTestServiceWith(t, authorizer)
+	expectStored(repo, true)
+	expectCan(decider, actions.Read(), true)
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), passwordResource, "setAt")
+	servicetest.ExpectAllowedActions(decider, actions, passwordResource)
+
+	got, err := svc.Get(t.Context(), actor, identityID)
+	require.NoError(t, err)
+
+	assert.Equal(t, Password{SetAt: authz.Visible(stored.SetAt), AllowedActions: authz.AllowedActions{}}, got)
 }
 
 func TestPasswordService_Get_NotFound(t *testing.T) {
@@ -229,6 +249,7 @@ func TestPasswordService_Set_Reset(t *testing.T) {
 			expectCan(decider, actions.Read(), true)
 			expectCan(decider, resetAction, true)
 			servicetest.ExpectReadableFields(decider, actions.ReadFields(), passwordResource, "setAt")
+			servicetest.ExpectAllowedActions(decider, actions, passwordResource, "password:reset")
 			set := expectSet(repo)
 			expectSessionsEnded(t, repo, terminator)
 
@@ -239,8 +260,10 @@ func TestPasswordService_Set_Reset(t *testing.T) {
 			assert.Equal(t, identityID, set.IdentityID)
 			assert.Equal(t, now, set.SetAt)
 			assertHashOf(t, "battery staple", set.Hash)
-			// The password as stored is returned.
-			assert.Equal(t, Password{SetAt: authz.Visible(now)}, got)
+			// The password as stored is returned, with the actions as they were before the write.
+			assert.Equal(t, Password{
+				SetAt: authz.Visible(now), AllowedActions: authz.AllowedActions{"password:reset"},
+			}, got)
 		})
 	}
 }
@@ -256,6 +279,7 @@ func TestPasswordService_Set_Change(t *testing.T) {
 	expectCan(decider, resetAction, false)
 	expectCan(decider, changeAction, true)
 	servicetest.ExpectReadableFields(decider, actions.ReadFields(), passwordResource, "setAt")
+	servicetest.ExpectAllowedActions(decider, actions, passwordResource, "password:change")
 	changed := expectChange(repo)
 	expectSessionsEnded(t, repo, terminator)
 
@@ -266,7 +290,7 @@ func TestPasswordService_Set_Change(t *testing.T) {
 	assert.Equal(t, identityID, changed.IdentityID)
 	assert.Equal(t, now, changed.SetAt)
 	assertHashOf(t, "battery staple", changed.Hash)
-	assert.Equal(t, Password{SetAt: authz.Visible(now)}, got)
+	assert.Equal(t, Password{SetAt: authz.Visible(now), AllowedActions: authz.AllowedActions{"password:change"}}, got)
 }
 
 // TestPasswordService_Set_ChangedMeanwhile checks that a change fails like a wrong current password, and ends
@@ -282,6 +306,7 @@ func TestPasswordService_Set_ChangedMeanwhile(t *testing.T) {
 	expectCan(decider, resetAction, false)
 	expectCan(decider, changeAction, true)
 	servicetest.ExpectReadableFields(decider, actions.ReadFields(), passwordResource, "setAt")
+	servicetest.ExpectAllowedActions(decider, actions, passwordResource, "password:change")
 	repoErr := fmt.Errorf("change password: %w", repository.ErrHashChanged)
 	repo.EXPECT().Change(mock.Anything, mock.Anything, storedHash).Return(repository.PasswordRecord{}, repoErr)
 
@@ -317,6 +342,7 @@ func TestPasswordService_Set_ChangeRejected(t *testing.T) {
 			expectCan(decider, resetAction, false)
 			decider.EXPECT().Can(changeAction, passwordResource).Return(true, nil).Maybe()
 			decider.EXPECT().Can(mock.Anything, passwordResource).Return(true, nil).Maybe()
+			decider.EXPECT().Hint(mock.Anything, passwordResource).Return(true, nil).Maybe()
 
 			_, err := svc.Set(t.Context(), actor, identityID,
 				PasswordInput{NewPassword: "battery staple", CurrentPassword: tt.current})
@@ -346,7 +372,7 @@ func TestPasswordService_Set_Denied(t *testing.T) {
 
 // TestPasswordService_Set_Unreadable checks that a password that the actor may not read is reported like a
 // missing one, before reset or change is checked, and that a first password that an actor may reset but not
-// read is set and returned with no field.
+// read is set and returned with no field and no allowed actions.
 func TestPasswordService_Set_Unreadable(t *testing.T) {
 	t.Parallel()
 
@@ -365,7 +391,7 @@ func TestPasswordService_Set_Unreadable(t *testing.T) {
 	t.Run("first password", func(t *testing.T) {
 		t.Parallel()
 		authorizer, decider := newDeciding(t)
-		// The mock fails the test if a field is checked.
+		// The mock fails the test if a field or an allowed action is checked.
 		svc, repo, terminator := newTestServiceWith(t, authorizer)
 		expectStored(repo, false)
 		expectCan(decider, actions.Read(), false)
@@ -628,6 +654,7 @@ func TestPasswordService_AuthorizationFails(t *testing.T) {
 				// Reset is denied, so that set checks change too.
 				decider.EXPECT().Can(resetAction, passwordResource).Return(false, nil).Maybe()
 				decider.EXPECT().Can(mock.Anything, passwordResource).Return(true, nil).Maybe()
+				decider.EXPECT().Hint(mock.Anything, passwordResource).Return(true, nil).Maybe()
 				wrote := false
 				repo.EXPECT().Set(mock.Anything, mock.Anything).RunAndReturn(
 					func(context.Context, repository.PasswordRecord) (repository.PasswordRecord, error) {
@@ -653,5 +680,21 @@ func TestPasswordService_AuthorizationFails(t *testing.T) {
 				assert.False(t, wrote, "nothing may be written after a failed decision")
 			})
 		}
+	}
+
+	// The allowed action decisions, after every other decision allowed the request. They come before any
+	// write too.
+	for _, name := range []string{"get", "set"} {
+		t.Run(name+" no allowed action decision", func(t *testing.T) {
+			t.Parallel()
+			authorizer, decider := newDeciding(t)
+			// The mock fails the test on a write.
+			svc, repo, _ := newTestServiceWith(t, authorizer)
+			expectStored(repo, true)
+			decider.EXPECT().Can(mock.Anything, passwordResource).Return(true, nil).Maybe()
+			decider.EXPECT().Hint(mock.Anything, passwordResource).Return(false, errDecision)
+
+			assertFailed(t, calls(t)[name](svc))
+		})
 	}
 }

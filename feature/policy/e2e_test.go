@@ -69,6 +69,24 @@ func withActions(i identity, actions ...identityapi.IdentityAction) identity {
 	return i
 }
 
+// allPolicyActions are the actions that a policy's allowedActions can hold, all of which the administrators
+// group allows, written out independently of the code: clients rely on their names.
+var allPolicyActions = []policyapi.PolicyAction{
+	"policy:delete", "policy:update:name", "policy:update:source", "policy:readSchema",
+}
+
+// withPolicyActions returns the policies as a caller sees them who may do the given actions to each, and
+// nothing else.
+func withPolicyActions(policies []policy, actions ...policyapi.PolicyAction) []policy {
+	seen := make([]policy, len(policies))
+	for i, p := range policies {
+		p.AllowedActions = envelope.Visible(append([]policyapi.PolicyAction{}, actions...))
+		seen[i] = p
+	}
+
+	return seen
+}
+
 // addPolicy creates a policy through the client and returns it.
 func addPolicy(t *testing.T, api *apitest.Client, name, source string) policy {
 	t.Helper()
@@ -136,8 +154,8 @@ func assertFieldsDenied(t *testing.T, resp *apitest.Response, pointers ...string
 
 // TestPolicies_Lifecycle takes one policy through every endpoint:
 //
-//  1. Create a policy: 201 with the new policy, its Location under /api/v1/policies, and its audit
-//     fields set by the server.
+//  1. Create a policy: 201 with the new policy, its Location under /api/v1/policies, its audit fields set by
+//     the server, and every action allowed, through the administrators group.
 //  2. Get it through the Location: the created policy.
 //  3. List the policies: read-own-identity, manage-own-api-keys and manage-own-password, which the migrations
 //     seed, administrators, which the first start created, then the new one.
@@ -161,6 +179,7 @@ func TestPolicies_Lifecycle(t *testing.T) {
 	assert.Equal(t, readIdentities.CreatedBy, readIdentities.UpdatedBy)
 	assert.WithinDuration(t, time.Now(), readIdentities.CreatedAt.Value, time.Minute)
 	assert.Equal(t, readIdentities.CreatedAt, readIdentities.UpdatedAt)
+	assert.Equal(t, envelope.Visible(allPolicyActions), readIdentities.AllowedActions)
 
 	// 2. Get.
 	assert.Equal(t, readIdentities, api.Get(location).DecodeResource[policy](http.StatusOK))
@@ -517,7 +536,8 @@ func TestPolicies_IdentitiesButNotOtherTypes(t *testing.T) {
 //  1. Create ada with an API key, grace, and the group auditors with ada as a member: 201 and 204.
 //  2. Add a policy that lets auditors read everything: 201.
 //  3. As ada, list the identities and the policies: all of them, the same as admin, with every field, but
-//     no allowed action on the identities. Get grace and the new policy: 200 with every field.
+//     no allowed action on the identities, and reading the schema, which the read action group holds, as the
+//     only one on the policies. Get grace and the new policy: 200 with every field and the same actions.
 //  4. As ada, create an identity and a policy: 403 fields-denied for both. Replace grace and the new
 //     policy: 403 fields-denied for both. Delete grace and the new policy: 403 Forbidden for both.
 //  5. As admin, list the identities and the policies: nothing was written.
@@ -544,9 +564,10 @@ func TestPolicies_ReadOnlyAudit(t *testing.T) {
 		readOnly[i] = withActions(identity)
 	}
 	assert.Equal(t, readOnly, asAda.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data)
-	assert.Equal(t, policies, listPolicies(asAda))
+	assert.Equal(t, withPolicyActions(policies, "policy:readSchema"), listPolicies(asAda))
 	assert.Equal(t, withActions(grace), asAda.Get(gracePath).DecodeResource[identity](http.StatusOK))
-	assert.Equal(t, audit, asAda.Get(auditPath).DecodeResource[policy](http.StatusOK))
+	assert.Equal(t, withPolicyActions([]policy{audit}, "policy:readSchema")[0],
+		asAda.Get(auditPath).DecodeResource[policy](http.StatusOK))
 
 	// 4. Write.
 	assertFieldsDenied(t, asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`),
@@ -751,10 +772,10 @@ func policyPatch(t *testing.T, member, value string) string {
 //
 //  1. Create ada with an API key, and the policy target: 201 for both.
 //  2. Add a policy that lets ada read policies and update their names: 201.
-//  3. As ada, patch target's name: 200 with the new name.
+//  3. As ada, patch target's name: 200 with the new name, and updating the name as the only allowed action.
 //  4. As ada, patch its source, and its name and source: 403 fields-denied pointing to source alone for
 //     both. Replace it with its current source: 403 fields-denied pointing to source.
-//  5. As admin, get target: as step 3 left it, so nothing else was written.
+//  5. As admin, get target: as step 3 left it, so nothing else was written, with every action allowed.
 func TestPolicies_PatchFieldDenials(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
@@ -776,6 +797,7 @@ func TestPolicies_PatchFieldDenials(t *testing.T) {
 	patched := asAda.Patch(targetPath, `{"name":"renamed"}`).DecodeResource[policy](http.StatusOK)
 	assert.Equal(t, envelope.Visible("renamed"), patched.Name)
 	assert.Equal(t, envelope.Visible(source), patched.Source)
+	assert.Equal(t, withPolicyActions([]policy{patched}, "policy:update:name")[0], patched)
 
 	// 4. Patch and replace the source.
 	const other = `permit (principal, action == Action::"identity:read", resource);`
@@ -784,7 +806,8 @@ func TestPolicies_PatchFieldDenials(t *testing.T) {
 	assertFieldsDenied(t, asAda.Put(targetPath, policyBody(t, "again", source)), "#/source")
 
 	// 5. Nothing else written.
-	assert.Equal(t, patched, api.Get(targetPath).DecodeResource[policy](http.StatusOK))
+	assert.Equal(t, withPolicyActions([]policy{patched}, allPolicyActions...)[0],
+		api.Get(targetPath).DecodeResource[policy](http.StatusOK))
 }
 
 // TestPolicies_MCP writes, fixes and removes a policy through the policy tools, as admin:

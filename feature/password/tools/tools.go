@@ -28,7 +28,9 @@ const (
 		"password must not pass through a model's context or logs, so passwords are set through the REST API " +
 		"only. "
 	// masking says what the output holds.
-	masking = "Fields that the policies do not allow you to read are absent from the output. "
+	masking = "Fields that the policies do not allow you to read are absent from the output. allowedActions " +
+		"lists what the policies allow you to do to the password, such as password:reset or password:change, " +
+		"so that you can skip what would be denied. "
 	// identityNotFound says what identity_not_found means.
 	identityNotFound = "Fails with identity_not_found if the identity does not exist, or if the policies do not " +
 		"allow you to read it: the two cases look the same. "

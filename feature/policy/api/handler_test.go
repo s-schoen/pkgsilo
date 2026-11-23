@@ -28,13 +28,14 @@ import (
 
 var (
 	everything = service.Policy{
-		ID:        uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
-		Name:      authz.Visible("everything"),
-		Source:    authz.Visible(`permit (principal, action, resource);`),
-		CreatedBy: authz.Visible(audit.SystemActor()),
-		UpdatedBy: authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
-		CreatedAt: authz.Visible(time.Date(2026, time.November, 7, 10, 0, 0, 0, time.UTC)),
-		UpdatedAt: authz.Visible(time.Date(2026, time.November, 7, 11, 30, 0, 123456000, time.UTC)),
+		ID:             uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
+		Name:           authz.Visible("everything"),
+		Source:         authz.Visible(`permit (principal, action, resource);`),
+		CreatedBy:      authz.Visible(audit.SystemActor()),
+		UpdatedBy:      authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
+		CreatedAt:      authz.Visible(time.Date(2026, time.November, 7, 10, 0, 0, 0, time.UTC)),
+		UpdatedAt:      authz.Visible(time.Date(2026, time.November, 7, 11, 30, 0, 123456000, time.UTC)),
+		AllowedActions: authz.AllowedActions{"policy:delete", "policy:update:name"},
 	}
 	everythingJSON = `{
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
@@ -43,7 +44,8 @@ var (
 		"createdBy": "00000000-0000-0000-0000-000000000000",
 		"updatedBy": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
 		"createdAt": "2026-11-07T10:00:00Z",
-		"updatedAt": "2026-11-07T11:30:00.123456Z"
+		"updatedAt": "2026-11-07T11:30:00.123456Z",
+		"allowedActions": ["policy:delete", "policy:update:name"]
 	}`
 	everythingPath = "/policies/0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"
 
@@ -106,18 +108,20 @@ func TestHandler_Get(t *testing.T) {
 	api.Get(everythingPath).AssertResource(everythingJSON)
 }
 
-// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response.
+// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response, and that a policy that
+// the caller may do nothing to has an empty list of allowed actions.
 func TestHandler_Get_HiddenFields(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().Get(mock.Anything, apitest.Actor, everything.ID).
-		Return(service.Policy{ID: everything.ID, Name: everything.Name}, nil)
+		Return(service.Policy{ID: everything.ID, Name: everything.Name, AllowedActions: authz.AllowedActions{}}, nil)
 
-	api.Get(everythingPath).AssertResource(`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"everything"}`)
+	api.Get(everythingPath).AssertResource(
+		`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"everything","allowedActions":[]}`)
 }
 
 // TestHandler_Create_Unreadable checks that a new policy that the caller may not read is answered with only
-// its ID and Location.
+// its ID and Location, without allowed actions.
 func TestHandler_Create_Unreadable(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
@@ -133,6 +137,14 @@ func TestHandler_ReadableMembers(t *testing.T) {
 	t.Parallel()
 
 	apitest.AssertReadableMembers(t, reflect.TypeFor[PolicyResponse](), service.Actions().ReadFields().Fields())
+}
+
+// TestHandler_AllowedActionsMember checks that the response lists the allowed actions, with the actions on
+// policies as the enum of its schema.
+func TestHandler_AllowedActionsMember(t *testing.T) {
+	t.Parallel()
+
+	apitest.AssertAllowedActionsMember(t, reflect.TypeFor[PolicyResponse](), service.Actions().Allowable())
 }
 
 func TestHandler_Replace(t *testing.T) {

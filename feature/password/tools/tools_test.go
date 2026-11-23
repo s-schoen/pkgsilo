@@ -24,9 +24,10 @@ import (
 var (
 	adaID       = uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")
 	adaPassword = service.Password{
-		SetAt: authz.Visible(time.Date(2026, time.November, 17, 10, 0, 0, 123456000, time.UTC)),
+		SetAt:          authz.Visible(time.Date(2026, time.November, 17, 10, 0, 0, 123456000, time.UTC)),
+		AllowedActions: authz.AllowedActions{"password:delete", "password:reset"},
 	}
-	adaJSON  = `{"setAt":"2026-11-17T10:00:00.123456Z"}`
+	adaJSON  = `{"setAt":"2026-11-17T10:00:00.123456Z","allowedActions":["password:delete","password:reset"]}`
 	adaArgs  = `{"identityId":"` + adaID.String() + `"}`
 	allTools = []string{"password_delete", "password_get"}
 )
@@ -46,6 +47,20 @@ func TestTools_ReadableMembers(t *testing.T) {
 	t.Parallel()
 
 	mcptest.AssertReadableMembers(t, reflect.TypeFor[PasswordOutput](), service.Actions().ReadFields().Fields())
+}
+
+// TestTools_AllowedActions checks that the output lists the allowed actions, with the actions on passwords
+// as the enum in the output schema of every tool that returns a password.
+func TestTools_AllowedActions(t *testing.T) {
+	t.Parallel()
+	mcptest.AssertAllowedActionsMember(t, reflect.TypeFor[PasswordOutput](), service.Actions().Allowable())
+
+	mcp, _ := newTestClient(t)
+	for _, name := range []string{"password_get"} {
+		schema := mcp.OutputSchema(name)
+		assert.Equal(t, []any{"password:delete", "password:change", "password:reset"},
+			schema.Properties["allowedActions"].Items.Enum, name)
+	}
 }
 
 // TestTools_NoPasswords checks that no tool sets a password, which would pass through the model's context,

@@ -87,12 +87,12 @@ func (s *passwordService) Get(ctx context.Context, actor, identityID uuid.UUID) 
 		return Password{}, fmt.Errorf("get password: %w", err)
 	}
 
-	fields, err := actions.ReadFields().Readable(decider, toResource(owner))
+	access, err := actions.Access(decider, toResource(owner))
 	if err != nil {
 		return Password{}, fmt.Errorf("get password: %w", err)
 	}
 
-	return toPassword(rec, fields), nil
+	return toPassword(rec, access), nil
 }
 
 func (s *passwordService) Set(
@@ -114,7 +114,7 @@ func (s *passwordService) Set(
 		return Password{}, fmt.Errorf("set password: %w", err)
 	}
 
-	reset, fields, err := authorizeSet(decider, toResource(owner), exists, in)
+	reset, access, err := authorizeSet(decider, toResource(owner), exists, in)
 	if err != nil {
 		return Password{}, fmt.Errorf("set password: %w", err)
 	}
@@ -136,18 +136,19 @@ func (s *passwordService) Set(
 		return Password{}, fmt.Errorf("set password: %w", err)
 	}
 
-	return toPassword(stored, fields), nil
+	return toPassword(stored, access), nil
 }
 
 // authorizeSet checks that the decider allows setting the resource, a password that exists or not, with in.
 // It reports whether the actor resets the password, rather than changing it with the current one, and the
-// fields of the password that the actor may read. It reports a password that exists but that the actor may
-// not read like a missing one. It checks everything before anything is written, so that a failed decision
-// can't fail a request whose write succeeded, but doesn't check that the current password matches.
+// actor's access to the password: the fields that it may read and the actions that it may do. It reports a
+// password that exists but that the actor may not read like a missing one. It checks everything before
+// anything is written, so that a failed decision can't fail a request whose write succeeded, but doesn't
+// check that the current password matches.
 func authorizeSet(
 	decider authz.Decider, resource authz.Resource, exists bool, in PasswordInput,
-) (bool, authz.ReadableFields, error) {
-	none := actions.ReadFields().NoneReadable()
+) (bool, authz.Access, error) {
+	none := actions.NoAccess()
 
 	readable, err := decider.Can(actions.Read(), resource)
 	if err != nil {
@@ -171,12 +172,12 @@ func authorizeSet(
 		return reset, none, nil
 	}
 
-	fields, err := actions.ReadFields().Readable(decider, resource)
+	access, err := actions.Access(decider, resource)
 	if err != nil {
-		return false, none, fmt.Errorf("check fields: %w", err)
+		return false, none, fmt.Errorf("check access: %w", err)
 	}
 
-	return reset, fields, nil
+	return reset, access, nil
 }
 
 // hashNewPassword returns the hash of in.NewPassword. Unless the actor resets the password, it first checks
@@ -301,8 +302,8 @@ func toResource(owner *authz.Owner) authz.Resource {
 	return actions.NewResource(owner)
 }
 
-// toPassword builds the password of a record, with the fields that the actor may read. Every other field
-// stays hidden. By hand, since the model has no ID of its own to map.
-func toPassword(rec repository.PasswordRecord, fields authz.ReadableFields) Password {
-	return Password{SetAt: fields.Reveal("setAt", rec.SetAt)}
+// toPassword builds the password of a record, with the fields that the actor may read and the actions that
+// it may do. Every other field stays hidden. By hand, since the model has no ID of its own to map.
+func toPassword(rec repository.PasswordRecord, access authz.Access) Password {
+	return Password{SetAt: access.Fields().Reveal("setAt", rec.SetAt), AllowedActions: access.AllowedActions()}
 }

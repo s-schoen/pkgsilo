@@ -44,6 +44,23 @@ type (
 	identity = identityapi.IdentityResponse
 )
 
+// allActions are the actions that a group's allowedActions can hold, all of which the administrators group
+// allows, written out independently of the code: clients rely on their names.
+var allActions = []groupapi.GroupAction{
+	"group:delete", "group:update:name", "group:readMembers", "group:addMember", "group:removeMember",
+}
+
+// withActions returns the groups as a caller sees them who may do the given actions to each, and nothing else.
+func withActions(groups []group, actions ...groupapi.GroupAction) []group {
+	seen := make([]group, len(groups))
+	for i, g := range groups {
+		g.AllowedActions = envelope.Visible(append([]groupapi.GroupAction{}, actions...))
+		seen[i] = g
+	}
+
+	return seen
+}
+
 // createGroup creates a group with the given name and returns it with its path.
 func createGroup(api *apitest.Client, name string) (created group, path string) {
 	created = api.Post(groupsPath, `{"name":"`+name+`"}`).DecodeResource[group](http.StatusCreated)
@@ -77,8 +94,8 @@ func memberIDs(api *apitest.Client, groupPath string) []uuid.UUID {
 
 // TestGroups_Lifecycle takes one group, maintainers, through every group endpoint:
 //
-//  1. Create maintainers: 201 with the new group, its Location under /api/v1/groups, and its
-//     audit fields set by the server.
+//  1. Create maintainers: 201 with the new group, its Location under /api/v1/groups, its audit fields set by
+//     the server, and every action allowed, through the administrators group.
 //  2. Get it through the Location: the created group.
 //  3. List the groups: administrators, which the first start created, then maintainers.
 //  4. Replace its name: 200 with the new name, the ID and creation time kept and the update time
@@ -99,6 +116,7 @@ func TestGroups_Lifecycle(t *testing.T) {
 	assert.Equal(t, maintainers.CreatedBy, maintainers.UpdatedBy)
 	assert.WithinDuration(t, time.Now(), maintainers.CreatedAt.Value, time.Minute)
 	assert.Equal(t, maintainers.CreatedAt, maintainers.UpdatedAt)
+	assert.Equal(t, envelope.Visible(allActions), maintainers.AllowedActions)
 
 	// 2. Get.
 	assert.Equal(t, maintainers, api.Get(location).DecodeResource[group](http.StatusOK))
@@ -463,8 +481,9 @@ func TestGroups_IdentitiesButNotGroups(t *testing.T) {
 //  1. Create ada with an API key and grace, the group auditors with ada as a member, and maintainers with
 //     grace as a member: 201 and 204.
 //  2. Add a policy that lets auditors read everything: 201.
-//  3. As ada, list the groups and maintainers' members: the same as admin, with every field. Get maintainers:
-//     200 with every field.
+//  3. As ada, list the groups and maintainers' members: the same as admin, with every field, but with reading
+//     the members as the only allowed action, which the read action group holds. Get maintainers: 200 with
+//     every field and the same allowed action.
 //  4. As ada, create a group and replace maintainers: 403 fields-denied pointing to name for both. Delete
 //     maintainers, add ada to it and remove grace from it: 403 Forbidden for each.
 //  5. As admin, list the groups and maintainers' members: nothing was written.
@@ -486,9 +505,10 @@ func TestGroups_ReadOnlyAudit(t *testing.T) {
 	// 3. Read.
 	groups := listGroups(api)
 	members := listMembers(api, maintainersPath)
-	assert.Equal(t, groups, listGroups(asAda))
+	assert.Equal(t, withActions(groups, "group:readMembers"), listGroups(asAda))
 	assert.Equal(t, members, listMembers(asAda, maintainersPath))
-	assert.Equal(t, maintainers, asAda.Get(maintainersPath).DecodeResource[group](http.StatusOK))
+	assert.Equal(t, withActions([]group{maintainers}, "group:readMembers")[0],
+		asAda.Get(maintainersPath).DecodeResource[group](http.StatusOK))
 
 	// 4. Write.
 	assertFieldsDenied(t, asAda.Post(groupsPath, `{"name":"more"}`), "#/name")
@@ -508,8 +528,9 @@ func TestGroups_ReadOnlyAudit(t *testing.T) {
 //  1. Create ada with an API key and grace, maintainers with both as members, and reviewers with grace as
 //     a member: 201 and 204.
 //  2. Add a policy that lets every identity read the groups it's a member of, and their members: 201.
-//  3. As ada, list the groups: maintainers alone. Get maintainers: 200. List its members: ada and grace,
-//     though ada can't read grace, since reading the members covers all of them.
+//  3. As ada, list the groups: maintainers alone, with reading its members as the only allowed action. Get
+//     maintainers: 200, the same. List its members: ada and grace, though ada can't read grace, since reading
+//     the members covers all of them.
 //  4. As ada, get reviewers and list its members: the same 404 group-not-found, to the byte, as for a group
 //     that doesn't exist.
 //  5. As admin, remove ada from maintainers: 204. As ada, list the groups: an empty 200. Get maintainers:
@@ -535,8 +556,9 @@ func TestGroups_MembersReadOwnGroup(t *testing.T) {
 	) when { principal in resource };`)
 
 	// 3. Read maintainers.
-	assert.Equal(t, []group{maintainers}, listGroups(asAda))
-	assert.Equal(t, maintainers, asAda.Get(maintainersPath).DecodeResource[group](http.StatusOK))
+	readable := withActions([]group{maintainers}, "group:readMembers")
+	assert.Equal(t, readable, listGroups(asAda))
+	assert.Equal(t, readable[0], asAda.Get(maintainersPath).DecodeResource[group](http.StatusOK))
 	assert.Equal(t, []uuid.UUID{ada.ID, grace}, memberIDs(asAda, maintainersPath))
 	asAda.Get(identitiesPath + "/" + grace.String()).AssertProblemType(identityNotFound)
 
@@ -710,8 +732,9 @@ func TestGroups_Patch(t *testing.T) {
 //
 //  1. Create ada with an API key, and the groups maintainers and hidden: 201 for each.
 //  2. Add a policy that lets ada read maintainers: 201.
-//  3. As ada, patch maintainers with an empty object: 200 with maintainers, since the patch sets no field.
-//     Patch its name: 403 fields-denied pointing to name, and, as admin, maintainers is unchanged.
+//  3. As ada, patch maintainers with an empty object: 200 with maintainers, with no allowed action, since the
+//     patch sets no field. Patch its name: 403 fields-denied pointing to name, and, as admin, maintainers is
+//     unchanged.
 //  4. As ada, patch hidden, with a name and with an empty object: the same 404 group-not-found, to the byte,
 //     as for a group that doesn't exist.
 func TestGroups_PatchByPolicy(t *testing.T) {
@@ -732,7 +755,8 @@ func TestGroups_PatchByPolicy(t *testing.T) {
 	);`)
 
 	// 3. Patch maintainers.
-	assert.Equal(t, maintainers, asAda.Patch(maintainersPath, `{}`).DecodeResource[group](http.StatusOK))
+	assert.Equal(t, withActions([]group{maintainers})[0],
+		asAda.Patch(maintainersPath, `{}`).DecodeResource[group](http.StatusOK))
 	assertFieldsDenied(t, asAda.Patch(maintainersPath, `{"name":"Mine"}`), "#/name")
 	assert.Equal(t, maintainers, api.Get(maintainersPath).DecodeResource[group](http.StatusOK))
 

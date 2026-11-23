@@ -83,22 +83,33 @@ func (MemberInput) Validate() error {
 // actor may not read is absent. The members' descriptions are part of the output schema, which describes
 // them to agents.
 type GroupOutput struct {
-	ID        uuid.UUID                 `json:"id" jsonschema:"The group's ID."`
-	Name      envelope.Field[string]    `json:"name,omitzero" jsonschema:"The unique name it is known by."`
-	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy,omitzero" jsonschema:"The identity that created it."`
-	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy,omitzero" jsonschema:"The identity that last changed it."`
-	CreatedAt envelope.Field[time.Time] `json:"createdAt,omitzero" jsonschema:"When it was created."`
-	UpdatedAt envelope.Field[time.Time] `json:"updatedAt,omitzero" jsonschema:"When it was last changed."`
+	ID             uuid.UUID                     `json:"id" jsonschema:"The group's ID."`
+	Name           envelope.Field[string]        `json:"name,omitzero" jsonschema:"The unique name it is known by."`
+	CreatedBy      envelope.Field[uuid.UUID]     `json:"createdBy,omitzero" jsonschema:"The identity that created it."`
+	UpdatedBy      envelope.Field[uuid.UUID]     `json:"updatedBy,omitzero" jsonschema:"The identity that last changed it."`
+	CreatedAt      envelope.Field[time.Time]     `json:"createdAt,omitzero" jsonschema:"When it was created."`
+	UpdatedAt      envelope.Field[time.Time]     `json:"updatedAt,omitzero" jsonschema:"When it was last changed."`
+	AllowedActions envelope.Field[[]GroupAction] `json:"allowedActions,omitzero" jsonschema:"The actions that the policies allow you to do to it, such as group:delete, group:update:name to change its name with group_update, or group:addMember. Absent only from a new group that you may not read."`
+}
+
+// GroupAction is the name of an action that the actor may do to a group, as GroupOutput lists
+// them: one of service.Actions().Allowable().
+type GroupAction string
+
+// EnumValues returns the names of the actions that GroupOutput can list, the enum of its schema.
+func (GroupAction) EnumValues() []string {
+	return service.Actions().Allowable()
 }
 
 func toGroupOutput(g service.Group) GroupOutput {
 	return GroupOutput{
-		ID:        g.ID,
-		Name:      envelope.NewField(g.Name.Get()),
-		CreatedBy: envelope.NewField(g.CreatedBy.Get()),
-		UpdatedBy: envelope.NewField(g.UpdatedBy.Get()),
-		CreatedAt: envelope.NewField(g.CreatedAt.Get()),
-		UpdatedAt: envelope.NewField(g.UpdatedAt.Get()),
+		ID:             g.ID,
+		Name:           envelope.NewField(g.Name.Get()),
+		CreatedBy:      envelope.NewField(g.CreatedBy.Get()),
+		UpdatedBy:      envelope.NewField(g.UpdatedBy.Get()),
+		CreatedAt:      envelope.NewField(g.CreatedAt.Get()),
+		UpdatedAt:      envelope.NewField(g.UpdatedAt.Get()),
+		AllowedActions: envelope.NewActions[GroupAction](g.AllowedActions),
 	}
 }
 
