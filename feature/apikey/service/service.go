@@ -96,21 +96,21 @@ func (s *apiKeyService) Create(
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", translateError(err))
 	}
 
-	id := uuid.NewV4()
-	if err := actions.CreateFields().Only(authz.SetFields(in)...).Check(decider, toResource(id, owner)); err != nil {
+	resource := actions.NewResource(owner)
+	if err := actions.CreateFields().Only(authz.SetFields(in)...).Check(decider, resource); err != nil {
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded, and
 	// lose the key that the caller couldn't retrieve again.
-	fields, err := actions.ReadFields().ReadableIf(decider, actions.Read(), toResource(id, owner))
+	fields, err := actions.ReadFields().ReadableIf(decider, actions.Read(), resource)
 	if err != nil {
 		return CreatedAPIKey{}, fmt.Errorf("create api key: %w", err)
 	}
 
 	key := generateKey()
 	rec, err := s.repo.Insert(ctx, repository.APIKeyRecord{
-		ID:         id,
+		ID:         resource.ID,
 		IdentityID: identityID,
 		Name:       in.Name,
 		KeyHash:    s.hash(key),
