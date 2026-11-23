@@ -328,8 +328,8 @@ func TestEngine_FailingForbid(t *testing.T) {
 	assert.Contains(t, err.Error(), policy.String()+"#1", "the error must name the policy and the statement")
 }
 
-// TestEngine_CountsDecisions checks that every decision is counted by its result only: allow, deny, or error
-// for a forbid that fails to evaluate.
+// TestEngine_CountsDecisions checks that every decision is counted by its purpose and result only: enforce
+// for Can and hint for Hint, and allow, deny, or error for a forbid that fails to evaluate.
 func TestEngine_CountsDecisions(t *testing.T) {
 	t.Parallel()
 	db := databasetest.New(t)
@@ -343,24 +343,33 @@ func TestEngine_CountsDecisions(t *testing.T) {
 
 	decider, err := New(db, metrics.MeterProvider(), tracenoop.NewTracerProvider()).For(t.Context(), ada)
 	require.NoError(t, err)
-	for range 2 {
-		can, err := decider.Can(testAction, identityResource(bob))
+	for _, decide := range []func(Action, Resource) (bool, error){decider.Can, decider.Hint} {
+		for range 2 {
+			can, err := decide(testAction, identityResource(bob))
+			require.NoError(t, err)
+			require.True(t, can)
+		}
+		can, err := decide(testAction, identityResource(ada))
 		require.NoError(t, err)
-		require.True(t, can)
+		require.False(t, can)
+		_, err = decide(testAction, Resource{Type: GroupType, ID: uuid.NewV4()})
+		require.Error(t, err)
 	}
-	can, err := decider.Can(testAction, identityResource(ada))
+	can, err := decider.Hint(testAction, identityResource(bob))
 	require.NoError(t, err)
-	require.False(t, can)
-	_, err = decider.Can(testAction, Resource{Type: GroupType, ID: uuid.NewV4()})
-	require.Error(t, err)
+	require.True(t, can)
 
 	got := map[string]int64{}
 	for _, point := range metrics.SumPoints[int64](t, "pkgsilo.authz.decisions") {
-		require.Equal(t, 1, point.Attributes.Len(), "the decision is the only attribute")
+		require.Equal(t, 2, point.Attributes.Len(), "the purpose and the decision are the only attributes")
+		purpose, _ := point.Attributes.Value("pkgsilo.authz.purpose")
 		decision, _ := point.Attributes.Value("pkgsilo.authz.decision")
-		got[decision.AsString()] = point.Value
+		got[purpose.AsString()+" "+decision.AsString()] = point.Value
 	}
-	assert.Equal(t, map[string]int64{"allow": 2, "deny": 1, "error": 1}, got)
+	assert.Equal(t, map[string]int64{
+		"enforce allow": 2, "enforce deny": 1, "enforce error": 1,
+		"hint allow": 3, "hint deny": 1, "hint error": 1,
+	}, got)
 }
 
 // TestEngine_FailingPermit checks that a permit that fails to evaluate grants nothing, without failing the

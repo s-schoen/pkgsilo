@@ -17,6 +17,11 @@ func (f deciderFunc) Can(action Action, resource Resource) (bool, error) {
 	return f(action, resource)
 }
 
+// Hint panics: the code under test must enforce its decisions.
+func (deciderFunc) Hint(action Action, _ Resource) (bool, error) {
+	panic("unexpected hint " + action.Name())
+}
+
 var testAction = NewAction("identity:read", ActionGroupRead)
 
 func TestAllowAll(t *testing.T) {
@@ -28,6 +33,16 @@ func TestAllowAll(t *testing.T) {
 	can, err := decider.Can(testAction, Resource{Type: IdentityType, ID: uuid.NewV4()})
 	require.NoError(t, err)
 	assert.True(t, can)
+
+	can, err = decider.Hint(testAction, Resource{Type: IdentityType, ID: uuid.NewV4()})
+	require.NoError(t, err)
+	assert.True(t, can)
+}
+
+func TestAction_Name(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "identity:read", testAction.Name())
 }
 
 // toRowResource returns the resource of a row of the tests of Filter: its ID ends in the row's value.

@@ -218,6 +218,72 @@ func (_c *MockDecider_Can_Call) RunAndReturn(run func(action authz.Action, resou
 	return _c
 }
 
+// Hint provides a mock function for the type MockDecider
+func (_mock *MockDecider) Hint(action authz.Action, resource authz.Resource) (bool, error) {
+	ret := _mock.Called(action, resource)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Hint")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(authz.Action, authz.Resource) (bool, error)); ok {
+		return returnFunc(action, resource)
+	}
+	if returnFunc, ok := ret.Get(0).(func(authz.Action, authz.Resource) bool); ok {
+		r0 = returnFunc(action, resource)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(authz.Action, authz.Resource) error); ok {
+		r1 = returnFunc(action, resource)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDecider_Hint_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Hint'
+type MockDecider_Hint_Call struct {
+	*mock.Call
+}
+
+// Hint is a helper method to define mock.On call
+//   - action authz.Action
+//   - resource authz.Resource
+func (_e *MockDecider_Expecter) Hint(action any, resource any) *MockDecider_Hint_Call {
+	return &MockDecider_Hint_Call{Call: _e.mock.On("Hint", action, resource)}
+}
+
+func (_c *MockDecider_Hint_Call) Run(run func(action authz.Action, resource authz.Resource)) *MockDecider_Hint_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 authz.Action
+		if args[0] != nil {
+			arg0 = args[0].(authz.Action)
+		}
+		var arg1 authz.Resource
+		if args[1] != nil {
+			arg1 = args[1].(authz.Resource)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDecider_Hint_Call) Return(b bool, err error) *MockDecider_Hint_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockDecider_Hint_Call) RunAndReturn(run func(action authz.Action, resource authz.Resource) (bool, error)) *MockDecider_Hint_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockOwnerLoader creates a new instance of MockOwnerLoader. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockOwnerLoader(t interface {
