@@ -46,6 +46,9 @@ component_management:
     - component_id: password
       paths:
         - "feature/password/**"
+    - component_id: permission
+      paths:
+        - "feature/permission/**"
     - component_id: policy
       paths:
         - "feature/policy/**"

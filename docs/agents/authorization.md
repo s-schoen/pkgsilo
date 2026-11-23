@@ -46,6 +46,12 @@ A model that doesn't map member by member onto its record is built by hand from 
 
 `feature/identity/service` is the reference; its tests expect the hints with `servicetest.ExpectAllowedActions`.
 
+## Permissions without an object
+
+`feature/permission` answers what the actor may do before it has an object in hand: `app/app.go` hands it every feature's `TypeActions`, so a new feature's actions appear there without further work.
+It decides the creates of a type that isn't owned on a new resource, and every other action with `Decider.CanSome`, which answers "allowed on some resource of the type" and errs only toward yes.
+`CanSome` is for that endpoint only: never use it to decide a request.
+
 ## Writes
 
 Every check runs before anything is written, and an existing object's read check comes first.
