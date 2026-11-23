@@ -146,6 +146,24 @@ func (a TypeActions) NewResource(owner *Owner) Resource {
 	return Resource{Type: a.declaration.Type, ID: id, Owner: owner}
 }
 
+// Actions returns every action declared on the resource type, in the order of the schema: <type>:read,
+// <type>:delete, the further actions, then the field actions of reading, creating and updating. Action
+// groups aren't actions of their own and aren't among them.
+func (a TypeActions) Actions() []Action {
+	return a.declaration.actions()
+}
+
+// Owned reports whether each resource belongs to an identity, as TypeSpec.Owned declares.
+func (a TypeActions) Owned() bool {
+	return a.declaration.Owned
+}
+
+// OnePerOwner reports whether an identity owns at most one resource, whose ID is its own, as
+// TypeSpec.OnePerOwner declares.
+func (a TypeActions) OnePerOwner() bool {
+	return a.onePerOwner
+}
+
 // Declaration returns the declaration of the resource type and all its actions, for Schema.
 func (a TypeActions) Declaration() Declaration {
 	return a.declaration
