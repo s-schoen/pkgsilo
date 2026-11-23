@@ -39,11 +39,15 @@ const identities: Array<IdentityResponse> = [
 ];
 const [ada, grace, hidden] = identities as [IdentityResponse, IdentityResponse, IdentityResponse];
 
+// The identities that the API has: identities at the start of each test, without the ones that
+// deleteIdentities deleted, so that a refetch, as after a denied delete, lists what's left.
+let stored: Array<IdentityResponse> = [];
+
 function listIdentities() {
-  return getListIdentitiesMockHandler({
-    data: identities,
+  return getListIdentitiesMockHandler(() => ({
+    data: stored,
     pagination: { offset: 0, limit: 100, nextOffset: null },
-  });
+  }));
 }
 
 // Answers a delete with 204, or with 403 for the ids in denied, and records the ids it was asked
@@ -58,6 +62,7 @@ function deleteIdentities(requested: Array<string>, denied: Array<string> = []) 
         { status: 403, headers: { "Content-Type": "application/problem+json" } },
       );
     }
+    stored = stored.filter((identity) => identity.id !== id);
     return new HttpResponse(null, { status: 204 });
   });
 }
@@ -98,6 +103,7 @@ async function findRows() {
 describe("/identities", () => {
   beforeEach(() => {
     toastQueue.clear();
+    stored = identities;
   });
 
   it("lists the identities by name, with the fallbacks for the fields it can't read", async () => {
