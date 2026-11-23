@@ -3,40 +3,30 @@ import { getGroupsMock } from "@/api/gen/client/groups/groups.msw.ts";
 import { getHealthMock } from "@/api/gen/client/health/health.msw.ts";
 import { getPasswordsMock } from "@/api/gen/client/passwords/passwords.msw.ts";
 import { getPoliciesMock } from "@/api/gen/client/policies/policies.msw.ts";
-import {
-  getGetCurrentSessionMockHandler,
-  getSessionsMock,
-} from "@/api/gen/client/sessions/sessions.msw.ts";
-import { adminId } from "@/mocks/identities-data.ts";
 import { createIdentitiesHandlers } from "@/mocks/identities-handlers.ts";
 import { createIdentitiesStore } from "@/mocks/identities-store.ts";
-
-// The session that the mock API answers with: signed in from the first request, so that the UI
-// needs no login. A year from now, so that it never expires during a dev session.
-function currentSession() {
-  const now = new Date();
-  return {
-    data: {
-      id: "00000000-0000-4000-8000-000000000001",
-      identityId: adminId,
-      createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  };
-}
+import { createSessionHandlers, requireActor } from "@/mocks/session-handlers.ts";
+import { createMockSession } from "@/mocks/session.ts";
 
 // The handlers of `task ui:dev:mock`. Orval generates the rest from the OpenAPI document, so every
 // route of the API answers a response of its shape with random data: replace it with fixed data in
 // a handler here once a view needs stable lists. MSW takes the first handler that matches, so the
 // handlers that override a generated one come first.
 //
-// The identities live in a store: each call starts a new one with the fixed identities, and
-// browser.ts calls it once per page load, so the changes last until a reload.
+// The session starts signed in as the admin, so that the UI needs no sign-in; signing in again
+// picks a persona by its username (admin, reader or self, personas.ts), which decides the
+// permissions, the identities' allowedActions and which writes answer 403. The other resources'
+// generated handlers don't check them.
+//
+// The session and the identities live in the page: each call starts anew with the fixed
+// identities, and browser.ts calls it once per page load, so the changes last until a reload.
 export function createHandlers() {
+  const session = createMockSession();
+  const actor = () => requireActor(session);
+  const store = createIdentitiesStore({ actorId: () => actor().id });
   return [
-    getGetCurrentSessionMockHandler(() => currentSession()),
-    ...createIdentitiesHandlers(createIdentitiesStore({ actorId: adminId })),
-    ...getSessionsMock(),
+    ...createSessionHandlers(session, store),
+    ...createIdentitiesHandlers(store, actor),
     ...getGroupsMock(),
     ...getPoliciesMock(),
     ...getApiKeysMock(),
