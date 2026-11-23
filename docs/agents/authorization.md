@@ -70,6 +70,8 @@ The service loads the rows, checks every one with `authz.Filter` and cuts out th
 - A resource that belongs to an identity, such as an API key, sets `Owned` in its `authz.TypeSpec` and passes its owner, with the owner's groups, in `authz.Resource.Owner`, so that policies can use `resource.owner`.
   The owner is the only attribute: secrets stay out of the schema.
   The service loads the owner with `authz.OwnerLoader.ReadableOwner`, which reports an identity that the actor can't read like a missing one, and translates `authz.ErrOwnerNotFound` to its own identity-not-found error.
+- A type whose identity owns at most one resource, such as a password, also sets `OnePerOwner`: its resource's ID is the owner's.
+  A create checks `TypeActions.NewResource(owner)`, which is the owner's resource for a one-per-owner type and a fresh ID otherwise; the service stores the new resource under that ID.
 
 ## No filters on hidden data
 
