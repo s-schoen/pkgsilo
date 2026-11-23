@@ -63,6 +63,8 @@ export default defineConfig({
     "eslint-plugin-testing-library",
     { name: "paraglide", specifier: "@inlang/paraglide-js/eslint" },
     "eslint-plugin-storybook",
+    // pkgsilo's own rules.
+    "./lint/pkgsilo-plugin.ts",
   ],
   categories: {
     correctness: "error",
@@ -157,6 +159,7 @@ export default defineConfig({
   overrides: [
     {
       files: [
+        "lint/**",
         "oxlint.config.ts",
         "orval.config.ts",
         "stylelint.config.ts",
@@ -182,6 +185,8 @@ export default defineConfig({
         "import/no-duplicates": "error",
         "import/no-self-import": "error",
         "paraglide/no-dynamic-message-access": "error",
+        // A resource's permissions hook names the decisions, and the JSX reads those names.
+        "pkgsilo/no-permission-checks-in-jsx": "error",
         "react/jsx-no-literals": [
           "error",
           {
