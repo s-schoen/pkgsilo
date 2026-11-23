@@ -58,10 +58,12 @@ tasks:
     run: once
     deps:
       - ui:install
-    # package.json and the lockfile too, so that a new orval generates the client again.
+    # package.json and the lockfile too, so that a new orval generates the client again. Orval reads
+    # the types of the mutator, src/api/fetch.ts, too.
     sources:
       - ../app/testdata/openapi.json
       - orval.config.ts
+      - src/api/fetch.ts
       - package.json
       - pnpm-lock.yaml
     generates:
