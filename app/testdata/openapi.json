@@ -5748,6 +5748,16 @@
             "type": "string",
             "format": "date-time"
           },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "apikey:delete"
+              ]
+            },
+            "description": "The actions that the policies allow the caller to do to it: apikey:delete. Absent only from a new API key that the caller may not read."
+          },
           "key": {
             "type": "string"
           }
@@ -5782,6 +5792,20 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "group:delete",
+                "group:update:name",
+                "group:readMembers",
+                "group:addMember",
+                "group:removeMember"
+              ]
+            },
+            "description": "The actions that the policies allow the caller to do to it, such as group:delete or group:addMember. Absent only from a new group that the caller may not read."
           }
         },
         "required": [
@@ -5918,6 +5942,16 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "apikey:delete"
+              ]
+            },
+            "description": "The actions that the policies allow the caller to do to it: apikey:delete. Absent only from a new API key that the caller may not read."
           }
         },
         "required": [
@@ -5997,6 +6031,18 @@
             "type": "string",
             "description": "When the password was last set.",
             "format": "date-time"
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "password:delete",
+                "password:change",
+                "password:reset"
+              ]
+            },
+            "description": "The actions that the policies allow the caller to do to it, such as password:reset to set it without the current one, or password:change to set it with the current one. Absent only from a password that the caller set but may not read."
           }
         },
         "additionalProperties": false
@@ -6064,6 +6110,19 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "policy:delete",
+                "policy:update:name",
+                "policy:update:source",
+                "policy:readSchema"
+              ]
+            },
+            "description": "The actions that the policies allow the caller to do to it, such as policy:delete or policy:update:source. Absent only from a new policy that the caller may not read."
           }
         },
         "required": [

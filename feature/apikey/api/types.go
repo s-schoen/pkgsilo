@@ -49,9 +49,19 @@ type KeyResponse struct {
 	// ExpiresAt is null for an API key that never expires, and absent if it's hidden.
 	ExpiresAt envelope.Field[*time.Time] `json:"expiresAt,omitzero"`
 	// LastUsedAt is null for an API key that has not been used yet, and absent if it's hidden.
-	LastUsedAt envelope.Field[*time.Time] `json:"lastUsedAt,omitzero"`
-	CreatedBy  envelope.Field[uuid.UUID]  `json:"createdBy,omitzero"`
-	CreatedAt  envelope.Field[time.Time]  `json:"createdAt,omitzero"`
+	LastUsedAt     envelope.Field[*time.Time]  `json:"lastUsedAt,omitzero"`
+	CreatedBy      envelope.Field[uuid.UUID]   `json:"createdBy,omitzero"`
+	CreatedAt      envelope.Field[time.Time]   `json:"createdAt,omitzero"`
+	AllowedActions envelope.Field[[]KeyAction] `json:"allowedActions,omitzero" jsonschema:"The actions that the policies allow the caller to do to it: apikey:delete. Absent only from a new API key that the caller may not read."`
+}
+
+// KeyAction is the name of an action that the caller may do to an API key, as KeyResponse lists
+// them: one of service.Actions().Allowable().
+type KeyAction string
+
+// EnumValues returns the names of the actions that KeyResponse can list, the enum of its schema.
+func (KeyAction) EnumValues() []string {
+	return service.Actions().Allowable()
 }
 
 // CreatedKeyResponse is the representation of a new API key: the only one that holds its key, which is
@@ -64,14 +74,15 @@ type CreatedKeyResponse struct {
 
 func toKeyResponse(k service.APIKey) KeyResponse {
 	return KeyResponse{
-		ID:         k.ID,
-		IdentityID: envelope.NewField(k.IdentityID.Get()),
-		Name:       envelope.NewField(k.Name.Get()),
-		KeySuffix:  envelope.NewField(k.KeySuffix.Get()),
-		ExpiresAt:  envelope.NewField(k.ExpiresAt.Get()),
-		LastUsedAt: envelope.NewField(k.LastUsedAt.Get()),
-		CreatedBy:  envelope.NewField(k.CreatedBy.Get()),
-		CreatedAt:  envelope.NewField(k.CreatedAt.Get()),
+		ID:             k.ID,
+		IdentityID:     envelope.NewField(k.IdentityID.Get()),
+		Name:           envelope.NewField(k.Name.Get()),
+		KeySuffix:      envelope.NewField(k.KeySuffix.Get()),
+		ExpiresAt:      envelope.NewField(k.ExpiresAt.Get()),
+		LastUsedAt:     envelope.NewField(k.LastUsedAt.Get()),
+		CreatedBy:      envelope.NewField(k.CreatedBy.Get()),
+		CreatedAt:      envelope.NewField(k.CreatedAt.Get()),
+		AllowedActions: envelope.NewActions[KeyAction](k.AllowedActions),
 	}
 }
 

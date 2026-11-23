@@ -28,9 +28,22 @@ func (r SetPasswordRequest) toInput() service.PasswordInput {
 // PasswordResponse is the representation of a password in responses. It never holds the password or its
 // hash. A field that the caller may not read is absent.
 type PasswordResponse struct {
-	SetAt envelope.Field[time.Time] `json:"setAt,omitzero" jsonschema:"When the password was last set."`
+	SetAt          envelope.Field[time.Time]        `json:"setAt,omitzero" jsonschema:"When the password was last set."`
+	AllowedActions envelope.Field[[]PasswordAction] `json:"allowedActions,omitzero" jsonschema:"The actions that the policies allow the caller to do to it, such as password:reset to set it without the current one, or password:change to set it with the current one. Absent only from a password that the caller set but may not read."`
+}
+
+// PasswordAction is the name of an action that the caller may do to a password, as PasswordResponse lists
+// them: one of service.Actions().Allowable().
+type PasswordAction string
+
+// EnumValues returns the names of the actions that PasswordResponse can list, the enum of its schema.
+func (PasswordAction) EnumValues() []string {
+	return service.Actions().Allowable()
 }
 
 func toPasswordResponse(p service.Password) PasswordResponse {
-	return PasswordResponse{SetAt: envelope.NewField(p.SetAt.Get())}
+	return PasswordResponse{
+		SetAt:          envelope.NewField(p.SetAt.Get()),
+		AllowedActions: envelope.NewActions[PasswordAction](p.AllowedActions),
+	}
 }

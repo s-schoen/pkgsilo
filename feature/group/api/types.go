@@ -63,22 +63,33 @@ func (r PatchGroupRequest) toPatch() service.GroupPatch {
 // GroupResponse is the representation of a group in responses. A field that the caller may not read is
 // absent.
 type GroupResponse struct {
-	ID        uuid.UUID                 `json:"id"`
-	Name      envelope.Field[string]    `json:"name,omitzero"`
-	CreatedBy envelope.Field[uuid.UUID] `json:"createdBy,omitzero"`
-	UpdatedBy envelope.Field[uuid.UUID] `json:"updatedBy,omitzero"`
-	CreatedAt envelope.Field[time.Time] `json:"createdAt,omitzero"`
-	UpdatedAt envelope.Field[time.Time] `json:"updatedAt,omitzero"`
+	ID             uuid.UUID                     `json:"id"`
+	Name           envelope.Field[string]        `json:"name,omitzero"`
+	CreatedBy      envelope.Field[uuid.UUID]     `json:"createdBy,omitzero"`
+	UpdatedBy      envelope.Field[uuid.UUID]     `json:"updatedBy,omitzero"`
+	CreatedAt      envelope.Field[time.Time]     `json:"createdAt,omitzero"`
+	UpdatedAt      envelope.Field[time.Time]     `json:"updatedAt,omitzero"`
+	AllowedActions envelope.Field[[]GroupAction] `json:"allowedActions,omitzero" jsonschema:"The actions that the policies allow the caller to do to it, such as group:delete or group:addMember. Absent only from a new group that the caller may not read."`
+}
+
+// GroupAction is the name of an action that the caller may do to a group, as GroupResponse lists
+// them: one of service.Actions().Allowable().
+type GroupAction string
+
+// EnumValues returns the names of the actions that GroupResponse can list, the enum of its schema.
+func (GroupAction) EnumValues() []string {
+	return service.Actions().Allowable()
 }
 
 func toGroupResponse(g service.Group) GroupResponse {
 	return GroupResponse{
-		ID:        g.ID,
-		Name:      envelope.NewField(g.Name.Get()),
-		CreatedBy: envelope.NewField(g.CreatedBy.Get()),
-		UpdatedBy: envelope.NewField(g.UpdatedBy.Get()),
-		CreatedAt: envelope.NewField(g.CreatedAt.Get()),
-		UpdatedAt: envelope.NewField(g.UpdatedAt.Get()),
+		ID:             g.ID,
+		Name:           envelope.NewField(g.Name.Get()),
+		CreatedBy:      envelope.NewField(g.CreatedBy.Get()),
+		UpdatedBy:      envelope.NewField(g.UpdatedBy.Get()),
+		CreatedAt:      envelope.NewField(g.CreatedAt.Get()),
+		UpdatedAt:      envelope.NewField(g.UpdatedAt.Get()),
+		AllowedActions: envelope.NewActions[GroupAction](g.AllowedActions),
 	}
 }
 

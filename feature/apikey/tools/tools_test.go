@@ -26,14 +26,15 @@ var (
 	adaID = uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")
 	// ci is an API key that expires and has not been used yet, with every field visible.
 	ci = service.APIKey{
-		ID:         uuid.MustParse("3f4a5b6c-7d8e-4f9a-8b0c-1d2e3f4a5b6c"),
-		IdentityID: authz.Visible(adaID),
-		Name:       authz.Visible("ci"),
-		KeySuffix:  authz.Visible("AB2C"),
-		ExpiresAt:  authz.Visible(new(time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC))),
-		LastUsedAt: authz.Visible[*time.Time](nil),
-		CreatedBy:  authz.Visible(apitest.Actor),
-		CreatedAt:  authz.Visible(time.Date(2026, time.October, 24, 10, 0, 0, 123456000, time.UTC)),
+		ID:             uuid.MustParse("3f4a5b6c-7d8e-4f9a-8b0c-1d2e3f4a5b6c"),
+		IdentityID:     authz.Visible(adaID),
+		Name:           authz.Visible("ci"),
+		KeySuffix:      authz.Visible("AB2C"),
+		ExpiresAt:      authz.Visible(new(time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC))),
+		LastUsedAt:     authz.Visible[*time.Time](nil),
+		CreatedBy:      authz.Visible(apitest.Actor),
+		CreatedAt:      authz.Visible(time.Date(2026, time.October, 24, 10, 0, 0, 123456000, time.UTC)),
+		AllowedActions: authz.AllowedActions{"apikey:delete"},
 	}
 	ciJSON = `{
 		"id": "3f4a5b6c-7d8e-4f9a-8b0c-1d2e3f4a5b6c",
@@ -43,16 +44,23 @@ var (
 		"expiresAt": "2027-01-01T00:00:00Z",
 		"lastUsedAt": null,
 		"createdBy": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
-		"createdAt": "2026-10-24T10:00:00.123456Z"
+		"createdAt": "2026-10-24T10:00:00.123456Z",
+		"allowedActions": ["apikey:delete"]
 	}`
 	// bootstrap is an API key that never expires and that the actor may read only the name and expiry of: its
-	// expiry is a visible null, its last use is hidden.
+	// expiry is a visible null, its last use is hidden. The actor may not delete it.
 	bootstrap = service.APIKey{
-		ID:        uuid.MustParse("9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d"),
-		Name:      authz.Visible("bootstrap"),
-		ExpiresAt: authz.Visible[*time.Time](nil),
+		ID:             uuid.MustParse("9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d"),
+		Name:           authz.Visible("bootstrap"),
+		ExpiresAt:      authz.Visible[*time.Time](nil),
+		AllowedActions: authz.AllowedActions{},
 	}
-	bootstrapJSON = `{"id":"9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d","name":"bootstrap","expiresAt":null}`
+	bootstrapJSON = `{
+		"id": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d",
+		"name": "bootstrap",
+		"expiresAt": null,
+		"allowedActions": []
+	}`
 
 	identityArg = `"identityId":"` + adaID.String() + `"`
 	keyArgs     = `{` + identityArg + `,"id":"` + ci.ID.String() + `"}`
@@ -73,6 +81,24 @@ func TestTools_ReadableMembers(t *testing.T) {
 	t.Parallel()
 
 	mcptest.AssertReadableMembers(t, reflect.TypeFor[APIKeyOutput](), service.Actions().ReadFields().Fields())
+}
+
+// TestTools_AllowedActions checks that the output lists the allowed actions, with the actions on API keys
+// as the enum in the output schema of every tool that returns an API key.
+func TestTools_AllowedActions(t *testing.T) {
+	t.Parallel()
+	mcptest.AssertAllowedActionsMember(t, reflect.TypeFor[APIKeyOutput](), service.Actions().Allowable())
+
+	mcp, _ := newTestClient(t)
+	for _, name := range []string{"apikey_get", "apikey_list"} {
+		schema := mcp.OutputSchema(name)
+		if name == "apikey_list" {
+			schema = schema.Properties["items"].Items
+		}
+
+		assert.Equal(t, []any{"apikey:delete"},
+			schema.Properties["allowedActions"].Items.Enum, name)
+	}
 }
 
 // TestTools_NoCreate checks that no tool creates an API key, whose key would pass through the model's

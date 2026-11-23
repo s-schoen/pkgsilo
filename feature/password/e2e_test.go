@@ -36,6 +36,17 @@ var errPasswordNotFound = mcpserver.DefineError("password_not_found",
 
 type password = passwordapi.PasswordResponse
 
+// allActions are the actions that a password's allowedActions can hold, all of which the administrators group
+// allows, written out independently of the code: clients rely on their names.
+var allActions = []passwordapi.PasswordAction{"password:delete", "password:change", "password:reset"}
+
+// withActions returns the password as a caller sees it who may do the given actions to it, and nothing else.
+func withActions(p password, actions ...passwordapi.PasswordAction) password {
+	p.AllowedActions = envelope.Visible(append([]passwordapi.PasswordAction{}, actions...))
+
+	return p
+}
+
 // passwordPathOf returns the path of the password of the identity with the given ID.
 func passwordPathOf(id uuid.UUID) string {
 	return "/api/v1/identities/" + id.String() + "/password"
@@ -81,11 +92,13 @@ func assertCurrentPasswordProblem(t *testing.T, resp *apitest.Response, detail s
 // admin:
 //
 //  1. Create ada, then get her password: 404 password-not-found.
-//  2. As admin, reset her password without a current one: 200 with when it was set.
-//  3. As ada, get her password: the same.
+//  2. As admin, reset her password without a current one: 200 with when it was set, and every action allowed,
+//     through the administrators group.
+//  3. As ada, get her password: the same, but with changing it as the only allowed action, since the seeded
+//     policy only lets her change it.
 //  4. As ada, change it without the current password, and with a wrong one: 422 invalid-body on
 //     currentPassword for both, and the password unchanged.
-//  5. As ada, change it with the current password: 200, set later than before.
+//  5. As ada, change it with the current password: 200, set later than before, with changing it allowed.
 //  6. As ada, delete it: 403 Forbidden, since the seeded policy only lets her change it.
 //  7. As admin, delete it: 204. Get it as admin and as ada: 404 password-not-found.
 //  8. As ada, change it again: 404 password-not-found, since only a reset sets a first password.
@@ -101,9 +114,10 @@ func TestPasswords_Lifecycle(t *testing.T) {
 	// 2. Reset.
 	reset := api.Put(path, `{"newPassword":"correct horse"}`).DecodeResource[password](http.StatusOK)
 	assert.WithinDuration(t, time.Now(), reset.SetAt.Value, time.Minute)
+	assert.Equal(t, envelope.Visible(allActions), reset.AllowedActions)
 
 	// 3. Get as ada.
-	assert.Equal(t, reset, asAda.Get(path).DecodeResource[password](http.StatusOK))
+	assert.Equal(t, withActions(reset, "password:change"), asAda.Get(path).DecodeResource[password](http.StatusOK))
 
 	// 4. Change without the right current password.
 	assertCurrentPasswordProblem(t, asAda.Put(path, `{"newPassword":"battery staple"}`),
@@ -117,6 +131,7 @@ func TestPasswords_Lifecycle(t *testing.T) {
 	changed := asAda.Put(path, `{"newPassword":"battery staple","currentPassword":"correct horse"}`).
 		DecodeResource[password](http.StatusOK)
 	assert.True(t, changed.SetAt.Value.After(reset.SetAt.Value), "a change must set a new time")
+	assert.Equal(t, withActions(changed, "password:change"), changed)
 	assertCurrentPasswordProblem(t,
 		asAda.Put(path, `{"newPassword":"staple","currentPassword":"correct horse"}`),
 		"does not match the current password")

@@ -34,14 +34,15 @@ var (
 	ciIdentityID = uuid.MustParse("7a2d3b4c-5e6f-4071-8b8c-0d1e2f3a4b5c")
 
 	ciKey = service.APIKey{
-		ID:         uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
-		IdentityID: authz.Visible(ciIdentityID),
-		Name:       authz.Visible("ci"),
-		KeySuffix:  authz.Visible("WXYZ"),
-		ExpiresAt:  authz.Visible(&ciExpiresAt),
-		LastUsedAt: authz.Visible(&ciLastUsedAt),
-		CreatedBy:  authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
-		CreatedAt:  authz.Visible(time.Date(2026, time.November, 5, 10, 0, 0, 0, time.UTC)),
+		ID:             uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
+		IdentityID:     authz.Visible(ciIdentityID),
+		Name:           authz.Visible("ci"),
+		KeySuffix:      authz.Visible("WXYZ"),
+		ExpiresAt:      authz.Visible(&ciExpiresAt),
+		LastUsedAt:     authz.Visible(&ciLastUsedAt),
+		CreatedBy:      authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
+		CreatedAt:      authz.Visible(time.Date(2026, time.November, 5, 10, 0, 0, 0, time.UTC)),
+		AllowedActions: authz.AllowedActions{"apikey:delete"},
 	}
 	ciJSON = `{
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
@@ -51,7 +52,8 @@ var (
 		"expiresAt": "2027-01-01T00:00:00Z",
 		"lastUsedAt": "2026-11-05T11:30:00.123456Z",
 		"createdBy": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-		"createdAt": "2026-11-05T10:00:00Z"
+		"createdAt": "2026-11-05T10:00:00Z",
+		"allowedActions": ["apikey:delete"]
 	}`
 
 	keysPath = "/identities/7a2d3b4c-5e6f-4071-8b8c-0d1e2f3a4b5c/api-keys"
@@ -115,9 +117,10 @@ func TestHandler_Create_NeverExpires(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
 	created := service.APIKey{
-		ID:         ciKey.ID,
-		ExpiresAt:  authz.Visible[*time.Time](nil),
-		LastUsedAt: authz.Visible[*time.Time](nil),
+		ID:             ciKey.ID,
+		ExpiresAt:      authz.Visible[*time.Time](nil),
+		LastUsedAt:     authz.Visible[*time.Time](nil),
+		AllowedActions: authz.AllowedActions{},
 	}
 	svc.EXPECT().Create(mock.Anything, apitest.Actor, ciIdentityID, service.APIKeyInput{Name: "ci"}).
 		Return(service.CreatedAPIKey{APIKey: created, Key: "psk_NEWKEY"}, nil)
@@ -126,12 +129,13 @@ func TestHandler_Create_NeverExpires(t *testing.T) {
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
 		"expiresAt": null,
 		"lastUsedAt": null,
+		"allowedActions": [],
 		"key": "psk_NEWKEY"
 	}`)
 }
 
 // TestHandler_Create_Unreadable checks that a new API key that the caller may not read is answered with only
-// its ID, Location and key, since the key can't be retrieved later.
+// its ID, Location and key, since the key can't be retrieved later, without allowed actions.
 func TestHandler_Create_Unreadable(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
@@ -143,15 +147,26 @@ func TestHandler_Create_Unreadable(t *testing.T) {
 }
 
 // TestHandler_Get_HiddenFields checks that a hidden field is absent from the response, unlike a visible
-// null.
+// null, and that an API key that the caller may do nothing to has an empty list of allowed actions.
 func TestHandler_Get_HiddenFields(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().Get(mock.Anything, apitest.Actor, ciIdentityID, ciKey.ID).
-		Return(service.APIKey{ID: ciKey.ID, Name: ciKey.Name, LastUsedAt: authz.Visible[*time.Time](nil)}, nil)
+		Return(service.APIKey{
+			ID: ciKey.ID, Name: ciKey.Name, LastUsedAt: authz.Visible[*time.Time](nil),
+			AllowedActions: authz.AllowedActions{},
+		}, nil)
 
-	api.Get(ciPath).
-		AssertResource(`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"ci","lastUsedAt":null}`)
+	api.Get(ciPath).AssertResource(
+		`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","name":"ci","lastUsedAt":null,"allowedActions":[]}`)
+}
+
+// TestHandler_AllowedActionsMember checks that the response lists the allowed actions, with the actions on
+// API keys as the enum of its schema.
+func TestHandler_AllowedActionsMember(t *testing.T) {
+	t.Parallel()
+
+	apitest.AssertAllowedActionsMember(t, reflect.TypeFor[KeyResponse](), service.Actions().Allowable())
 }
 
 // TestHandler_ReadableMembers checks that every member of the response but the ID can be hidden and has
