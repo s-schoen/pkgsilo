@@ -42,6 +42,11 @@ func (d *purposeDecider) Hint(action Action, _ Resource) (bool, error) {
 	return d.decide(action)
 }
 
+// CanSome panics: Access decides about its object.
+func (*purposeDecider) CanSome(action Action, _ string) (bool, error) {
+	panic("unexpected CanSome " + action.Name())
+}
+
 func (d *purposeDecider) decide(action Action) (bool, error) {
 	if action.Name() == d.fail {
 		return false, errDecision

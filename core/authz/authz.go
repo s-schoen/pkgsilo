@@ -122,6 +122,17 @@ type Decider interface {
 	// allowed actions of an object, and is counted as a hint rather than as a check that a request passes
 	// or fails by. It must never decide whether a request is allowed.
 	Hint(action Action, resource Resource) (bool, error)
+	// CanSome reports whether the actor may do the action to some resource of the type, such as "may the
+	// actor delete identities?", for a client that has no object in hand. It's decided as a hint, like
+	// Hint, and must never decide whether a request is allowed: it isn't exact.
+	//
+	// It errs only toward yes. A permit whose condition refers to the resource counts as matching some
+	// resource, and so does a forbid that is scoped to some resources, by `resource ==`, `resource in` or
+	// `resource is` another type, or whose condition refers to the resource: neither can deny every
+	// resource of the type. Only an unscoped forbid and one scoped to `resource is <the type>` without a
+	// condition on the resource deny. The principal's scope and conditions are evaluated exactly. As for
+	// Can, a forbid that fails to evaluate results in an error, and a permit that fails grants nothing.
+	CanSome(action Action, resourceType string) (bool, error)
 }
 
 // AllowAll returns an Authorizer that allows everything to everyone. It's only for code that runs without
@@ -142,6 +153,10 @@ func (allowAll) Can(Action, Resource) (bool, error) {
 }
 
 func (allowAll) Hint(Action, Resource) (bool, error) {
+	return true, nil
+}
+
+func (allowAll) CanSome(Action, string) (bool, error) {
 	return true, nil
 }
 

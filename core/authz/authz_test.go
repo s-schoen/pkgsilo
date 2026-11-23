@@ -22,6 +22,11 @@ func (deciderFunc) Hint(action Action, _ Resource) (bool, error) {
 	panic("unexpected hint " + action.Name())
 }
 
+// CanSome panics: the code under test must enforce its decisions.
+func (deciderFunc) CanSome(action Action, _ string) (bool, error) {
+	panic("unexpected CanSome " + action.Name())
+}
+
 var testAction = NewAction("identity:read", ActionGroupRead)
 
 func TestAllowAll(t *testing.T) {
@@ -35,6 +40,10 @@ func TestAllowAll(t *testing.T) {
 	assert.True(t, can)
 
 	can, err = decider.Hint(testAction, Resource{Type: IdentityType, ID: uuid.NewV4()})
+	require.NoError(t, err)
+	assert.True(t, can)
+
+	can, err = decider.CanSome(testAction, IdentityType)
 	require.NoError(t, err)
 	assert.True(t, can)
 }

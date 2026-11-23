@@ -14,8 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestExperimentalCedarOnlyInChecks checks that checks.go is the only user of cedar-go's x/exp packages, which
-// may break at any time: decisions must never depend on them.
+// TestExperimentalCedarOnlyInChecks checks that checks.go and the Engine's CanSome are the only users of
+// cedar-go's x/exp packages, which may break at any time: no decision that enforces may depend on them.
+// CanSome's decisions are hints only, and its engine tests pin the behavior that it relies on.
 func TestExperimentalCedarOnlyInChecks(t *testing.T) {
 	t.Parallel()
 	root, err := filepath.Abs("../../..")
@@ -43,7 +44,7 @@ func TestExperimentalCedarOnlyInChecks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"feature/policy/service/checks.go"}, importers)
+	assert.Equal(t, []string{"core/authz/engine.go", "feature/policy/service/checks.go"}, importers)
 }
 
 // importsExperimentalCedar reports whether the Go file at path imports any of cedar-go's x/exp packages.

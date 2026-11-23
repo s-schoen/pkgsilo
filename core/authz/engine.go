@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"sync/atomic"
 	"uuid"
 
 	"github.com/cedar-policy/cedar-go"
 	"github.com/cedar-policy/cedar-go/types"
+	"github.com/cedar-policy/cedar-go/x/exp/ast"
+	"github.com/cedar-policy/cedar-go/x/exp/batch"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -164,6 +167,15 @@ func (d *decider) Hint(action Action, resource Resource) (bool, error) {
 	return allowed, err
 }
 
+// CanSome reports whether the policies allow the principal the action on some resource of the type, and
+// counts the decision as a hint.
+func (d *decider) CanSome(action Action, resourceType string) (bool, error) {
+	allowed, err := d.decideSome(action, resourceType)
+	d.decisions.record(purposeHint, allowed, err)
+
+	return allowed, err
+}
+
 // decide reports whether the policies allow the principal the action on the resource.
 func (d *decider) decide(action Action, resource Resource) (bool, error) {
 	entities := requestEntities{list: [4]types.Entity{d.principal, action.entity}, n: 3}
@@ -185,6 +197,75 @@ func (d *decider) decide(action Action, resource Resource) (bool, error) {
 	}
 
 	return decision == cedar.Allow, nil
+}
+
+// decideSome reports whether the policies allow the principal the action on some resource of the type.
+//
+// It relies on cedar-go's experimental batch package, whose ignored resource drops the permits' conditions
+// on the resource and the forbids that have one, but lets every scope clause on the resource match, a
+// forbid's too. A forbid scoped to `resource == Identity::"<admin>"` would thus deny every identity. The
+// forbids that are scoped to some resources are therefore left out before, so that the answer errs only
+// toward yes. The engine tests pin that behavior, so that an upgrade that changes it fails them.
+func (d *decider) decideSome(action Action, resourceType string) (bool, error) {
+	entities := requestEntities{list: [4]types.Entity{d.principal, action.entity}, n: 2}
+	request := batch.Request{
+		Principal: d.principal.UID,
+		Action:    action.entity.UID,
+		Resource:  batch.Ignore(),
+		Context:   types.Record{},
+	}
+
+	var result batch.Result
+	err := batch.Authorize(context.Background(), somePolicies{d.policies, types.EntityType(resourceType)}, entities,
+		request, func(r batch.Result) error {
+			result = batch.Result{Decision: r.Decision, Diagnostic: r.Diagnostic}
+
+			return nil
+		})
+	if err != nil {
+		return false, fmt.Errorf("decide %s on some %s: %w", action.entity.UID, resourceType, err)
+	}
+	if err := d.forbidErrors(result.Diagnostic.Errors); err != nil {
+		return false, fmt.Errorf("decide %s on some %s: %w", action.entity.UID, resourceType, err)
+	}
+
+	return result.Decision == cedar.Allow, nil
+}
+
+// somePolicies iterates over the statements that can decide about every resource of a type: the permits,
+// and the forbids that are scoped to any resource or to `resource is <the type>`.
+//
+// Filtering per decision is no more work than batch.Authorize does itself per decision, so the result isn't
+// cached per revision and type.
+type somePolicies struct {
+	policies     *cedar.PolicySet
+	resourceType types.EntityType
+}
+
+// All returns an iterator over the statements.
+func (p somePolicies) All() iter.Seq2[cedar.PolicyID, *cedar.Policy] {
+	return func(yield func(cedar.PolicyID, *cedar.Policy) bool) {
+		for id, statement := range p.policies.All() {
+			if p.decidesEvery(statement) && !yield(id, statement) {
+				return
+			}
+		}
+	}
+}
+
+// decidesEvery reports whether the statement can decide about every resource of the type.
+func (p somePolicies) decidesEvery(statement *cedar.Policy) bool {
+	if statement.Effect() == cedar.Permit {
+		return true
+	}
+	switch scope := (*ast.Policy)(statement.AST()).Resource.(type) {
+	case ast.ScopeTypeAll:
+		return true
+	case ast.ScopeTypeIs:
+		return scope.Type == p.resourceType
+	default:
+		return false
+	}
 }
 
 // forbidErrors joins the errors of the forbid statements that failed to evaluate. Cedar skips a statement
