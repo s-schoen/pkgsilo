@@ -106,6 +106,19 @@ func PathID(name, description string) Parameter {
 	}
 }
 
+// PathIdentityID returns the path parameter name that holds the UUID of an identity, or request.Me for the
+// caller's own, as request.IdentityParam reads it. Any other value is answered like an unknown identity.
+func PathIdentityID(name, description string) Parameter {
+	return Parameter{
+		Name: name, In: inPath, Description: description + ` "` + request.Me + `" stands for the caller's own.`,
+		Required: true,
+		Schema: &jsonschema.Schema{AnyOf: []*jsonschema.Schema{
+			{Type: typeString, Format: "uuid"},
+			{Type: typeString, Enum: []any{request.Me}},
+		}},
+	}
+}
+
 // Body is a request body: a JSON object whose schema is that of a Go type.
 type Body struct {
 	mediaType   string
