@@ -91,7 +91,7 @@ func (s *identityService) Create(ctx context.Context, actor uuid.UUID, in Identi
 		return Identity{}, fmt.Errorf("create identity: %w", translateError(err))
 	}
 
-	return toIdentity.Map(rec, fields), nil
+	return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *identityService) Get(ctx context.Context, actor, id uuid.UUID) (Identity, error) {
@@ -110,7 +110,7 @@ func (s *identityService) Get(ctx context.Context, actor, id uuid.UUID) (Identit
 		return Identity{}, fmt.Errorf("get identity: %w", err)
 	}
 
-	return toIdentity.Map(rec, fields), nil
+	return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *identityService) List(
@@ -146,7 +146,7 @@ func (s *identityService) List(
 		if err != nil {
 			return pagination.Page[Identity]{}, fmt.Errorf("list identities: %w", err)
 		}
-		identities[i] = toIdentity.Map(rec, fields)
+		identities[i] = toIdentity.Map(rec, authz.FieldsOnly(fields))
 	}
 
 	return pagination.Page[Identity]{Items: identities, HasMore: page.HasMore}, nil
@@ -185,7 +185,7 @@ func (s *identityService) Replace(ctx context.Context, actor, id uuid.UUID, in I
 		return Identity{}, fmt.Errorf("replace identity: %w", translateError(err))
 	}
 
-	return toIdentity.Map(rec, fields), nil
+	return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *identityService) Patch(ctx context.Context, actor, id uuid.UUID, patch IdentityPatch) (Identity, error) {
@@ -211,7 +211,7 @@ func (s *identityService) Patch(ctx context.Context, actor, id uuid.UUID, patch 
 	}
 
 	if len(authz.SetFields(patch)) == 0 {
-		return toIdentity.Map(rec, fields), nil
+		return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
 	}
 
 	rec, err = s.repo.Patch(ctx, repository.IdentityPatch{
@@ -225,7 +225,7 @@ func (s *identityService) Patch(ctx context.Context, actor, id uuid.UUID, patch 
 		return Identity{}, fmt.Errorf("patch identity: %w", translateError(err))
 	}
 
-	return toIdentity.Map(rec, fields), nil
+	return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *identityService) Delete(ctx context.Context, actor, id uuid.UUID) error {

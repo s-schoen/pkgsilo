@@ -55,6 +55,8 @@ type Identity struct {
 	UpdatedBy authz.Field[uuid.UUID] `authz:"updatedBy"`
 	CreatedAt authz.Field[time.Time] `authz:"createdAt"`
 	UpdatedAt authz.Field[time.Time] `authz:"updatedAt"`
+	// AllowedActions are the actions that the actor may do to the identity.
+	AllowedActions authz.AllowedActions
 }
 
 // IdentityInput holds the identity fields set by callers when creating or replacing an identity. The authz

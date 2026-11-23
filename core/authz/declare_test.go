@@ -13,6 +13,8 @@ type testModel struct {
 	Name      Field[string]    `authz:"name"`
 	OwnerID   Field[string]    `authz:"ownerId"`
 	CreatedAt Field[time.Time] `authz:"createdAt"`
+
+	AllowedActions AllowedActions
 }
 
 type testInput struct {
@@ -28,6 +30,7 @@ type testPatch struct {
 func TestDeclareType(t *testing.T) {
 	t.Parallel()
 	extra := NewAction("apikey:rotate")
+	readExtra := NewAction("apikey:readUsage", ActionGroupRead)
 
 	got := DeclareType(TypeSpec{
 		Type:    "APIKey",
@@ -36,7 +39,7 @@ func TestDeclareType(t *testing.T) {
 		Create:  reflect.TypeFor[testInput](),
 		Update:  reflect.TypeFor[testInput](),
 		Patch:   reflect.TypeFor[testPatch](),
-		Actions: []Action{extra},
+		Actions: []Action{extra, readExtra},
 	})
 
 	assert.Equal(t, "APIKey", got.Type())
@@ -48,9 +51,12 @@ func TestDeclareType(t *testing.T) {
 	assert.Equal(t, Declaration{
 		Type:    "APIKey",
 		Owned:   true,
-		Actions: []Action{got.Read(), got.Delete(), extra},
+		Actions: []Action{got.Read(), got.Delete(), extra, readExtra},
 		Fields:  []FieldActions{got.ReadFields(), got.CreateFields(), got.UpdateFields()},
 	}, got.Declaration())
+	assert.Equal(t,
+		[]string{"apikey:delete", "apikey:update:name", "apikey:update:ownerId", "apikey:rotate", "apikey:readUsage"},
+		got.Allowable(), "no read of the object or a field, and no create")
 }
 
 // TestDeclareType_WithoutWrites checks that a type without Create and Update has no field actions for
@@ -66,6 +72,7 @@ func TestDeclareType_WithoutWrites(t *testing.T) {
 	assert.NotContains(t, schema, "policy:create")
 	assert.NotContains(t, schema, "policy:update")
 	assert.Contains(t, schema, `action "policy:read:ownerId" in ["policy:readFields", "read"]`)
+	assert.Equal(t, []string{"policy:delete"}, got.Allowable())
 }
 
 // TestDeclareType_Invalid checks that a spec whose types would leave a field unchecked, or that would name
@@ -99,6 +106,30 @@ func TestDeclareType_Invalid(t *testing.T) {
 				Name Field[string]
 			}]()},
 			want: "member Name",
+		},
+		{
+			name: "model without AllowedActions",
+			spec: TypeSpec{Type: "Policy", Model: reflect.TypeFor[struct {
+				ID   string
+				Name Field[string] `authz:"name"`
+			}]()},
+			want: "has no member AllowedActions of type authz.AllowedActions",
+		},
+		{
+			name: "AllowedActions of another type",
+			spec: TypeSpec{Type: "Policy", Model: reflect.TypeFor[struct {
+				ID             string
+				AllowedActions []string
+			}]()},
+			want: "member AllowedActions",
+		},
+		{
+			name: "AllowedActions under another name",
+			spec: TypeSpec{Type: "Policy", Model: reflect.TypeFor[struct {
+				ID      string
+				Actions AllowedActions
+			}]()},
+			want: "member Actions",
 		},
 		{
 			name: "tag with a colon",

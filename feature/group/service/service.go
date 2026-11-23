@@ -97,7 +97,7 @@ func (s *groupService) Create(ctx context.Context, actor uuid.UUID, in GroupInpu
 		return Group{}, fmt.Errorf("create group: %w", translateError(err))
 	}
 
-	return toGroup.Map(rec, fields), nil
+	return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *groupService) Get(ctx context.Context, actor, id uuid.UUID) (Group, error) {
@@ -116,7 +116,7 @@ func (s *groupService) Get(ctx context.Context, actor, id uuid.UUID) (Group, err
 		return Group{}, fmt.Errorf("get group: %w", err)
 	}
 
-	return toGroup.Map(rec, fields), nil
+	return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *groupService) List(ctx context.Context, actor uuid.UUID, offset, limit int) (pagination.Page[Group], error) {
@@ -145,7 +145,7 @@ func (s *groupService) List(ctx context.Context, actor uuid.UUID, offset, limit 
 		if err != nil {
 			return pagination.Page[Group]{}, fmt.Errorf("list groups: %w", err)
 		}
-		groups[i] = toGroup.Map(rec, fields)
+		groups[i] = toGroup.Map(rec, authz.FieldsOnly(fields))
 	}
 
 	return pagination.Page[Group]{Items: groups, HasMore: page.HasMore}, nil
@@ -182,7 +182,7 @@ func (s *groupService) Replace(ctx context.Context, actor, id uuid.UUID, in Grou
 		return Group{}, fmt.Errorf("replace group: %w", translateError(err))
 	}
 
-	return toGroup.Map(rec, fields), nil
+	return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *groupService) Patch(ctx context.Context, actor, id uuid.UUID, patch GroupPatch) (Group, error) {
@@ -208,7 +208,7 @@ func (s *groupService) Patch(ctx context.Context, actor, id uuid.UUID, patch Gro
 	}
 
 	if len(authz.SetFields(patch)) == 0 {
-		return toGroup.Map(rec, fields), nil
+		return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
 	}
 
 	rec, err = s.repo.Patch(ctx, repository.GroupPatch{
@@ -221,7 +221,7 @@ func (s *groupService) Patch(ctx context.Context, actor, id uuid.UUID, patch Gro
 		return Group{}, fmt.Errorf("patch group: %w", translateError(err))
 	}
 
-	return toGroup.Map(rec, fields), nil
+	return toGroup.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *groupService) Delete(ctx context.Context, actor, id uuid.UUID) error {

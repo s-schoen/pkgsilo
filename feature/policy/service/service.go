@@ -128,7 +128,7 @@ func (s *policyService) Create(ctx context.Context, actor uuid.UUID, in PolicyIn
 		return Policy{}, fmt.Errorf("create policy: %w", translateError(err))
 	}
 
-	return toPolicy.Map(rec, fields), nil
+	return toPolicy.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *policyService) Get(ctx context.Context, actor, id uuid.UUID) (Policy, error) {
@@ -147,7 +147,7 @@ func (s *policyService) Get(ctx context.Context, actor, id uuid.UUID) (Policy, e
 		return Policy{}, fmt.Errorf("get policy: %w", err)
 	}
 
-	return toPolicy.Map(rec, fields), nil
+	return toPolicy.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *policyService) List(ctx context.Context, actor uuid.UUID, offset, limit int) (pagination.Page[Policy], error) {
@@ -176,7 +176,7 @@ func (s *policyService) List(ctx context.Context, actor uuid.UUID, offset, limit
 		if err != nil {
 			return pagination.Page[Policy]{}, fmt.Errorf("list policies: %w", err)
 		}
-		policies[i] = toPolicy.Map(rec, fields)
+		policies[i] = toPolicy.Map(rec, authz.FieldsOnly(fields))
 	}
 
 	return pagination.Page[Policy]{Items: policies, HasMore: page.HasMore}, nil
@@ -232,7 +232,7 @@ func (s *policyService) Replace(ctx context.Context, actor, id uuid.UUID, in Pol
 		return Policy{}, fmt.Errorf("replace policy: %w", translateError(err))
 	}
 
-	return toPolicy.Map(rec, fields), nil
+	return toPolicy.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *policyService) Patch(ctx context.Context, actor, id uuid.UUID, patch PolicyPatch) (Policy, error) {
@@ -258,7 +258,7 @@ func (s *policyService) Patch(ctx context.Context, actor, id uuid.UUID, patch Po
 	}
 
 	if len(authz.SetFields(patch)) == 0 {
-		return toPolicy.Map(rec, fields), nil
+		return toPolicy.Map(rec, authz.FieldsOnly(fields)), nil
 	}
 
 	err = s.repo.Write(ctx, func(ctx context.Context, w repository.PolicyWriter) error {
@@ -284,7 +284,7 @@ func (s *policyService) Patch(ctx context.Context, actor, id uuid.UUID, patch Po
 		return Policy{}, fmt.Errorf("patch policy: %w", translateError(err))
 	}
 
-	return toPolicy.Map(rec, fields), nil
+	return toPolicy.Map(rec, authz.FieldsOnly(fields)), nil
 }
 
 func (s *policyService) Delete(ctx context.Context, actor, id uuid.UUID) error {
