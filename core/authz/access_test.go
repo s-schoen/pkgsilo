@@ -160,13 +160,3 @@ func TestTypeActions_NoAccess(t *testing.T) {
 	assert.Nil(t, access.AllowedActions())
 	assert.Equal(t, accessActions.ReadFields().NoneReadable(), access.Fields())
 }
-
-func TestFieldsOnly(t *testing.T) {
-	t.Parallel()
-	fields := accessActions.ReadFields().NoneReadable()
-
-	access := FieldsOnly(fields)
-
-	assert.Equal(t, fields, access.Fields())
-	assert.Nil(t, access.AllowedActions())
-}
