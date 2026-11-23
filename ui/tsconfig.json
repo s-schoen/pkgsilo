@@ -24,6 +24,7 @@
   "include": [
     "src",
     ".storybook/*",
+    "lint",
     "orval.config.ts",
     "oxlint.config.ts",
     "stylelint.config.ts",
