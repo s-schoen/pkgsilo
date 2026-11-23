@@ -22,7 +22,7 @@ func SecurityScheme() openapi.SecurityScheme {
 // Docs describes the API key endpoints of Routes in the OpenAPI document. The routes are mounted at a path
 // with the identityID parameter.
 func Docs() openapi.Section {
-	identityID := openapi.PathID("identityID", "The ID of the identity that the API keys belong to.")
+	identityID := openapi.PathIdentityID("identityID", "The ID of the identity that the API keys belong to.")
 	id := openapi.PathID("id", "The ID of the API key.")
 
 	return openapi.Section{

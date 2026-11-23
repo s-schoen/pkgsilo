@@ -10,9 +10,11 @@ Each feature describes its own routes in `api/docs.go`; `core/openapi` adds ever
 
 - `Pattern` is the chi pattern of `Routes()`, relative to the mount path.
   `Parameters` declares every path parameter of the full path with `openapi.PathID`, the mount path's ones included (see `feature/apikey/api/docs.go`).
+  A parameter that names an identity takes `me` for the caller's own: the handler reads it with `request.IdentityParam` and `Docs()` declares it with `openapi.PathIdentityID`.
+  MCP tools keep UUIDs.
 - A public route in a section whose other routes need authentication, such as a login, sets `Public`; a section whose routes are all public is mounted with `spec.MountPublic` instead.
 - `Body` and `Responses` name the api package's own types: `JSONBody`/`MergePatchBody` for what `request.DecodeJSON`/`DecodeMergePatch` read, and `Resource`, `Created`, `Collection`, `NoContent` or `JSON` for what the `envelope` writer writes.
-- `Problems` lists every problem type that the handler answers with: the types of `errors.go`, `envelope.ForbiddenProblem`, `request.FieldsDeniedType`, and the not-found type of each `UUIDParam`.
+- `Problems` lists every problem type that the handler answers with: the types of `errors.go`, `envelope.ForbiddenProblem`, `request.FieldsDeniedType`, and the not-found type of each `UUIDParam` or `IdentityParam`.
   Build adds the rest itself: the body's 400/413/415/422, the pagination's 400 for a `Collection`, the 401 of `authn.Require`, the 403 of `middleware.CrossOriginProtection` for a POST, PUT, PATCH or DELETE, and the 500.
 
 Schemas come from `core/typeschema`, as for the MCP tools: a `jsonschema` tag is a member's description, and a member is required unless it's tagged `omitzero` or `omitempty`.

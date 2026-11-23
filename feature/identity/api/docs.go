@@ -10,7 +10,7 @@ import (
 
 // Docs describes the identity endpoints of Routes in the OpenAPI document.
 func Docs() openapi.Section {
-	id := openapi.PathID("id", "The ID of the identity.")
+	id := openapi.PathIdentityID("id", "The ID of the identity.")
 	// writeProblems are the problems of a request that changes an identity.
 	writeProblems := []envelope.ProblemType{
 		envelope.ForbiddenProblem, request.FieldsDeniedType, IdentityNotFoundType, usernameTakenType,

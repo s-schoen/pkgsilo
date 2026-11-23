@@ -289,6 +289,56 @@ func TestHandler_SettableMembersHaveActions(t *testing.T) {
 	}
 }
 
+// TestHandler_Me checks that "me" in the path stands for the actor's identity.
+func TestHandler_Me(t *testing.T) {
+	t.Parallel()
+	me := ada
+	me.ID = apitest.Actor
+	meJSON := strings.Replace(adaJSON, ada.ID.String(), apitest.Actor.String(), 1)
+	tests := []struct {
+		name   string
+		method string
+		body   string
+		expect func(svc *mocks.MockIdentityService)
+	}{
+		{
+			name: "get", method: http.MethodGet,
+			expect: func(svc *mocks.MockIdentityService) {
+				svc.EXPECT().Get(mock.Anything, apitest.Actor, apitest.Actor).Return(me, nil)
+			},
+		},
+		{
+			name: "replace", method: http.MethodPut, body: adaBody,
+			expect: func(svc *mocks.MockIdentityService) {
+				svc.EXPECT().Replace(mock.Anything, apitest.Actor, apitest.Actor, adaInput).Return(me, nil)
+			},
+		},
+		{
+			name: "patch", method: http.MethodPatch, body: `{"displayName":"Ada Lovelace"}`,
+			expect: func(svc *mocks.MockIdentityService) {
+				patch := service.IdentityPatch{DisplayName: new("Ada Lovelace")}
+				svc.EXPECT().Patch(mock.Anything, apitest.Actor, apitest.Actor, patch).Return(me, nil)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			api, svc := newTestClient(t, loggertest.Discard())
+			tt.expect(svc)
+
+			api.Send(tt.method, "/identities/me", tt.body).AssertResource(meJSON)
+		})
+	}
+	t.Run("delete", func(t *testing.T) {
+		t.Parallel()
+		api, svc := newTestClient(t, loggertest.Discard())
+		svc.EXPECT().Delete(mock.Anything, apitest.Actor, apitest.Actor).Return(nil)
+
+		api.Delete("/identities/me").AssertNoContent()
+	})
+}
+
 func TestHandler_InvalidID(t *testing.T) {
 	t.Parallel()
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete} {
