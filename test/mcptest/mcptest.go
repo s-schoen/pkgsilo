@@ -226,6 +226,22 @@ func (c *Client) AssertDescriptions() {
 	}
 }
 
+// OutputSchema returns the output schema of the tool with the given name, as the endpoint lists it.
+func (c *Client) OutputSchema(name string) *jsonschema.Schema {
+	c.tb.Helper()
+	for _, tool := range c.Tools() {
+		if tool.Name == name {
+			var s jsonschema.Schema
+			remarshal(c.tb, tool.OutputSchema, &s)
+
+			return &s
+		}
+	}
+	c.tb.Fatalf("no tool %s", name)
+
+	return nil
+}
+
 // walkMembers calls visit with every member of the objects in schema, nested ones included, and its path,
 // such as items.id, under the prefix path.
 func walkMembers(schema *jsonschema.Schema, path string, visit func(path string, member *jsonschema.Schema)) {
@@ -403,6 +419,13 @@ func AssertReadableMembers(tb testing.TB, output reflect.Type, readable []string
 			tb.Errorf("member %q of %s isn't tagged omitzero, so a hidden field would fail the call", name, output)
 		}
 	}
+}
+
+// AssertAllowedActionsMember asserts that the output type has the member allowedActions, as
+// apitest.AssertAllowedActionsMember asserts for a response body.
+func AssertAllowedActionsMember(tb testing.TB, output reflect.Type, allowable []string) {
+	tb.Helper()
+	apitest.AssertAllowedActionsMember(tb, output, allowable)
 }
 
 // AssertDescriptionContains asserts that the description of the member of t with the given JSON name, its

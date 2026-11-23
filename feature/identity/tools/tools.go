@@ -27,7 +27,9 @@ const (
 		"display name. It authenticates with API keys, and the policies of pkgsilo decide what it may do. "
 	// masking says what the output holds.
 	masking = "Fields that the policies do not allow you to read are absent from the output. createdBy and " +
-		"updatedBy are the nil UUID for changes that pkgsilo made itself, such as creating the first identity. "
+		"updatedBy are the nil UUID for changes that pkgsilo made itself, such as creating the first identity. " +
+		"allowedActions lists what the policies allow you to do to the identity, such as identity:delete or " +
+		"identity:update:displayName, so that you can skip what would be denied. "
 	// notFound says what identity_not_found means.
 	notFound = "Fails with identity_not_found if no identity has the ID, or if the policies do not allow you " +
 		"to read it: the two cases look the same. "

@@ -39,13 +39,14 @@ var (
 	}
 	// storedIdentity is stored, translated to the domain model, with every field visible.
 	storedIdentity = Identity{
-		ID:          stored.ID,
-		Username:    authz.Visible("grace"),
-		DisplayName: authz.Visible("Grace Hopper"),
-		CreatedBy:   authz.Visible(stored.CreatedBy),
-		UpdatedBy:   authz.Visible(stored.UpdatedBy),
-		CreatedAt:   authz.Visible(stored.CreatedAt),
-		UpdatedAt:   authz.Visible(stored.UpdatedAt),
+		ID:             stored.ID,
+		Username:       authz.Visible("grace"),
+		DisplayName:    authz.Visible("Grace Hopper"),
+		CreatedBy:      authz.Visible(stored.CreatedBy),
+		UpdatedBy:      authz.Visible(stored.UpdatedBy),
+		CreatedAt:      authz.Visible(stored.CreatedAt),
+		UpdatedAt:      authz.Visible(stored.UpdatedAt),
+		AllowedActions: authz.AllowedActions(actions.Allowable()),
 	}
 
 	// storedResource is stored as a resource of decisions, in no group.
@@ -93,9 +94,11 @@ func expectReadable(repo *mocks.MockIdentityRepository, decider *authzmocks.Mock
 	decider.EXPECT().Can(actions.Read(), storedResource).Return(true, nil)
 }
 
-// expectAllFieldsReadable makes the decider allow reading every field of the resource, once each.
-func expectAllFieldsReadable(decider *authzmocks.MockDecider, resource authz.Resource) {
+// expectFullAccess makes the decider allow reading every field of the resource and every action on it,
+// once each.
+func expectFullAccess(decider *authzmocks.MockDecider, resource authz.Resource) {
 	servicetest.ExpectReadableFields(decider, actions.ReadFields(), resource, actions.ReadFields().Fields()...)
+	servicetest.ExpectAllowedActions(decider, actions, resource, actions.Allowable()...)
 }
 
 // isReadField reports whether the action is one of reading a field of an identity.
@@ -200,6 +203,7 @@ func TestIdentityService_Create_ChecksEveryField(t *testing.T) {
 					return true, nil
 				},
 			)
+			decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(false, nil).Maybe()
 			var inserted repository.IdentityRecord
 			if tt.wantDenied == nil {
 				repo.EXPECT().Insert(mock.Anything, servicetest.Capture(&inserted)).Return(stored, nil)
@@ -223,22 +227,28 @@ func TestIdentityService_Create_ChecksEveryField(t *testing.T) {
 }
 
 // TestIdentityService_Create_ReadableFields checks that the new identity is returned with the fields that
-// the actor may read, and with only its ID if it may not read the identity.
+// the actor may read and the actions that it may do, and with only its ID if it may not read the identity.
 func TestIdentityService_Create_ReadableFields(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
 		canRead  bool
 		readable []string
+		allowed  []string
 		want     Identity
 	}{
-		{name: "all", canRead: true, readable: actions.ReadFields().Fields(), want: storedIdentity},
+		{
+			name: "all", canRead: true, readable: actions.ReadFields().Fields(), allowed: actions.Allowable(),
+			want: storedIdentity,
+		},
 		{
 			name: "some", canRead: true, readable: []string{"displayName", "createdAt"},
+			allowed: []string{"identity:update:displayName"},
 			want: Identity{
-				ID:          stored.ID,
-				DisplayName: authz.Visible("Grace Hopper"),
-				CreatedAt:   authz.Visible(stored.CreatedAt),
+				ID:             stored.ID,
+				DisplayName:    authz.Visible("Grace Hopper"),
+				CreatedAt:      authz.Visible(stored.CreatedAt),
+				AllowedActions: authz.AllowedActions{"identity:update:displayName"},
 			},
 		},
 		{name: "unreadable identity", canRead: false, want: Identity{ID: stored.ID}},
@@ -259,6 +269,7 @@ func TestIdentityService_Create_ReadableFields(t *testing.T) {
 					decider.EXPECT().Can(action, mock.Anything).
 						Return(slices.Contains(tt.readable, actions.ReadFields().Fields()[i]), nil).Once()
 				}
+				servicetest.ExpectAllowedActions(decider, actions, mock.Anything, tt.allowed...)
 			}
 			repo.EXPECT().Insert(mock.Anything, mock.Anything).Return(stored, nil)
 
@@ -281,7 +292,7 @@ func TestIdentityService_Get(t *testing.T) {
 	}, nil)
 	resource := authz.Resource{Type: "Identity", ID: stored.ID, Groups: []uuid.UUID{maintainers, reviewers}}
 	decider.EXPECT().Can(actions.Read(), resource).Return(true, nil)
-	expectAllFieldsReadable(decider, resource)
+	expectFullAccess(decider, resource)
 
 	got, err := svc.Get(t.Context(), actor, stored.ID)
 	require.NoError(t, err)
@@ -290,22 +301,40 @@ func TestIdentityService_Get(t *testing.T) {
 }
 
 // TestIdentityService_Get_HiddenFields checks that only the fields that the actor may read are visible,
-// and the ID always.
+// and the ID always, and that only the actions that it may do are allowed.
 func TestIdentityService_Get_HiddenFields(t *testing.T) {
 	t.Parallel()
 	authorizer, decider := newDeciding(t)
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
 	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "displayName", "updatedBy")
+	servicetest.ExpectAllowedActions(decider, actions, storedResource, "identity:update:displayName")
 
 	got, err := svc.Get(t.Context(), actor, stored.ID)
 	require.NoError(t, err)
 
 	assert.Equal(t, Identity{
-		ID:          stored.ID,
-		DisplayName: authz.Visible("Grace Hopper"),
-		UpdatedBy:   authz.Visible(stored.UpdatedBy),
+		ID:             stored.ID,
+		DisplayName:    authz.Visible("Grace Hopper"),
+		UpdatedBy:      authz.Visible(stored.UpdatedBy),
+		AllowedActions: authz.AllowedActions{"identity:update:displayName"},
 	}, got)
+}
+
+// TestIdentityService_Get_NothingAllowed checks that an identity that the actor may read but do nothing to
+// tells so with an empty list of allowed actions.
+func TestIdentityService_Get_NothingAllowed(t *testing.T) {
+	t.Parallel()
+	authorizer, decider := newDeciding(t)
+	svc, repo := newTestServiceWith(t, authorizer)
+	expectReadable(repo, decider)
+	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource)
+	servicetest.ExpectAllowedActions(decider, actions, storedResource)
+
+	got, err := svc.Get(t.Context(), actor, stored.ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, Identity{ID: stored.ID, AllowedActions: authz.AllowedActions{}}, got)
 }
 
 func TestIdentityService_Get_Hidden(t *testing.T) {
@@ -358,17 +387,26 @@ func TestIdentityService_List_Pages(t *testing.T) {
 					return true, nil
 				},
 			).Maybe()
+			hints := map[byte]int{}
+			decider.EXPECT().Hint(mock.Anything, mock.Anything).RunAndReturn(
+				func(_ authz.Action, resource authz.Resource) (bool, error) {
+					hints[resource.ID[15]]++
+					return true, nil
+				},
+			).Maybe()
 
 			got, err := svc.List(t.Context(), actor, tt.offset, tt.limit)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.wantIDs, idsOf(got.Items))
 			assert.Equal(t, tt.wantHasMore, got.HasMore)
-			wantFieldChecks := map[byte]int{}
+			wantFieldChecks, wantHints := map[byte]int{}, map[byte]int{}
 			for _, id := range tt.wantIDs {
 				wantFieldChecks[id] = len(actions.ReadFields().Fields())
+				wantHints[id] = len(actions.Allowable())
 			}
 			assert.Equal(t, wantFieldChecks, fieldChecks, "the fields of the rows on the page must be checked, and only those")
+			assert.Equal(t, wantHints, hints, "the actions of the rows on the page must be checked, and only those")
 		})
 	}
 }
@@ -432,8 +470,8 @@ func TestIdentityService_List_LoadsGroupsInBulk(t *testing.T) {
 	decider.EXPECT().Can(actions.Read(), first).Return(true, nil)
 	decider.EXPECT().Can(actions.Read(), second).Return(true, nil)
 	// The fields are checked with the groups too, so that a forbid on a group member's field applies.
-	expectAllFieldsReadable(decider, first)
-	expectAllFieldsReadable(decider, second)
+	expectFullAccess(decider, first)
+	expectFullAccess(decider, second)
 
 	got, err := svc.List(t.Context(), actor, 0, 5)
 	require.NoError(t, err)
@@ -471,6 +509,7 @@ func TestIdentityService_Replace(t *testing.T) {
 			Return(true, nil).Once()
 	}
 	servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "username")
+	servicetest.ExpectAllowedActions(decider, actions, storedResource, "identity:delete")
 	repo.EXPECT().Update(mock.Anything, repository.IdentityRecord{
 		ID:          stored.ID,
 		Username:    "ada",
@@ -482,8 +521,10 @@ func TestIdentityService_Replace(t *testing.T) {
 	got, err := svc.Replace(t.Context(), actor, stored.ID, input)
 	require.NoError(t, err)
 
-	// The response to a write is masked like a read.
-	assert.Equal(t, Identity{ID: stored.ID, Username: authz.Visible("grace")}, got)
+	// The response to a write is masked like a read, with the actions as they were before it.
+	assert.Equal(t, Identity{
+		ID: stored.ID, Username: authz.Visible("grace"), AllowedActions: authz.AllowedActions{"identity:delete"},
+	}, got)
 }
 
 // TestIdentityService_Replace_FieldsDenied checks that replacing checks every field, even one whose value
@@ -531,6 +572,7 @@ func TestIdentityService_Patch(t *testing.T) {
 					Return(true, nil).Once()
 			}
 			servicetest.ExpectReadableFields(decider, actions.ReadFields(), storedResource, "username")
+			servicetest.ExpectAllowedActions(decider, actions, storedResource, "identity:delete")
 			repo.EXPECT().Patch(mock.Anything, repository.IdentityPatch{
 				ID:          stored.ID,
 				Username:    tt.patch.Username,
@@ -542,8 +584,10 @@ func TestIdentityService_Patch(t *testing.T) {
 			got, err := svc.Patch(t.Context(), actor, stored.ID, tt.patch)
 			require.NoError(t, err)
 
-			// The response to a write is masked like a read.
-			assert.Equal(t, Identity{ID: stored.ID, Username: authz.Visible("grace")}, got)
+			// The response to a write is masked like a read, with the actions as they were before it.
+			assert.Equal(t, Identity{
+				ID: stored.ID, Username: authz.Visible("grace"), AllowedActions: authz.AllowedActions{"identity:delete"},
+			}, got)
 		})
 	}
 }
@@ -556,7 +600,7 @@ func TestIdentityService_Patch_Empty(t *testing.T) {
 	// The mocks fail the test on a write decision or a write.
 	svc, repo := newTestServiceWith(t, authorizer)
 	expectReadable(repo, decider)
-	expectAllFieldsReadable(decider, storedResource)
+	expectFullAccess(decider, storedResource)
 
 	got, err := svc.Patch(t.Context(), actor, stored.ID, IdentityPatch{})
 	require.NoError(t, err)
@@ -830,6 +874,26 @@ func TestIdentityService_AuthorizationFails(t *testing.T) {
 				authorizer, decider := newDeciding(t)
 				decider.EXPECT().Can(mock.MatchedBy(isReadField), mock.Anything).Return(false, errDecision)
 				decider.EXPECT().Can(mock.Anything, mock.Anything).Return(true, nil).Maybe()
+				// The mock fails the test if the repository writes anything.
+				svc, repo := newTestServiceWith(t, authorizer)
+				repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).Maybe()
+				repo.EXPECT().ListAll(mock.Anything).Return([]repository.IdentityRecord{stored}, nil).Maybe()
+				repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+
+				err := call(svc)
+
+				require.ErrorIs(t, err, errDecision)
+				assert.NotErrorIs(t, err, authz.ErrDenied)
+			})
+		}
+		// The allowed action decisions, after every other decision allowed the request. They come before any
+		// write too.
+		if name != "delete" {
+			t.Run(name+" no allowed action decision", func(t *testing.T) {
+				t.Parallel()
+				authorizer, decider := newDeciding(t)
+				decider.EXPECT().Can(mock.Anything, mock.Anything).Return(true, nil).Maybe()
+				decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(false, errDecision)
 				// The mock fails the test if the repository writes anything.
 				svc, repo := newTestServiceWith(t, authorizer)
 				repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).Maybe()

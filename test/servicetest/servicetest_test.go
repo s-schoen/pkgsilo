@@ -3,6 +3,7 @@ package servicetest
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"uuid"
 
@@ -91,4 +92,32 @@ func TestExpectReadableFields(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, authz.Field[string]{}, readable.Reveal("username", "ada"))
 	assert.Equal(t, authz.Visible("Ada"), readable.Reveal("displayName", "Ada"))
+}
+
+// thing is the model of a type for TestExpectAllowedActions.
+type thing struct {
+	ID             uuid.UUID
+	Name           authz.Field[string] `authz:"name"`
+	AllowedActions authz.AllowedActions
+}
+
+func TestExpectAllowedActions(t *testing.T) {
+	t.Parallel()
+	actions := authz.DeclareType(authz.TypeSpec{
+		Type:  "Thing",
+		Model: reflect.TypeFor[thing](),
+		Update: reflect.TypeFor[struct {
+			Name string `authz:"name"`
+		}](),
+		Actions: []authz.Action{authz.NewAction("thing:archive")},
+	})
+	resource := authz.Resource{Type: "Thing", ID: uuid.NewV4()}
+	decider := authzmocks.NewMockDecider(t)
+	decider.EXPECT().Can(mock.Anything, resource).Return(true, nil)
+
+	ExpectAllowedActions(decider, actions, resource, "thing:update:name", "thing:archive")
+
+	access, err := actions.Access(decider, resource)
+	require.NoError(t, err)
+	assert.Equal(t, authz.AllowedActions{"thing:update:name", "thing:archive"}, access.AllowedActions())
 }

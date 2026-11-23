@@ -69,23 +69,34 @@ func (r PatchIdentityRequest) toPatch() service.IdentityPatch {
 // IdentityResponse is the representation of an identity in responses. A field that the caller may not
 // read is absent.
 type IdentityResponse struct {
-	ID          uuid.UUID                 `json:"id"                    jsonschema:"The identity's ID."`
-	Username    envelope.Field[string]    `json:"username,omitzero"    jsonschema:"The unique name it is known by."`
-	DisplayName envelope.Field[string]    `json:"displayName,omitzero" jsonschema:"Its human-readable name."`
-	CreatedBy   envelope.Field[uuid.UUID] `json:"createdBy,omitzero"   jsonschema:"The identity that created it, the nil UUID if pkgsilo did."`
-	UpdatedBy   envelope.Field[uuid.UUID] `json:"updatedBy,omitzero"   jsonschema:"The identity that last changed it, the nil UUID if pkgsilo did."`
-	CreatedAt   envelope.Field[time.Time] `json:"createdAt,omitzero"   jsonschema:"When it was created."`
-	UpdatedAt   envelope.Field[time.Time] `json:"updatedAt,omitzero"   jsonschema:"When it was last changed."`
+	ID             uuid.UUID                        `json:"id"                       jsonschema:"The identity's ID."`
+	Username       envelope.Field[string]           `json:"username,omitzero"       jsonschema:"The unique name it is known by."`
+	DisplayName    envelope.Field[string]           `json:"displayName,omitzero"    jsonschema:"Its human-readable name."`
+	CreatedBy      envelope.Field[uuid.UUID]        `json:"createdBy,omitzero"      jsonschema:"The identity that created it, the nil UUID if pkgsilo did."`
+	UpdatedBy      envelope.Field[uuid.UUID]        `json:"updatedBy,omitzero"      jsonschema:"The identity that last changed it, the nil UUID if pkgsilo did."`
+	CreatedAt      envelope.Field[time.Time]        `json:"createdAt,omitzero"      jsonschema:"When it was created."`
+	UpdatedAt      envelope.Field[time.Time]        `json:"updatedAt,omitzero"      jsonschema:"When it was last changed."`
+	AllowedActions envelope.Field[[]IdentityAction] `json:"allowedActions,omitzero" jsonschema:"The actions that the policies allow the caller to do to it, such as identity:delete. Absent only from a new identity that the caller may not read."`
+}
+
+// IdentityAction is the name of an action that the caller may do to an identity, as IdentityResponse lists
+// them: one of service.Actions().Allowable().
+type IdentityAction string
+
+// EnumValues returns the names of the actions that IdentityResponse can list, the enum of its schema.
+func (IdentityAction) EnumValues() []string {
+	return service.Actions().Allowable()
 }
 
 func toIdentityResponse(i service.Identity) IdentityResponse {
 	return IdentityResponse{
-		ID:          i.ID,
-		Username:    envelope.NewField(i.Username.Get()),
-		DisplayName: envelope.NewField(i.DisplayName.Get()),
-		CreatedBy:   envelope.NewField(i.CreatedBy.Get()),
-		UpdatedBy:   envelope.NewField(i.UpdatedBy.Get()),
-		CreatedAt:   envelope.NewField(i.CreatedAt.Get()),
-		UpdatedAt:   envelope.NewField(i.UpdatedAt.Get()),
+		ID:             i.ID,
+		Username:       envelope.NewField(i.Username.Get()),
+		DisplayName:    envelope.NewField(i.DisplayName.Get()),
+		CreatedBy:      envelope.NewField(i.CreatedBy.Get()),
+		UpdatedBy:      envelope.NewField(i.UpdatedBy.Get()),
+		CreatedAt:      envelope.NewField(i.CreatedAt.Get()),
+		UpdatedAt:      envelope.NewField(i.UpdatedAt.Get()),
+		AllowedActions: envelope.NewActions[IdentityAction](i.AllowedActions),
 	}
 }

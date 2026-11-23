@@ -24,13 +24,14 @@ import (
 
 var (
 	ada = service.Identity{
-		ID:          apitest.Actor,
-		Username:    authz.Visible("ada"),
-		DisplayName: authz.Visible("Ada Lovelace"),
-		CreatedBy:   authz.Visible(audit.SystemActor()),
-		UpdatedBy:   authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
-		CreatedAt:   authz.Visible(time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC)),
-		UpdatedAt:   authz.Visible(time.Date(2026, time.October, 24, 11, 30, 0, 123456000, time.UTC)),
+		ID:             apitest.Actor,
+		Username:       authz.Visible("ada"),
+		DisplayName:    authz.Visible("Ada Lovelace"),
+		CreatedBy:      authz.Visible(audit.SystemActor()),
+		UpdatedBy:      authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
+		CreatedAt:      authz.Visible(time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC)),
+		UpdatedAt:      authz.Visible(time.Date(2026, time.October, 24, 11, 30, 0, 123456000, time.UTC)),
+		AllowedActions: authz.AllowedActions{"identity:delete", "identity:update:displayName"},
 	}
 	adaJSON = `{
 		"id": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
@@ -39,14 +40,16 @@ var (
 		"createdBy": "00000000-0000-0000-0000-000000000000",
 		"updatedBy": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
 		"createdAt": "2026-10-24T10:00:00Z",
-		"updatedAt": "2026-10-24T11:30:00.123456Z"
+		"updatedAt": "2026-10-24T11:30:00.123456Z",
+		"allowedActions": ["identity:delete", "identity:update:displayName"]
 	}`
-	// grace is an identity that the actor may read only the display name of.
+	// grace is an identity that the actor may read only the display name of, and do nothing to.
 	grace = service.Identity{
-		ID:          uuid.MustParse("7c8d9e0f-1a2b-4c3d-9e4f-5a6b7c8d9e0f"),
-		DisplayName: authz.Visible("Grace Hopper"),
+		ID:             uuid.MustParse("7c8d9e0f-1a2b-4c3d-9e4f-5a6b7c8d9e0f"),
+		DisplayName:    authz.Visible("Grace Hopper"),
+		AllowedActions: authz.AllowedActions{},
 	}
-	graceJSON = `{"id":"7c8d9e0f-1a2b-4c3d-9e4f-5a6b7c8d9e0f","displayName":"Grace Hopper"}`
+	graceJSON = `{"id":"7c8d9e0f-1a2b-4c3d-9e4f-5a6b7c8d9e0f","displayName":"Grace Hopper","allowedActions":[]}`
 )
 
 // newTestClient returns a client for the identity tools, backed by a mock service.
@@ -64,6 +67,26 @@ func TestTools_ReadableMembers(t *testing.T) {
 	t.Parallel()
 
 	mcptest.AssertReadableMembers(t, reflect.TypeFor[IdentityOutput](), service.Actions().ReadFields().Fields())
+}
+
+// TestTools_AllowedActions checks that the output lists the allowed actions, with the actions on identities
+// as the enum in the output schema of every tool that returns an identity.
+func TestTools_AllowedActions(t *testing.T) {
+	t.Parallel()
+	mcptest.AssertAllowedActionsMember(t, reflect.TypeFor[IdentityOutput](), service.Actions().Allowable())
+
+	mcp, _ := newTestClient(t)
+	for _, name := range []string{
+		"identity_create", "identity_get", "identity_list", "identity_update", "identity_whoami",
+	} {
+		schema := mcp.OutputSchema(name)
+		if name == "identity_list" {
+			schema = schema.Properties["items"].Items
+		}
+
+		assert.Equal(t, []any{"identity:delete", "identity:update:username", "identity:update:displayName"},
+			schema.Properties["allowedActions"].Items.Enum, name)
+	}
 }
 
 // TestTools_SettableMembers checks that every member that identity_create and identity_update set has an

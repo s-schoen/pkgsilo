@@ -48,3 +48,15 @@ func ExpectReadableFields(
 		decider.EXPECT().Can(action, resource).Return(slices.Contains(readable, names[i]), nil).Once()
 	}
 }
+
+// ExpectAllowedActions makes the decider hint that the actions with the given names are allowed on the
+// resource, and deny the others that actions.Allowable names, as when a service tells an object's
+// AllowedActions. Each action is expected to be asked about once.
+func ExpectAllowedActions(
+	decider *authzmocks.MockDecider, actions authz.TypeActions, resource any, allowed ...string,
+) {
+	for _, name := range actions.Allowable() {
+		decider.EXPECT().Hint(mock.MatchedBy(func(action authz.Action) bool { return action.Name() == name }), resource).
+			Return(slices.Contains(allowed, name), nil).Once()
+	}
+}

@@ -72,7 +72,7 @@ func (s *identityService) Create(ctx context.Context, actor uuid.UUID, in Identi
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
-	fields, err := actions.ReadFields().ReadableIf(decider, actions.Read(), resource)
+	access, err := actions.AccessIf(decider, resource)
 	if err != nil {
 		return Identity{}, fmt.Errorf("create identity: %w", err)
 	}
@@ -91,7 +91,7 @@ func (s *identityService) Create(ctx context.Context, actor uuid.UUID, in Identi
 		return Identity{}, fmt.Errorf("create identity: %w", translateError(err))
 	}
 
-	return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
+	return toIdentity.Map(rec, access), nil
 }
 
 func (s *identityService) Get(ctx context.Context, actor, id uuid.UUID) (Identity, error) {
@@ -105,12 +105,12 @@ func (s *identityService) Get(ctx context.Context, actor, id uuid.UUID) (Identit
 		return Identity{}, fmt.Errorf("get identity: %w", err)
 	}
 
-	fields, err := actions.ReadFields().Readable(decider, resource)
+	access, err := actions.Access(decider, resource)
 	if err != nil {
 		return Identity{}, fmt.Errorf("get identity: %w", err)
 	}
 
-	return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
+	return toIdentity.Map(rec, access), nil
 }
 
 func (s *identityService) List(
@@ -142,11 +142,11 @@ func (s *identityService) List(
 	page := pagination.FromAll(readable, offset, limit)
 	identities := make([]Identity, len(page.Items))
 	for i, rec := range page.Items {
-		fields, err := actions.ReadFields().Readable(decider, toResource(rec, groups))
+		access, err := actions.Access(decider, toResource(rec, groups))
 		if err != nil {
 			return pagination.Page[Identity]{}, fmt.Errorf("list identities: %w", err)
 		}
-		identities[i] = toIdentity.Map(rec, authz.FieldsOnly(fields))
+		identities[i] = toIdentity.Map(rec, access)
 	}
 
 	return pagination.Page[Identity]{Items: identities, HasMore: page.HasMore}, nil
@@ -169,7 +169,7 @@ func (s *identityService) Replace(ctx context.Context, actor, id uuid.UUID, in I
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
-	fields, err := actions.ReadFields().Readable(decider, resource)
+	access, err := actions.Access(decider, resource)
 	if err != nil {
 		return Identity{}, fmt.Errorf("replace identity: %w", err)
 	}
@@ -185,7 +185,7 @@ func (s *identityService) Replace(ctx context.Context, actor, id uuid.UUID, in I
 		return Identity{}, fmt.Errorf("replace identity: %w", translateError(err))
 	}
 
-	return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
+	return toIdentity.Map(rec, access), nil
 }
 
 func (s *identityService) Patch(ctx context.Context, actor, id uuid.UUID, patch IdentityPatch) (Identity, error) {
@@ -205,13 +205,13 @@ func (s *identityService) Patch(ctx context.Context, actor, id uuid.UUID, patch 
 	}
 
 	// Checked before writing, so that a failed decision can't fail a request whose write succeeded.
-	fields, err := actions.ReadFields().Readable(decider, resource)
+	access, err := actions.Access(decider, resource)
 	if err != nil {
 		return Identity{}, fmt.Errorf("patch identity: %w", err)
 	}
 
 	if len(authz.SetFields(patch)) == 0 {
-		return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
+		return toIdentity.Map(rec, access), nil
 	}
 
 	rec, err = s.repo.Patch(ctx, repository.IdentityPatch{
@@ -225,7 +225,7 @@ func (s *identityService) Patch(ctx context.Context, actor, id uuid.UUID, patch 
 		return Identity{}, fmt.Errorf("patch identity: %w", translateError(err))
 	}
 
-	return toIdentity.Map(rec, authz.FieldsOnly(fields)), nil
+	return toIdentity.Map(rec, access), nil
 }
 
 func (s *identityService) Delete(ctx context.Context, actor, id uuid.UUID) error {

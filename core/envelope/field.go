@@ -77,3 +77,20 @@ func (f *Field[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 
 	return nil
 }
+
+// NewActions returns the allowed actions of a resource, the names of the actions that the caller may do to
+// it, as a field of A, a string type whose values are those that the field can hold, such as one that
+// implements typeschema.Enum. It's visible unless names is nil, as for an object that the caller may not
+// read, so that an object that the caller may do nothing to has an empty list.
+func NewActions[A ~string](names []string) Field[[]A] {
+	if names == nil {
+		return Field[[]A]{}
+	}
+
+	actions := make([]A, len(names))
+	for i, name := range names {
+		actions[i] = A(name)
+	}
+
+	return Visible(actions)
+}

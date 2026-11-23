@@ -44,10 +44,23 @@ const identitiesPath = "/api/v1/identities"
 
 type identity = identityapi.IdentityResponse
 
+// allActions are the actions that an identity's allowedActions can hold, all of which the administrators group
+// allows, written out independently of the code: clients rely on their names.
+var allActions = []identityapi.IdentityAction{
+	"identity:delete", "identity:update:username", "identity:update:displayName",
+}
+
+// withActions returns the identity as a caller sees it who may do the given actions to it, and nothing else.
+func withActions(i identity, actions ...identityapi.IdentityAction) identity {
+	i.AllowedActions = envelope.Visible(append([]identityapi.IdentityAction{}, actions...))
+
+	return i
+}
+
 // TestIdentities_Lifecycle takes one identity, ada, through every endpoint:
 //
-//  1. Create ada: 201 with the new identity, its Location under /api/v1/identities, and its
-//     audit fields set by the server.
+//  1. Create ada: 201 with the new identity, its Location under /api/v1/identities, its audit fields set by
+//     the server, and every action allowed, through the administrators group.
 //  2. Get her through the Location: the created identity.
 //  3. List the identities: admin, who the first start created and who made the request, then ada,
 //     attributed to admin.
@@ -70,6 +83,7 @@ func TestIdentities_Lifecycle(t *testing.T) {
 	assert.Equal(t, ada.CreatedBy, ada.UpdatedBy)
 	assert.WithinDuration(t, time.Now(), ada.CreatedAt.Value, time.Minute)
 	assert.Equal(t, ada.CreatedAt, ada.UpdatedAt)
+	assert.Equal(t, envelope.Visible(allActions), ada.AllowedActions)
 
 	// 2. Get.
 	assert.Equal(t, ada, api.Get(location).DecodeResource[identity](http.StatusOK))
@@ -195,7 +209,7 @@ func insertPolicy(t *testing.T, db *sqlx.DB, source string) {
 // administrators group, which is reading itself alone:
 //
 //  1. Create ada and grace, each with an API key: 201 for each.
-//  2. As ada, get ada: 200 with ada.
+//  2. As ada, get ada: 200 with ada, with no allowed actions, since the seeded policies only let her read.
 //  3. As ada, get grace: the same 404 identity-not-found, to the byte, as an identity that doesn't exist.
 //  4. As ada, list the identities: ada alone, without a nextOffset, so that the admin and grace leave no
 //     trace.
@@ -212,7 +226,8 @@ func TestIdentities_OwnIdentityOnly(t *testing.T) {
 	gracePath := identitiesPath + "/" + grace.ID.String()
 
 	// 2. Get ada.
-	assert.Equal(t, ada, asAda.Get(identitiesPath + "/" + ada.ID.String()).DecodeResource[identity](http.StatusOK))
+	assert.Equal(t, withActions(ada),
+		asAda.Get(identitiesPath + "/" + ada.ID.String()).DecodeResource[identity](http.StatusOK))
 
 	// 3. Get grace.
 	hidden := asAda.Get(gracePath)
@@ -222,7 +237,7 @@ func TestIdentities_OwnIdentityOnly(t *testing.T) {
 
 	// 4. List.
 	listed := asAda.Get(identitiesPath).DecodeCollection[identity](http.StatusOK)
-	assert.Equal(t, []identity{ada}, listed.Data)
+	assert.Equal(t, []identity{withActions(ada)}, listed.Data)
 	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 50}, listed.Pagination)
 
 	// 5. List from offset 1.
@@ -265,7 +280,7 @@ func TestIdentities_ListPagesWithHiddenRows(t *testing.T) {
 	}
 
 	// 2. List before the policy.
-	assert.Equal(t, []identity{reader},
+	assert.Equal(t, []identity{withActions(reader)},
 		asReader.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data)
 
 	// 3. Add the policy.
@@ -277,17 +292,17 @@ func TestIdentities_ListPagesWithHiddenRows(t *testing.T) {
 
 	// 4. List the first page.
 	first := asReader.Get(identitiesPath + "?limit=2").DecodeCollection[identity](http.StatusOK)
-	assert.Equal(t, []identity{reader, created["two"]}, first.Data)
+	assert.Equal(t, []identity{withActions(reader), withActions(created["two"])}, first.Data)
 	assert.Equal(t, envelope.Pagination{Offset: 0, Limit: 2, NextOffset: new(2)}, first.Pagination)
 
 	// 5. List the last page.
 	last := asReader.Get(identitiesPath + "?offset=2&limit=2").DecodeCollection[identity](http.StatusOK)
-	assert.Equal(t, []identity{created["four"], created["six"]}, last.Data)
+	assert.Equal(t, []identity{withActions(created["four"]), withActions(created["six"])}, last.Data)
 	assert.Equal(t, envelope.Pagination{Offset: 2, Limit: 2}, last.Pagination)
 
 	// 6. Get one by one.
 	asReader.Get(identitiesPath + "/" + created["three"].ID.String()).AssertProblemType(identityNotFound)
-	assert.Equal(t, created["four"],
+	assert.Equal(t, withActions(created["four"]),
 		asReader.Get(identitiesPath + "/" + created["four"].ID.String()).DecodeResource[identity](http.StatusOK))
 }
 
@@ -386,11 +401,12 @@ func TestIdentities_WritesDeniedByDefault(t *testing.T) {
 //
 //  1. Create ada with an API key: 201.
 //  2. Add a policy that lets every identity update itself.
-//  3. As ada, replace ada: 200 with the new values.
+//  3. As ada, replace ada: 200 with the new values, and both fields' update actions allowed.
 //  4. As ada, create carol: 403 fields-denied pointing to username and displayName.
 //  5. Add a policy that forbids changing usernames.
 //  6. As ada, replace ada with a new display name and her username unchanged: 403 fields-denied pointing to
-//     username alone, and ada is unchanged.
+//     username alone, and, as admin, ada is unchanged, with every action allowed but updating her username,
+//     which the forbid denies admin too. As ada, get ada: only the display name's update action allowed.
 func TestIdentities_UpdateSelf(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
@@ -409,6 +425,7 @@ func TestIdentities_UpdateSelf(t *testing.T) {
 	assert.Equal(t, envelope.Visible("ada-lovelace"), replaced.Username)
 	assert.Equal(t, envelope.Visible("Ada Lovelace"), replaced.DisplayName)
 	assert.Equal(t, envelope.Visible(ada.ID), replaced.UpdatedBy)
+	assert.Equal(t, withActions(replaced, "identity:update:username", "identity:update:displayName"), replaced)
 
 	// 4. Create carol.
 	assertFieldsDenied(t, asAda.Post(identitiesPath, `{"username":"carol","displayName":"Carol"}`),
@@ -420,7 +437,11 @@ func TestIdentities_UpdateSelf(t *testing.T) {
 	// 6. Replace ada again.
 	assertFieldsDenied(t, asAda.Put(adaPath, `{"username":"ada-lovelace","displayName":"Countess of Lovelace"}`),
 		"#/username")
-	assert.Equal(t, replaced, api.Get(adaPath).DecodeResource[identity](http.StatusOK))
+	// The forbid applies to admin too.
+	assert.Equal(t, withActions(replaced, "identity:delete", "identity:update:displayName"),
+		api.Get(adaPath).DecodeResource[identity](http.StatusOK))
+	assert.Equal(t, withActions(replaced, "identity:update:displayName"),
+		asAda.Get(adaPath).DecodeResource[identity](http.StatusOK))
 }
 
 // TestIdentities_CreateAndDeleteByPolicy checks that a policy can let an identity outside the
@@ -487,13 +508,14 @@ func TestIdentities_DisplayNameOnly(t *testing.T) {
 	);`)
 
 	// 3. Get grace.
-	asAda.Get(gracePath).AssertResource(`{"id":"` + grace.ID.String() + `","displayName":"grace"}`)
+	asAda.Get(gracePath).AssertResource(`{"id":"` + grace.ID.String() + `","displayName":"grace","allowedActions":[]}`)
 
 	// 4. List.
 	listed := asAda.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data
 	require.Len(t, listed, 3)
-	assert.Equal(t, identity{ID: listed[0].ID, DisplayName: envelope.Visible("Administrator")}, listed[0])
-	assert.Equal(t, []identity{ada, {ID: grace.ID, DisplayName: grace.DisplayName}}, listed[1:])
+	assert.Equal(t, withActions(identity{ID: listed[0].ID, DisplayName: envelope.Visible("Administrator")}), listed[0])
+	assert.Equal(t, []identity{withActions(ada), withActions(identity{ID: grace.ID, DisplayName: grace.DisplayName})},
+		listed[1:])
 }
 
 // TestIdentities_ForbidOneField checks that a forbid on reading one field hides it, even where another
@@ -524,13 +546,13 @@ func TestIdentities_ForbidOneField(t *testing.T) {
 		);`)
 
 	// 3. Get grace.
-	withoutUsername := grace
+	withoutUsername := withActions(grace)
 	withoutUsername.Username = envelope.Field[string]{}
 	assert.Equal(t, withoutUsername,
 		asAda.Get(identitiesPath + "/" + grace.ID.String()).DecodeResource[identity](http.StatusOK))
 
 	// 4. Get ada.
-	withoutUsername = ada
+	withoutUsername = withActions(ada)
 	withoutUsername.Username = envelope.Field[string]{}
 	assert.Equal(t, withoutUsername,
 		asAda.Get(identitiesPath + "/" + ada.ID.String()).DecodeResource[identity](http.StatusOK))
@@ -673,9 +695,11 @@ func TestIdentities_PatchConcurrently(t *testing.T) {
 //
 //  1. Create ada and grace, each with an API key: 201 for each.
 //  2. Add a policy that lets every identity update itself, but forbids changing usernames: 201.
-//  3. As ada, patch her display name: 200 with the new display name.
+//  3. As ada, patch her display name: 200 with the new display name, and only the display name's update action
+//     allowed.
 //  4. As ada, patch her username, and her username and display name: 403 fields-denied pointing to username
-//     alone for both, and, as admin, ada is as step 3 left her, so nothing was written.
+//     alone for both, and, as admin, ada is as step 3 left her, so nothing was written, with every action
+//     allowed but updating her username, which the forbid denies admin too.
 //  5. As ada, replace ada with her current username: 403 fields-denied pointing to username.
 //  6. As ada, patch grace, whom she can't read, with a display name and with an empty object: the same 404
 //     identity-not-found, to the byte, as for an identity that doesn't exist.
@@ -699,11 +723,14 @@ func TestIdentities_PatchOneField(t *testing.T) {
 	patched := asAda.Patch(adaPath, `{"displayName":"Ada Lovelace"}`).DecodeResource[identity](http.StatusOK)
 	assert.Equal(t, envelope.Visible("Ada Lovelace"), patched.DisplayName)
 	assert.Equal(t, envelope.Visible(ada.ID), patched.UpdatedBy)
+	assert.Equal(t, withActions(patched, "identity:update:displayName"), patched)
 
 	// 4. Patch the username.
 	assertFieldsDenied(t, asAda.Patch(adaPath, `{"username":"ada-lovelace"}`), "#/username")
 	assertFieldsDenied(t, asAda.Patch(adaPath, `{"username":"ada-lovelace","displayName":"Countess"}`), "#/username")
-	assert.Equal(t, patched, api.Get(adaPath).DecodeResource[identity](http.StatusOK))
+	// The forbid applies to admin too.
+	assert.Equal(t, withActions(patched, "identity:delete", "identity:update:displayName"),
+		api.Get(adaPath).DecodeResource[identity](http.StatusOK))
 
 	// 5. Replace.
 	assertFieldsDenied(t, asAda.Put(adaPath, `{"username":"ada","displayName":"Countess"}`), "#/username")
@@ -720,7 +747,7 @@ func TestIdentities_PatchOneField(t *testing.T) {
 //
 //  1. Create ada with an API key: 201.
 //  2. As ada, call identity_whoami over MCP: ada, as the API created her, since the seeded policies let
-//     an identity read itself.
+//     an identity read itself, with no allowed actions, since they let it do nothing else.
 func TestIdentities_MCPWhoami(t *testing.T) {
 	t.Parallel()
 	api := apptest.New(t)
@@ -729,7 +756,7 @@ func TestIdentities_MCPWhoami(t *testing.T) {
 	ada, asAda := apptest.NewIdentity(api, "ada")
 
 	// 2. Who am I.
-	assert.Equal(t, ada, apptest.MCP(t, asAda).Call("identity_whoami", "").Decode[identity]())
+	assert.Equal(t, withActions(ada), apptest.MCP(t, asAda).Call("identity_whoami", "").Decode[identity]())
 }
 
 // errUsernameTaken is the tool error of a username that another identity has, written out independently of
@@ -745,7 +772,7 @@ type identityPage struct {
 
 // TestIdentities_MCP takes one identity, ada, through the identity tools as admin:
 //
-//  1. Create ada with identity_create: ada, with its audit fields set by the server.
+//  1. Create ada with identity_create: ada, with its audit fields set by the server and every action allowed.
 //  2. Page through identity_list one identity at a time, from the first page on, copying each nextOffset into
 //     the next call: admin, whom the first start created, then ada on the last page, without a nextOffset.
 //  3. Change ada's display name with identity_update: ada with the new display name and the same username.
@@ -761,6 +788,7 @@ func TestIdentities_MCP(t *testing.T) {
 	assert.Equal(t, envelope.Visible("ada"), ada.Username)
 	assert.Equal(t, envelope.Visible("Ada Lovelace"), ada.DisplayName)
 	assert.Equal(t, ada.CreatedAt, ada.UpdatedAt)
+	assert.Equal(t, envelope.Visible(allActions), ada.AllowedActions)
 
 	// 2. Page through the list.
 	var (

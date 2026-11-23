@@ -31,7 +31,8 @@ type output struct {
 }
 
 // TestFor_Output checks the schema of an output with fields, UUIDs, times and text inside slices and maps,
-// which only an envelope.Field leaves optional.
+// which only an envelope.Field leaves optional, and whose slices aren't null, since encoding/json/v2 encodes
+// a nil slice as empty.
 func TestFor_Output(t *testing.T) {
 	t.Parallel()
 
@@ -44,7 +45,7 @@ func TestFor_Output(t *testing.T) {
 		"type": "object",
 		"properties": {
 			"items": {
-				"type": ["null", "array"],
+				"type": "array",
 				"items": {
 					"type": "object",
 					"properties": {
@@ -91,7 +92,51 @@ func TestFor_Input(t *testing.T) {
 	}`, string(b))
 }
 
+// action is a string type with a fixed set of values.
+type action string
+
+func (action) EnumValues() []string {
+	return []string{"thing:delete", "thing:archive"}
+}
+
+type withActions struct {
+	Actions envelope.Field[[]action] `json:"actions,omitzero" jsonschema:"The actions."`
+}
+
+// TestFor_Enum checks that a type that implements Enum is a string with its values, also inside a field and
+// a slice.
+func TestFor_Enum(t *testing.T) {
+	t.Parallel()
+
+	schema, err := typeschema.For(reflect.TypeFor[withActions](), typeschema.Output)
+
+	require.NoError(t, err)
+	b, err := json.Marshal(schema)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{
+		"type": "object",
+		"properties": {
+			"actions": {
+				"type": "array",
+				"items": {"type": "string", "enum": ["thing:delete", "thing:archive"]},
+				"description": "The actions."
+			}
+		},
+		"additionalProperties": false
+	}`, string(b))
+}
+
+// intEnum implements Enum, but isn't a string.
+type intEnum int
+
+func (intEnum) EnumValues() []string {
+	return []string{"one"}
+}
+
 type (
+	enumNotString struct {
+		Value intEnum `json:"value"`
+	}
 	fieldWithoutOmitZero struct {
 		Name envelope.Field[string] `json:"name"`
 	}
@@ -106,7 +151,8 @@ type (
 	}
 )
 
-// TestFor_Invalid checks that For fails for the wrappers in the wrong direction or without omitzero.
+// TestFor_Invalid checks that For fails for the wrappers in the wrong direction or without omitzero, and for
+// an Enum that isn't a string.
 func TestFor_Invalid(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -118,6 +164,7 @@ func TestFor_Invalid(t *testing.T) {
 		{name: "optional without omitzero", t: reflect.TypeFor[optionalWithoutOmitZero](), dir: typeschema.Input},
 		{name: "field in input", t: reflect.TypeFor[fieldInSlice](), dir: typeschema.Input},
 		{name: "optional in output", t: reflect.TypeFor[optionalInStruct](), dir: typeschema.Output},
+		{name: "enum not a string", t: reflect.TypeFor[enumNotString](), dir: typeschema.Output},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

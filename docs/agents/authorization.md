@@ -28,15 +28,23 @@ The field actions are named after the `authz` tags, so renaming a tag renames an
 
 An object the actor can't read gets the same domain error as a missing one, so that both answer with the same 404.
 
-## Reads
+## Reads and allowed actions
 
-The domain model holds every field but `ID` as an `authz.Field` tagged `authz:"<field>"` with the name of its response member.
-The service builds it from its record with `authz.NewMapper[<Name>Record, <Model>](actions)`, a package variable named `to<Model>`, on what `Readable` returned: it reveals each field by its tag.
-`NewMapper` fails the package's initialization if a member of the model has no member of the record with the same name and type, so that no field can be forgotten.
+The domain model holds every field but `ID` as an `authz.Field` tagged `authz:"<field>"` with the name of its response member, and a member `AllowedActions authz.AllowedActions`, which `DeclareType` requires.
+The service builds it from its record with `authz.NewMapper[<Name>Record, <Model>](actions)`, a package variable named `to<Model>`, on the `authz.Access` that `actions.Access(decider, resource)` returned: it reveals each field by its tag and fills `AllowedActions`.
+`NewMapper` fails the package's initialization if a member of the model but `AllowedActions` has no member of the record with the same name and type, so that no field can be forgotten.
 
-The service checks the fields of one object after its read check, of a list only for the rows on the page, and of a write before writing.
+`AllowedActions` lists the actions that the actor may do to the object, so that a client offers only those: every action of `actions.Allowable()`, which is `<type>:delete`, `<type>:update:<field>` and the further actions, read ones too, such as `group:readMembers`.
+It holds no `<type>:read`, `<type>:read:<field>` (the object and its visible fields tell those) and no `<type>:create:<field>` (no existing object has them).
+`Access` enforces the field reads with `Can` and asks about the actions with `Decider.Hint`, which decides alike but counts as a hint in the decisions metric.
+The list is advisory: the service still checks every request.
+
+The service gets the access of one object after its read check, of a list only for the rows on the page, and of a write before writing, as the object was before it.
 A write's response is masked like a read.
-A `POST` gets its fields from `ReadableIf`, which checks the object's read action first, so that an object the actor can't read returns only its ID.
+A `POST` gets its access from `AccessIf`, which checks the object's read action first, so that an object the actor can't read returns only its ID, without `AllowedActions`.
+A model that doesn't map member by member onto its record is built by hand from `Access.Fields()` and `Access.AllowedActions()`.
+
+`feature/identity/service` is the reference; its tests expect the hints with `servicetest.ExpectAllowedActions`.
 
 ## Writes
 

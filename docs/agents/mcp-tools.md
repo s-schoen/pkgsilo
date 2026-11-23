@@ -49,6 +49,8 @@ A limit that a description names comes from the service's constant, such as `str
 ## Output and lists
 
 - Every member but `id` is an `envelope.Field` tagged `json:",omitzero"`, filled with `envelope.NewField(field.Get())`, so that a hidden field is absent and a visible `null` stays `null`.
+- The output of an object has `allowedActions` like the REST response, with the tools package's own `<Type>Action` type (see [openapi.md](openapi.md)), so that the output schema lists the actions as an enum.
+  Its description says what it holds; the shared part of the tools' descriptions mentions it.
 - A list tool takes `mcpserver.ListInput` and returns the `mcpserver.ListOutput` of `mcpserver.NewListOutput`, whose `nextOffset` an agent copies into its next call.
   Each item is the output of the matching get tool.
 
@@ -68,7 +70,7 @@ It covers:
 - every tool error, with `AssertToolError` against the values in `errors.go`, and `AssertInternalError`;
 - every validation error;
 - pagination with and without `nextOffset`;
-- the output, with `mcptest.AssertReadableMembers`;
+- the output, with `mcptest.AssertReadableMembers` and `mcptest.AssertAllowedActionsMember`, and the enum in the output schema of each tool that returns the object, with `OutputSchema`;
 - the inputs of create and update tools, with `mcptest.AssertSettableMembers`.
 
 Beyond `tools_test.go`:
