@@ -17,8 +17,18 @@ Each feature describes its own routes in `api/docs.go`; `core/openapi` adds ever
 
 Schemas come from `core/typeschema`, as for the MCP tools: a `jsonschema` tag is a member's description, and a member is required unless it's tagged `omitzero` or `omitempty`.
 Every `envelope.Field` and `request.Optional` member is tagged `omitzero`; Build fails otherwise.
+A slice or map of a response is never `null`, since `encoding/json/v2` encodes a nil one as empty.
 A request member that may be left out is tagged `omitzero` too.
 Describe the rules of a request member in its `jsonschema` tag, in the words of the matching MCP tool.
+
+## `allowedActions`
+
+Every resource response has the member `allowedActions`, the model's `AllowedActions` (see [authorization.md](authorization.md)), declared as in `feature/identity/api/types.go`:
+
+- A string type `<Type>Action` whose `EnumValues()` returns `service.Actions().Allowable()`: it implements `typeschema.Enum`, so the schema lists the type's actions as an enum and the generated TypeScript has a string-literal union per resource.
+- The member `AllowedActions envelope.Field[[]<Type>Action]`, tagged `json:"allowedActions,omitzero"`, filled with `envelope.NewActions[<Type>Action](model.AllowedActions)`: present, `[]` when nothing is allowed, and absent only from a new object that the caller can't read.
+
+`apitest.AssertAllowedActionsMember` checks the member and its enum in `handler_test.go`; `apitest.AssertReadableMembers` leaves it out of the readable fields.
 
 ## How it stays true
 

@@ -29,13 +29,14 @@ import (
 
 var (
 	ada = service.Identity{
-		ID:          uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
-		Username:    authz.Visible("ada"),
-		DisplayName: authz.Visible("Ada Lovelace"),
-		CreatedBy:   authz.Visible(audit.SystemActor()),
-		UpdatedBy:   authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
-		CreatedAt:   authz.Visible(time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC)),
-		UpdatedAt:   authz.Visible(time.Date(2026, time.October, 24, 11, 30, 0, 123456000, time.UTC)),
+		ID:             uuid.MustParse("0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"),
+		Username:       authz.Visible("ada"),
+		DisplayName:    authz.Visible("Ada Lovelace"),
+		CreatedBy:      authz.Visible(audit.SystemActor()),
+		UpdatedBy:      authz.Visible(uuid.MustParse("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")),
+		CreatedAt:      authz.Visible(time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC)),
+		UpdatedAt:      authz.Visible(time.Date(2026, time.October, 24, 11, 30, 0, 123456000, time.UTC)),
+		AllowedActions: authz.AllowedActions{"identity:delete", "identity:update:displayName"},
 	}
 	adaJSON = `{
 		"id": "0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4",
@@ -44,7 +45,8 @@ var (
 		"createdBy": "00000000-0000-0000-0000-000000000000",
 		"updatedBy": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
 		"createdAt": "2026-10-24T10:00:00Z",
-		"updatedAt": "2026-10-24T11:30:00.123456Z"
+		"updatedAt": "2026-10-24T11:30:00.123456Z",
+		"allowedActions": ["identity:delete", "identity:update:displayName"]
 	}`
 	adaPath = "/identities/0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4"
 
@@ -114,18 +116,20 @@ func TestHandler_Get(t *testing.T) {
 	api.Get(adaPath).AssertResource(adaJSON)
 }
 
-// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response.
+// TestHandler_Get_HiddenFields checks that a hidden field is absent from the response, and that an identity
+// that the caller may do nothing to has an empty list of allowed actions.
 func TestHandler_Get_HiddenFields(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
 	svc.EXPECT().Get(mock.Anything, apitest.Actor, ada.ID).
-		Return(service.Identity{ID: ada.ID, DisplayName: ada.DisplayName}, nil)
+		Return(service.Identity{ID: ada.ID, DisplayName: ada.DisplayName, AllowedActions: authz.AllowedActions{}}, nil)
 
-	api.Get(adaPath).AssertResource(`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","displayName":"Ada Lovelace"}`)
+	api.Get(adaPath).AssertResource(
+		`{"id":"0b6d7c1e-2f3a-4b5c-9d6e-7f8091a2b3c4","displayName":"Ada Lovelace","allowedActions":[]}`)
 }
 
 // TestHandler_Create_Unreadable checks that a new identity that the caller may not read is answered with
-// only its ID and Location.
+// only its ID and Location, without allowed actions.
 func TestHandler_Create_Unreadable(t *testing.T) {
 	t.Parallel()
 	api, svc := newTestClient(t, loggertest.Discard())
@@ -140,6 +144,14 @@ func TestHandler_ReadableMembers(t *testing.T) {
 	t.Parallel()
 
 	apitest.AssertReadableMembers(t, reflect.TypeFor[IdentityResponse](), service.Actions().ReadFields().Fields())
+}
+
+// TestHandler_AllowedActionsMember checks that the response lists the allowed actions, with the actions on
+// identities as the enum of its schema.
+func TestHandler_AllowedActionsMember(t *testing.T) {
+	t.Parallel()
+
+	apitest.AssertAllowedActionsMember(t, reflect.TypeFor[IdentityResponse](), service.Actions().Allowable())
 }
 
 func TestHandler_Replace(t *testing.T) {

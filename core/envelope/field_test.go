@@ -121,3 +121,14 @@ func TestField_ValueType(t *testing.T) {
 	assert.Equal(t, reflect.TypeFor[string](), Field[string]{}.ValueType())
 	assert.Equal(t, reflect.TypeFor[*time.Time](), Field[*time.Time]{}.ValueType())
 }
+
+// TestNewActions checks that the actions are visible, even none, unless there are no allowed actions at all.
+func TestNewActions(t *testing.T) {
+	t.Parallel()
+	type action string
+
+	assert.Equal(t, Visible([]action{"thing:delete", "thing:archive"}),
+		NewActions[action]([]string{"thing:delete", "thing:archive"}))
+	assert.Equal(t, Visible([]action{}), NewActions[action]([]string{}))
+	assert.Equal(t, Field[[]action]{}, NewActions[action](nil))
+}

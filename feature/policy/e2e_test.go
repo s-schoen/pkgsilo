@@ -62,6 +62,13 @@ func policyBody(t *testing.T, name, source string) string {
 	return string(body)
 }
 
+// withActions returns the identity as a caller sees it who may do the given actions to it, and nothing else.
+func withActions(i identity, actions ...identityapi.IdentityAction) identity {
+	i.AllowedActions = envelope.Visible(append([]identityapi.IdentityAction{}, actions...))
+
+	return i
+}
+
 // addPolicy creates a policy through the client and returns it.
 func addPolicy(t *testing.T, api *apitest.Client, name, source string) policy {
 	t.Helper()
@@ -457,7 +464,7 @@ func TestPolicies_SecondInstance(t *testing.T) {
 	);`)
 
 	// 4. Get grace elsewhere.
-	assert.Equal(t, grace, asAdaElsewhere.Get(gracePath).DecodeResource[identity](http.StatusOK))
+	assert.Equal(t, withActions(grace), asAdaElsewhere.Get(gracePath).DecodeResource[identity](http.StatusOK))
 
 	// 5. Delete the policy.
 	api.Delete(policiesPath + "/" + readGrace.ID.String()).AssertNoContent()
@@ -509,8 +516,8 @@ func TestPolicies_IdentitiesButNotOtherTypes(t *testing.T) {
 //
 //  1. Create ada with an API key, grace, and the group auditors with ada as a member: 201 and 204.
 //  2. Add a policy that lets auditors read everything: 201.
-//  3. As ada, list the identities and the policies: all of them, the same as admin, with every field. Get
-//     grace and the new policy: 200 with every field.
+//  3. As ada, list the identities and the policies: all of them, the same as admin, with every field, but
+//     no allowed action on the identities. Get grace and the new policy: 200 with every field.
 //  4. As ada, create an identity and a policy: 403 fields-denied for both. Replace grace and the new
 //     policy: 403 fields-denied for both. Delete grace and the new policy: 403 Forbidden for both.
 //  5. As admin, list the identities and the policies: nothing was written.
@@ -532,9 +539,13 @@ func TestPolicies_ReadOnlyAudit(t *testing.T) {
 	// 3. Read.
 	identities := api.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data
 	policies := listPolicies(api)
-	assert.Equal(t, identities, asAda.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data)
+	readOnly := make([]identity, len(identities))
+	for i, identity := range identities {
+		readOnly[i] = withActions(identity)
+	}
+	assert.Equal(t, readOnly, asAda.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data)
 	assert.Equal(t, policies, listPolicies(asAda))
-	assert.Equal(t, grace, asAda.Get(gracePath).DecodeResource[identity](http.StatusOK))
+	assert.Equal(t, withActions(grace), asAda.Get(gracePath).DecodeResource[identity](http.StatusOK))
 	assert.Equal(t, audit, asAda.Get(auditPath).DecodeResource[policy](http.StatusOK))
 
 	// 4. Write.
@@ -603,7 +614,8 @@ func TestPolicies_FieldDenials(t *testing.T) {
 	// 5. Without the forbid.
 	api.Put(policiesPath+"/"+editorsPolicy.ID.String(), policyBody(t, "editors", grant)).AssertStatus(http.StatusOK)
 	replaced := asAda.Put(gracePath, body).DecodeResource[identity](http.StatusOK)
-	assert.Equal(t, identity{ID: grace.ID}, replaced, "the response to a write is masked like a read")
+	assert.Equal(t, withActions(identity{ID: grace.ID}, "identity:update:username", "identity:update:displayName"),
+		replaced, "the response to a write is masked like a read")
 	assert.Equal(t, envelope.Visible("grace-hopper"),
 		api.Get(gracePath).DecodeResource[identity](http.StatusOK).Username)
 }

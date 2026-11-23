@@ -5799,10 +5799,7 @@
             "type": "string"
           },
           "components": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": "array",
             "items": {
               "type": "object",
               "properties": {
@@ -5864,6 +5861,18 @@
             "type": "string",
             "description": "When it was last changed.",
             "format": "date-time"
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "identity:delete",
+                "identity:update:username",
+                "identity:update:displayName"
+              ]
+            },
+            "description": "The actions that the policies allow the caller to do to it, such as identity:delete. Absent only from a new identity that the caller may not read."
           }
         },
         "required": [

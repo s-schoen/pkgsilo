@@ -60,7 +60,7 @@ func TestListInput_Schema(t *testing.T) {
 	assert.JSONEq(t, `{
 		"type": "object",
 		"properties": {
-			"items": {"type": ["null", "array"], "items": {"type": "string"}, "description": "The items of the page."},
+			"items": {"type": "array", "items": {"type": "string"}, "description": "The items of the page."},
 			"nextOffset": {
 				"type": ["null", "integer"],
 				"description": "The offset of the next page, to pass to the next call. It's absent on the last page."
