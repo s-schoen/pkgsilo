@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"uuid"
 )
 
 // fieldTag is the struct tag that names a field of an object, which its field actions are named after,
@@ -26,6 +27,9 @@ type TypeSpec struct {
 	Type string
 	// Owned declares that each resource belongs to an identity, as Declaration.Owned does.
 	Owned bool
+	// OnePerOwner declares an Owned type whose identity owns at most one resource, whose ID is the
+	// identity's, such as Password. Without it, each resource has an ID of its own. NewResource follows it.
+	OnePerOwner bool
 	// Model is the domain model as an actor sees it: every member but ID and AllowedActions is a Field,
 	// tagged with the name of the field, such as `authz:"username"`. Each one gets an action
 	// <type>:read:<field>. Its member AllowedActions, of the type AllowedActions, is required.
@@ -46,6 +50,7 @@ type TypeSpec struct {
 // TypeActions are the actions on a resource type that DeclareType derived from its TypeSpec.
 type TypeActions struct {
 	declaration  Declaration
+	onePerOwner  bool
 	model        reflect.Type
 	read, delete Action
 	readFields   FieldActions
@@ -60,12 +65,17 @@ type TypeActions struct {
 // Actions. It panics on a spec whose types break the rules of TypeSpec, which is a bug that a feature's
 // package initialization reveals: a member without an action would be revealed or written unchecked.
 func DeclareType(spec TypeSpec) TypeActions {
+	if spec.OnePerOwner && !spec.Owned {
+		panic(fmt.Sprintf("authz: type %s is OnePerOwner but not Owned", spec.Type))
+	}
+
 	prefix := strings.ToLower(spec.Type)
 	actions := TypeActions{
-		model:      spec.Model,
-		read:       NewAction(prefix+":read", ActionGroupRead),
-		delete:     NewAction(prefix + ":delete"),
-		readFields: NewReadFieldActions(prefix, modelFields(spec.Model)...),
+		onePerOwner: spec.OnePerOwner,
+		model:       spec.Model,
+		read:        NewAction(prefix+":read", ActionGroupRead),
+		delete:      NewAction(prefix + ":delete"),
+		readFields:  NewReadFieldActions(prefix, modelFields(spec.Model)...),
 	}
 	if spec.Create != nil {
 		actions.createFields = NewFieldActions(prefix+":create", inputFields(spec.Create)...)
@@ -117,6 +127,23 @@ func (a TypeActions) CreateFields() FieldActions {
 // UpdateFields returns the actions <type>:update:<field> of setting each field of Update, none without it.
 func (a TypeActions) UpdateFields() FieldActions {
 	return a.updateFields
+}
+
+// NewResource returns the resource of the owner that a create checks: for a OnePerOwner type the owner's
+// one resource, whose ID is the owner's, whether it exists or not, else a new resource with a fresh ID. A
+// caller that creates the resource stores it under the returned ID. It panics for a type that isn't Owned,
+// which is a bug in the caller: a resource of it can't carry an owner.
+func (a TypeActions) NewResource(owner *Owner) Resource {
+	if !a.declaration.Owned {
+		panic(fmt.Sprintf("authz: type %s isn't Owned, so its resources have no owner", a.declaration.Type))
+	}
+
+	id := owner.ID
+	if !a.onePerOwner {
+		id = uuid.NewV4()
+	}
+
+	return Resource{Type: a.declaration.Type, ID: id, Owner: owner}
 }
 
 // Declaration returns the declaration of the resource type and all its actions, for Schema.

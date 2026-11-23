@@ -4,8 +4,10 @@ import (
 	"reflect"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type testModel struct {
@@ -132,6 +134,11 @@ func TestDeclareType_Invalid(t *testing.T) {
 			want: "member Actions",
 		},
 		{
+			name: "OnePerOwner without Owned",
+			spec: TypeSpec{Type: "Password", OnePerOwner: true, Model: model},
+			want: "OnePerOwner but not Owned",
+		},
+		{
 			name: "tag with a colon",
 			spec: TypeSpec{Type: "Policy", Model: model, Create: reflect.TypeFor[struct {
 				Name string `authz:"na:me"`
@@ -187,6 +194,44 @@ func TestDeclareType_Invalid(t *testing.T) {
 			DeclareType(tt.spec)
 		})
 	}
+}
+
+// TestTypeActions_NewResource checks that a new resource of a OnePerOwner type is the owner's one resource,
+// and that of another owned type has a fresh ID of its own, both with the owner.
+func TestTypeActions_NewResource(t *testing.T) {
+	t.Parallel()
+	model := reflect.TypeFor[testModel]()
+	owner := &Owner{ID: uuid.NewV4(), Groups: []uuid.UUID{uuid.NewV4()}}
+
+	t.Run("one per owner", func(t *testing.T) {
+		t.Parallel()
+		actions := DeclareType(TypeSpec{Type: "Password", Owned: true, OnePerOwner: true, Model: model})
+
+		assert.Equal(t, Resource{Type: "Password", ID: owner.ID, Owner: owner}, actions.NewResource(owner))
+	})
+
+	t.Run("many per owner", func(t *testing.T) {
+		t.Parallel()
+		actions := DeclareType(TypeSpec{Type: "APIKey", Owned: true, Model: model})
+
+		first, second := actions.NewResource(owner), actions.NewResource(owner)
+
+		assert.Equal(t, "APIKey", first.Type)
+		assert.Same(t, owner, first.Owner)
+		assert.NotEqual(t, uuid.UUID{}, first.ID)
+		assert.NotEqual(t, owner.ID, first.ID, "not the owner's ID")
+		assert.NotEqual(t, first.ID, second.ID, "a fresh ID each time")
+		assert.Empty(t, first.Groups)
+	})
+
+	t.Run("not owned", func(t *testing.T) {
+		t.Parallel()
+		actions := DeclareType(TypeSpec{Type: "Policy", Model: model})
+
+		require.PanicsWithValue(t, "authz: type Policy isn't Owned, so its resources have no owner", func() {
+			actions.NewResource(owner)
+		})
+	})
 }
 
 func TestSetFields(t *testing.T) {
