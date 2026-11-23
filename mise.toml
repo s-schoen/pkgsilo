@@ -16,7 +16,7 @@ gotestsum = "1.13.0"
 prek = "0.5.11"
 cocogitto = "7.0.0"
 # Runs the GitHub Actions workflows locally (`task ci:push`, `task ci:pr`).
-act = "0.2.97"
+act = "0.2.98"
 # Build the UI in ui/ (`task ui:build`), which `task build:prod` embeds.
 node = "26.13.1"
 pnpm = "12.21.0"
