@@ -19,15 +19,17 @@ export const permissionsQueryKeyPrefix = getListPermissionsQueryKey("me");
 // it lists every action that may be allowed on some resource of its type; with owner, exactly the
 // actions on the resources that owner owns, such as creating its API keys. The authenticated route
 // loads the list without owner before any page renders. It refetches on every focus of the window
-// and every reconnect, however fresh ("always": useSuspenseQuery keeps a response fresh for a
-// second at least), as a policy may have changed meanwhile. A denied request refetches it too
-// (invalidateOnForbidden). Built with queryOptions instead of the generated query options, whose
-// queryFn useSuspenseQuery doesn't take.
+// and every reconnect, however fresh ("always"), as a policy may have changed meanwhile. A denied
+// request refetches it too (invalidateOnForbidden). Nothing else refetches it: it stays fresh
+// otherwise, so that a component that mounts later, such as the navigation, reads the list that the
+// route loaded. Built with queryOptions instead of the generated query options, whose queryFn
+// useSuspenseQuery doesn't take.
 export function permissionsQueryOptions(owner?: PermissionsOwner) {
   const params = owner === undefined ? undefined : { owner };
   return queryOptions({
     queryKey: getListPermissionsQueryKey("me", params),
     queryFn: ({ signal }) => listPermissions("me", params, { signal }),
+    staleTime: Infinity,
     refetchOnWindowFocus: "always",
     refetchOnReconnect: "always",
     select: allowedActionsOf,

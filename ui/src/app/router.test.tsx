@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { m } from "@/paraglide/messages.js";
 import { renderRoute } from "@/test/render.tsx";
 import { server } from "@/test/server.ts";
-import { signedIn } from "@/test/session.ts";
+import { permissions, signedIn } from "@/test/session.ts";
 
 describe("router", () => {
   beforeEach(() => {
@@ -35,6 +35,32 @@ describe("router", () => {
       "aria-current",
       "page",
     );
+  });
+
+  it("shows the entries that the signed-in identity's permissions allow", async () => {
+    renderRoute("/");
+    await screen.findByText(m.welcome());
+
+    const navigation = screen.getByRole("navigation", { name: m.mainNavigation() });
+    expect(within(navigation).getByRole("link", { name: m.identities() })).toHaveAttribute(
+      "href",
+      "/identities",
+    );
+  });
+
+  it("hides the entries and the sections that the permissions don't allow", async () => {
+    server.use(permissions([]));
+    renderRoute("/");
+    await screen.findByText(m.welcome());
+
+    const navigation = screen.getByRole("navigation", { name: m.mainNavigation() });
+    expect(within(navigation).getByRole("link", { name: m.home() })).toBeInTheDocument();
+    expect(
+      within(navigation).queryByRole("link", { name: m.identities() }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(navigation).queryByRole("heading", { name: m.administration() }),
+    ).not.toBeInTheDocument();
   });
 
   it("marks no entry of the navigation for a page that isn't in it", async () => {
