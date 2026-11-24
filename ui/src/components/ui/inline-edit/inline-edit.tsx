@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Button } from "react-aria-components/Button";
 
 import { InlineEditError } from "@/components/ui/inline-edit/inline-edit-error.ts";
@@ -44,6 +44,7 @@ export type InlineEditProps<T> = {
   // one while the user isn't editing.
   onEditingChange?: (isEditing: boolean) => void;
   // Renders the value as plain text, without the edit mode, as for a value the actor may not change.
+  // An edit that is open when it turns true ends as a cancel does, once a running save has finished.
   isReadOnly?: boolean;
   // The size: default for a sidebar's value, title for a page's large title.
   variant?: "default" | "title";
@@ -90,14 +91,6 @@ export function InlineEdit<T>({
   }, [isEditing]);
 
   const rootClassName = `${styles.inlineEdit} ${variant === "title" ? styles.title : ""}`;
-
-  if (isReadOnly) {
-    return (
-      <div className={rootClassName}>
-        <div className={styles.value}>{renderView(value)}</div>
-      </div>
-    );
-  }
 
   function edit() {
     valueBefore.current = value;
@@ -162,6 +155,29 @@ export function InlineEdit<T>({
     }
     onChange(valueBefore.current);
     leave(true);
+  }
+
+  // A value that turns read-only during its edit, as when the policies change meanwhile, ends the
+  // edit as a cancel does, so that the unsaved value doesn't show as the value and the caller learns
+  // that the edit ended. A running save finishes first, since the API decides it. The editor stays
+  // until then, so that the focus leaves it before React removes it (leave).
+  const cancelEdit = useEffectEvent(() => {
+    if (editing.current) {
+      cancel();
+    }
+  });
+  useEffect(() => {
+    if (isReadOnly && !isPending) {
+      cancelEdit();
+    }
+  }, [isReadOnly, isPending]);
+
+  if (isReadOnly && !isEditing) {
+    return (
+      <div className={rootClassName}>
+        <div className={styles.value}>{renderView(value)}</div>
+      </div>
+    );
   }
 
   function handleKeyDown(event: KeyboardEvent) {

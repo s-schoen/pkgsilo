@@ -16,6 +16,7 @@ const text = {
   taken: "This username is taken.",
   displayName: "Display name",
   title: "Ada Lovelace",
+  lock: "Lock",
 };
 
 // The caller's validation, as a form's schema: a username of 3 characters at least.
@@ -28,6 +29,25 @@ function UsernameField({ value: initial, ...props }: ComponentProps<typeof Inlin
   const [value, setValue] = useState(initial);
   return (
     <InlineTextField {...props} value={value} onChange={setValue} errorMessage={validate(value)} />
+  );
+}
+
+// A field that turns read-only once the button beside it is pressed, as when the policies change
+// while the user edits it.
+function LockingField(props: ComponentProps<typeof InlineTextField>) {
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  return (
+    <>
+      <UsernameField {...props} isReadOnly={isReadOnly} />
+      <button
+        type="button"
+        onClick={() => {
+          setIsReadOnly(true);
+        }}
+      >
+        {text.lock}
+      </button>
+    </>
   );
 }
 
@@ -354,6 +374,69 @@ export const ReadOnly = meta.story({
   play: async ({ canvas }) => {
     await expect(canvas.getByText(text.value)).toBeVisible();
     await expect(canvas.queryByRole("button")).not.toBeInTheDocument();
+  },
+});
+
+// A value that turns read-only during its edit ends the edit as Escape does: the value before it
+// shows as text, unsaved, and the edit mode ended.
+export const TurnsReadOnlyWhileEditing = meta.story({
+  render: (args) => <LockingField {...args} />,
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(
+      canvas.getByRole("button", { name: m.inlineEditLabel({ label: args.label }) }),
+    );
+    // The editor takes the focus once it has rendered.
+    await waitFor(() => expect(canvas.getByRole("textbox", { name: args.label })).toHaveFocus());
+    await userEvent.keyboard(text.changed);
+
+    // Without moving the focus, as a refetch while the user is in another tab.
+    await fireEvent.click(canvas.getByRole("button", { name: text.lock }));
+
+    await waitFor(() => expect(canvas.queryByRole("textbox")).not.toBeInTheDocument());
+    await expect(canvas.getByText(text.value)).toBeVisible();
+    await expect(canvas.queryByText(text.changed)).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole("button", { name: m.inlineEditLabel({ label: args.label }) }),
+    ).not.toBeInTheDocument();
+    await expect(args.onSave).not.toHaveBeenCalled();
+    await expect(args.onEditingChange).toHaveBeenLastCalledWith(false);
+  },
+});
+
+// The save of TurnsReadOnlyWhileSaving, which the story fails once the value has turned read-only.
+const runningSave = { fail: (_error: Error) => {} };
+
+// A value that turns read-only while its save runs keeps the editor until the save has finished,
+// since the API decides it; a save that the API rejects then ends the edit as Escape does.
+export const TurnsReadOnlyWhileSaving = meta.story({
+  args: {
+    onSave: fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          runningSave.fail = reject;
+        }),
+    ),
+  },
+  render: (args) => <LockingField {...args} />,
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(
+      canvas.getByRole("button", { name: m.inlineEditLabel({ label: args.label }) }),
+    );
+    // The editor takes the focus once it has rendered.
+    await waitFor(() => expect(canvas.getByRole("textbox", { name: args.label })).toHaveFocus());
+    await userEvent.keyboard(`${text.changed}{Enter}`);
+    await expect(canvas.getByRole("progressbar", { name: m.inlineEditSaving() })).toBeVisible();
+
+    await fireEvent.click(canvas.getByRole("button", { name: text.lock }));
+
+    await expect(canvas.getByRole("textbox", { name: args.label })).toHaveValue(text.changed);
+
+    runningSave.fail(new InlineEditError(text.taken));
+
+    await waitFor(() => expect(canvas.queryByRole("textbox")).not.toBeInTheDocument());
+    await expect(canvas.getByText(text.value)).toBeVisible();
+    await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
+    await expect(args.onEditingChange).toHaveBeenLastCalledWith(false);
   },
 });
 
