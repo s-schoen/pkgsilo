@@ -316,11 +316,11 @@ func TestPolicyService_Create_ReadableFields(t *testing.T) {
 			want: storedPolicy,
 		},
 		{
-			name: "some", canRead: true, readable: []string{"name"}, allowed: []string{"policy:readSchema"},
+			name: "some", canRead: true, readable: []string{"name"}, allowed: []string{"policy:update:name"},
 			want: Policy{
 				ID:             stored.ID,
 				Name:           authz.Visible("everything"),
-				AllowedActions: authz.AllowedActions{"policy:readSchema"},
+				AllowedActions: authz.AllowedActions{"policy:update:name"},
 			},
 		},
 		{name: "unreadable policy", canRead: false, want: Policy{ID: stored.ID}},
@@ -1209,25 +1209,6 @@ func TestPolicyService_AuthorizationFails(t *testing.T) {
 				authorizer, decider := newDeciding(t)
 				decider.EXPECT().Can(mock.MatchedBy(isReadField), mock.Anything).Return(false, errDecision)
 				decider.EXPECT().Can(mock.Anything, mock.Anything).Return(true, nil).Maybe()
-				// The mocks fail the test if the repository writes anything.
-				svc, repo, _ := newTestServiceWith(t, authorizer)
-				repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).Maybe()
-				repo.EXPECT().ListAll(mock.Anything).Return([]repository.PolicyRecord{stored}, nil).Maybe()
-
-				err := call(svc)
-
-				require.ErrorIs(t, err, errDecision)
-				assert.NotErrorIs(t, err, authz.ErrDenied)
-			})
-		}
-		// The allowed action decisions, after every other decision allowed the request. They come before any
-		// write too.
-		if name != "delete" && name != "schema" {
-			t.Run(name+" no allowed action decision", func(t *testing.T) {
-				t.Parallel()
-				authorizer, decider := newDeciding(t)
-				decider.EXPECT().Can(mock.Anything, mock.Anything).Return(true, nil).Maybe()
-				decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(false, errDecision)
 				// The mocks fail the test if the repository writes anything.
 				svc, repo, _ := newTestServiceWith(t, authorizer)
 				repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).Maybe()

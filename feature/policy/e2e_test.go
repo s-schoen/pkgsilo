@@ -71,9 +71,7 @@ func withActions(i identity, actions ...identityapi.IdentityAction) identity {
 
 // allPolicyActions are the actions that a policy's allowedActions can hold, all of which the administrators
 // group allows, written out independently of the code: clients rely on their names.
-var allPolicyActions = []policyapi.PolicyAction{
-	"policy:delete", "policy:update:name", "policy:update:source", "policy:readSchema",
-}
+var allPolicyActions = []policyapi.PolicyAction{"policy:delete", "policy:update:name", "policy:update:source"}
 
 // withPolicyActions returns the policies as a caller sees them who may do the given actions to each, and
 // nothing else.
@@ -536,8 +534,8 @@ func TestPolicies_IdentitiesButNotOtherTypes(t *testing.T) {
 //  1. Create ada with an API key, grace, and the group auditors with ada as a member: 201 and 204.
 //  2. Add a policy that lets auditors read everything: 201.
 //  3. As ada, list the identities and the policies: all of them, the same as admin, with every field, but
-//     no allowed action on the identities, and reading the schema, which the read action group holds, as the
-//     only one on the policies. Get grace and the new policy: 200 with every field and the same actions.
+//     no allowed action on either: reading the schema, which the read action group holds, is an action on
+//     the policies as a whole, not on one. Get grace and the new policy: 200 with every field and no actions.
 //  4. As ada, create an identity and a policy: 403 fields-denied for both. Replace grace and the new
 //     policy: 403 fields-denied for both. Delete grace and the new policy: 403 Forbidden for both.
 //  5. As admin, list the identities and the policies: nothing was written.
@@ -564,9 +562,9 @@ func TestPolicies_ReadOnlyAudit(t *testing.T) {
 		readOnly[i] = withActions(identity)
 	}
 	assert.Equal(t, readOnly, asAda.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data)
-	assert.Equal(t, withPolicyActions(policies, "policy:readSchema"), listPolicies(asAda))
+	assert.Equal(t, withPolicyActions(policies), listPolicies(asAda))
 	assert.Equal(t, withActions(grace), asAda.Get(gracePath).DecodeResource[identity](http.StatusOK))
-	assert.Equal(t, withPolicyActions([]policy{audit}, "policy:readSchema")[0],
+	assert.Equal(t, withPolicyActions([]policy{audit})[0],
 		asAda.Get(auditPath).DecodeResource[policy](http.StatusOK))
 
 	// 4. Write.

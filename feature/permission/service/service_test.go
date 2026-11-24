@@ -48,7 +48,8 @@ var (
 	// owner is otherID as the owner of keys and secrets.
 	owner = &authz.Owner{ID: otherID, Groups: []uuid.UUID{uuid.MustParse("5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b")}}
 
-	errDB = errors.New("connection refused")
+	errDB       = errors.New("connection refused")
+	errDecision = errors.New("forbid failed to evaluate")
 )
 
 // newTestService returns a service on the test types that asks authorizer, with a mock owner loader.
@@ -234,7 +235,57 @@ func TestList_UnreadableOwner(t *testing.T) {
 	servicetest.AssertTranslated(t, err, ErrIdentityNotFound, authz.ErrOwnerNotFound)
 }
 
-// TestList_Errors checks that a failing authorizer or decision fails the list, unchanged.
+// TestList_FailedDecisions checks that an action whose decision fails is left out, without failing the list
+// or skipping the actions after it, so that one broken forbid doesn't fail the whole list.
+func TestList_FailedDecisions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("some resource", func(t *testing.T) {
+		t.Parallel()
+		authorizer, decider := newDeciding(t)
+		svc, _ := newTestService(t, authorizer)
+		decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(true, nil)
+		decider.EXPECT().CanSome(named("widget:spin"), mock.Anything).Return(false, errDecision).Once()
+		decider.EXPECT().CanSome(named("widget:delete"), mock.Anything).Return(true, nil).Once()
+		decider.EXPECT().CanSome(mock.Anything, mock.Anything).Return(false, nil)
+
+		got, err := svc.List(t.Context(), actor, actor, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, authz.AllowedActions{"widget:delete", "widget:create:name"}, got.AllowedActions)
+	})
+
+	t.Run("new resource", func(t *testing.T) {
+		t.Parallel()
+		authorizer, decider := newDeciding(t)
+		svc, _ := newTestService(t, authorizer)
+		decider.EXPECT().Hint(named("widget:create:name"), mock.Anything).Return(false, errDecision).Once()
+		decider.EXPECT().CanSome(named("widget:spin"), mock.Anything).Return(true, nil).Once()
+		decider.EXPECT().CanSome(mock.Anything, mock.Anything).Return(false, nil)
+
+		got, err := svc.List(t.Context(), actor, actor, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, authz.AllowedActions{"widget:spin"}, got.AllowedActions)
+	})
+
+	t.Run("owner", func(t *testing.T) {
+		t.Parallel()
+		authorizer, decider := newDeciding(t)
+		svc, owners := newTestService(t, authorizer)
+		owners.EXPECT().ReadableOwner(mock.Anything, decider, otherID).Return(owner, nil)
+		decider.EXPECT().Hint(named("key:create:name"), mock.Anything).Return(false, errDecision).Once()
+		decider.EXPECT().Hint(named("secret:reset"), mock.Anything).Return(true, nil).Once()
+		decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(false, nil)
+
+		got, err := svc.List(t.Context(), actor, actor, &otherID)
+
+		require.NoError(t, err)
+		assert.Equal(t, authz.AllowedActions{"secret:reset"}, got.AllowedActions)
+	})
+}
+
+// TestList_Errors checks that a failing authorizer fails the list, unchanged.
 func TestList_Errors(t *testing.T) {
 	t.Parallel()
 
@@ -245,41 +296,6 @@ func TestList_Errors(t *testing.T) {
 		svc, _ := newTestService(t, authorizer)
 
 		_, err := svc.List(t.Context(), actor, actor, nil)
-
-		servicetest.AssertTranslated(t, err, errDB, errDB)
-	})
-
-	t.Run("some resource", func(t *testing.T) {
-		t.Parallel()
-		authorizer, decider := newDeciding(t)
-		svc, _ := newTestService(t, authorizer)
-		decider.EXPECT().CanSome(mock.Anything, mock.Anything).Return(false, errDB).Once()
-
-		_, err := svc.List(t.Context(), actor, actor, nil)
-
-		servicetest.AssertTranslated(t, err, errDB, errDB)
-	})
-
-	t.Run("new resource", func(t *testing.T) {
-		t.Parallel()
-		authorizer, decider := newDeciding(t)
-		svc, _ := newTestService(t, authorizer)
-		decider.EXPECT().CanSome(mock.Anything, mock.Anything).Return(false, nil)
-		decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(false, errDB).Once()
-
-		_, err := svc.List(t.Context(), actor, actor, nil)
-
-		servicetest.AssertTranslated(t, err, errDB, errDB)
-	})
-
-	t.Run("owner", func(t *testing.T) {
-		t.Parallel()
-		authorizer, decider := newDeciding(t)
-		svc, owners := newTestService(t, authorizer)
-		owners.EXPECT().ReadableOwner(mock.Anything, decider, otherID).Return(owner, nil)
-		decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(false, errDB).Once()
-
-		_, err := svc.List(t.Context(), actor, actor, &otherID)
 
 		servicetest.AssertTranslated(t, err, errDB, errDB)
 	})

@@ -33,15 +33,17 @@ func TestDeclareType(t *testing.T) {
 	t.Parallel()
 	extra := NewAction("apikey:rotate")
 	readExtra := NewAction("apikey:readUsage", ActionGroupRead)
+	collection := NewAction("apikey:readStats", ActionGroupRead)
 
 	got := DeclareType(TypeSpec{
-		Type:    "APIKey",
-		Owned:   true,
-		Model:   reflect.TypeFor[testModel](),
-		Create:  reflect.TypeFor[testInput](),
-		Update:  reflect.TypeFor[testInput](),
-		Patch:   reflect.TypeFor[testPatch](),
-		Actions: []Action{extra, readExtra},
+		Type:              "APIKey",
+		Owned:             true,
+		Model:             reflect.TypeFor[testModel](),
+		Create:            reflect.TypeFor[testInput](),
+		Update:            reflect.TypeFor[testInput](),
+		Patch:             reflect.TypeFor[testPatch](),
+		Actions:           []Action{extra, readExtra},
+		CollectionActions: []Action{collection},
 	})
 
 	assert.Equal(t, "APIKey", got.Type())
@@ -53,14 +55,14 @@ func TestDeclareType(t *testing.T) {
 	assert.Equal(t, Declaration{
 		Type:    "APIKey",
 		Owned:   true,
-		Actions: []Action{got.Read(), got.Delete(), extra, readExtra},
+		Actions: []Action{got.Read(), got.Delete(), extra, readExtra, collection},
 		Fields:  []FieldActions{got.ReadFields(), got.CreateFields(), got.UpdateFields()},
 	}, got.Declaration())
 	assert.Equal(t,
 		[]string{"apikey:delete", "apikey:update:name", "apikey:update:ownerId", "apikey:rotate", "apikey:readUsage"},
-		got.Allowable(), "no read of the object or a field, and no create")
+		got.Allowable(), "no read of the object or a field, no create and no action on the collection")
 	assert.Equal(t, []string{
-		"apikey:read", "apikey:delete", "apikey:rotate", "apikey:readUsage",
+		"apikey:read", "apikey:delete", "apikey:rotate", "apikey:readUsage", "apikey:readStats",
 		"apikey:read:name", "apikey:read:ownerId", "apikey:read:createdAt",
 		"apikey:create:name", "apikey:create:ownerId",
 		"apikey:update:name", "apikey:update:ownerId",

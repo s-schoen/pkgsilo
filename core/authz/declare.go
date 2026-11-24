@@ -45,6 +45,11 @@ type TypeSpec struct {
 	Patch reflect.Type
 	// Actions are the further actions on the resources, such as group:addMember.
 	Actions []Action
+	// CollectionActions are the further actions on the resources as a whole rather than on one of them, such
+	// as policy:readSchema, which a service checks on a resource that stands for them all. They're declared
+	// like Actions, but no object's AllowedActions holds them, since what one object allows says nothing
+	// about them.
+	CollectionActions []Action
 }
 
 // TypeActions are the actions on a resource type that DeclareType derived from its TypeSpec.
@@ -62,8 +67,9 @@ type TypeActions struct {
 
 // DeclareType declares the resource type of spec and the actions on it: <type>:read, as a member of the
 // action group read, <type>:delete, the field actions of its Model, Create and Update, and its further
-// Actions. It panics on a spec whose types break the rules of TypeSpec, which is a bug that a feature's
-// package initialization reveals: a member without an action would be revealed or written unchecked.
+// Actions and CollectionActions. It panics on a spec whose types break the rules of TypeSpec, which is a
+// bug that a feature's package initialization reveals: a member without an action would be revealed or
+// written unchecked.
 func DeclareType(spec TypeSpec) TypeActions {
 	if spec.OnePerOwner && !spec.Owned {
 		panic(fmt.Sprintf("authz: type %s is OnePerOwner but not Owned", spec.Type))
@@ -92,7 +98,7 @@ func DeclareType(spec TypeSpec) TypeActions {
 	actions.declaration = Declaration{
 		Type:    spec.Type,
 		Owned:   spec.Owned,
-		Actions: append([]Action{actions.read, actions.delete}, spec.Actions...),
+		Actions: slices.Concat([]Action{actions.read, actions.delete}, spec.Actions, spec.CollectionActions),
 		Fields:  []FieldActions{actions.readFields, actions.createFields, actions.updateFields},
 	}
 

@@ -990,23 +990,6 @@ func TestGroupService_AuthorizationFails(t *testing.T) {
 		})
 	}
 
-	// The allowed action decisions, after every other decision allowed the request. They come before any
-	// write too.
-	for _, name := range []string{"create", "get", "list", "replace", "patch"} {
-		t.Run(name+" no allowed action decision", func(t *testing.T) {
-			t.Parallel()
-			authorizer, decider := newDeciding(t)
-			decider.EXPECT().Can(mock.Anything, mock.Anything).Return(true, nil).Maybe()
-			decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(false, errDecision)
-			// The mock fails the test if the repository writes anything.
-			svc, repo := newTestServiceWith(t, authorizer)
-			repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).Maybe()
-			repo.EXPECT().ListAll(mock.Anything).Return([]repository.GroupRecord{stored}, nil).Maybe()
-
-			assertFailed(t, all[name](svc))
-		})
-	}
-
 	// The decision on the identity, after the actor was allowed the action on the group.
 	memberActions := map[string]authz.Action{"add member": actionAddMember, "remove member": actionRemoveMember}
 	for name, action := range memberActions {

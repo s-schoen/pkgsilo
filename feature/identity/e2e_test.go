@@ -376,6 +376,32 @@ func TestIdentities_FailingPolicy(t *testing.T) {
 	api.Get(identitiesPath).AssertInternalError()
 }
 
+// TestIdentities_FailingWritePolicy checks that a policy that fails to evaluate on a write fails only that
+// write, and leaves the action out of allowedActions, rather than failing every read that lists it:
+//
+//  1. Add a forbid on identity:delete that fails to evaluate.
+//  2. Get the admin and list the identities: 200 for both, with every action but identity:delete.
+//  3. Delete the admin: 500, and the admin still exists.
+func TestIdentities_FailingWritePolicy(t *testing.T) {
+	t.Parallel()
+	api, db := apptest.NewWithDB(t)
+	admin := api.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data[0]
+	adminPath := identitiesPath + "/" + admin.ID.String()
+
+	// 1. Add the policy.
+	insertPolicy(t, db,
+		`forbid (principal, action == Action::"identity:delete", resource) when { resource.missing == principal };`)
+
+	// 2. Get and list.
+	want := withActions(admin, "identity:update:username", "identity:update:displayName")
+	assert.Equal(t, want, api.Get(adminPath).DecodeResource[identity](http.StatusOK))
+	assert.Equal(t, []identity{want}, api.Get(identitiesPath).DecodeCollection[identity](http.StatusOK).Data)
+
+	// 3. Delete.
+	api.Delete(adminPath).AssertInternalError()
+	api.Get(adminPath).AssertStatus(http.StatusOK)
+}
+
 // assertFieldsDenied asserts a fields-denied problem that points to the given members of the request body,
 // in that order.
 func assertFieldsDenied(t *testing.T, resp *apitest.Response, pointers ...string) {

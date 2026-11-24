@@ -886,26 +886,6 @@ func TestIdentityService_AuthorizationFails(t *testing.T) {
 				assert.NotErrorIs(t, err, authz.ErrDenied)
 			})
 		}
-		// The allowed action decisions, after every other decision allowed the request. They come before any
-		// write too.
-		if name != "delete" {
-			t.Run(name+" no allowed action decision", func(t *testing.T) {
-				t.Parallel()
-				authorizer, decider := newDeciding(t)
-				decider.EXPECT().Can(mock.Anything, mock.Anything).Return(true, nil).Maybe()
-				decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(false, errDecision)
-				// The mock fails the test if the repository writes anything.
-				svc, repo := newTestServiceWith(t, authorizer)
-				repo.EXPECT().Get(mock.Anything, stored.ID).Return(stored, nil).Maybe()
-				repo.EXPECT().ListAll(mock.Anything).Return([]repository.IdentityRecord{stored}, nil).Maybe()
-				repo.EXPECT().ListMemberships(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
-
-				err := call(svc)
-
-				require.ErrorIs(t, err, errDecision)
-				assert.NotErrorIs(t, err, authz.ErrDenied)
-			})
-		}
 		// The write decisions, after the actor was allowed to read the identity.
 		if name == "replace" || name == "patch" || name == "delete" {
 			t.Run(name+" no write decision", func(t *testing.T) {

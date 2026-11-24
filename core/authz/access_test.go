@@ -94,19 +94,33 @@ func TestTypeActions_Access_NothingAllowed(t *testing.T) {
 	assert.Empty(t, access.AllowedActions())
 }
 
+// TestTypeActions_Access_Error checks that a failing field read fails Access, since leaving the field out
+// would hide one that may be readable.
 func TestTypeActions_Access_Error(t *testing.T) {
 	t.Parallel()
-	for _, fail := range []string{"thing:read:ownerId", "thing:update:name"} {
-		t.Run(fail, func(t *testing.T) {
-			t.Parallel()
 
-			access, err := accessActions.Access(&purposeDecider{allowed: []string{"thing:delete"}, fail: fail},
-				accessResource)
+	access, err := accessActions.Access(
+		&purposeDecider{allowed: []string{"thing:delete"}, fail: "thing:read:ownerId"}, accessResource)
 
-			require.ErrorIs(t, err, errDecision)
-			assert.Equal(t, Access{}, access)
-		})
+	require.ErrorIs(t, err, errDecision)
+	assert.Equal(t, Access{}, access)
+}
+
+// TestTypeActions_Access_HintError checks that an action whose hint fails is left out, without failing Access
+// or skipping the actions after it, so that a broken forbid on a write doesn't fail every read.
+func TestTypeActions_Access_HintError(t *testing.T) {
+	t.Parallel()
+	decider := &purposeDecider{
+		allowed: []string{"thing:read:name", "thing:delete", "thing:update:name", "thing:archive"},
+		fail:    "thing:update:name",
 	}
+
+	access, err := accessActions.Access(decider, accessResource)
+
+	require.NoError(t, err)
+	assert.Equal(t, AllowedActions{"thing:delete", "thing:archive"}, access.AllowedActions())
+	assert.Equal(t, Visible("Ada"), access.Fields().Reveal("name", "Ada"))
+	assert.Equal(t, accessActions.Allowable(), decider.hinted, "every action must be hinted")
 }
 
 // TestTypeActions_AccessIf checks that AccessIf checks the read of the object first, and gives an object

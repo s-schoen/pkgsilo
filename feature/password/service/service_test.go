@@ -681,20 +681,4 @@ func TestPasswordService_AuthorizationFails(t *testing.T) {
 			})
 		}
 	}
-
-	// The allowed action decisions, after every other decision allowed the request. They come before any
-	// write too.
-	for _, name := range []string{"get", "set"} {
-		t.Run(name+" no allowed action decision", func(t *testing.T) {
-			t.Parallel()
-			authorizer, decider := newDeciding(t)
-			// The mock fails the test on a write.
-			svc, repo, _ := newTestServiceWith(t, authorizer)
-			expectStored(repo, true)
-			decider.EXPECT().Can(mock.Anything, passwordResource).Return(true, nil).Maybe()
-			decider.EXPECT().Hint(mock.Anything, passwordResource).Return(false, errDecision)
-
-			assertFailed(t, calls(t)[name](svc))
-		})
-	}
 }

@@ -6445,8 +6445,7 @@
               "enum": [
                 "policy:delete",
                 "policy:update:name",
-                "policy:update:source",
-                "policy:readSchema"
+                "policy:update:source"
               ]
             },
             "description": "The actions that the policies allow the caller to do to it, such as policy:delete or policy:update:source. Absent only from a new policy that the caller may not read."

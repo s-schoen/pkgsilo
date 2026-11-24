@@ -16,7 +16,7 @@ The API answers an `*authz.FieldsDeniedError` with `request.FieldsDeniedProblem`
   - `<type>:create:<field>` and `<type>:update:<field>`, grouped under `<type>:create` and `<type>:update`, for every member of `TypeSpec.Create` and `TypeSpec.Update`, each tagged `authz:"<field>"` with the name of its request member.
     `TypeSpec.Patch` holds the same members as pointers.
   - `<type>:read:<field>` for every field of the domain model, `TypeSpec.Model`, but the ID, grouped under `read` and `<type>:readFields`.
-- Further actions, declared with `authz.NewAction`, those that read in `authz.ActionGroupRead`.
+- Further actions, declared with `authz.NewAction`, those that read in `authz.ActionGroupRead`: those on one object in `TypeSpec.Actions`, such as `group:addMember`, and those on the resources as a whole in `TypeSpec.CollectionActions`, such as `policy:readSchema`, which the service checks on a resource that stands for them all.
 
 `Actions()` exports them: `Actions().Declaration()` is the `authz.Declaration` that `app/app.go` adds to `authz.Schema`, so that saving a policy with an undeclared action fails validation, and `Actions().ReadFields().Fields()` returns the read field names for the handler test.
 
@@ -35,8 +35,9 @@ The service builds it from its record with `authz.NewMapper[<Name>Record, <Model
 `NewMapper` fails the package's initialization if a member of the model but `AllowedActions` has no member of the record with the same name and type, so that no field can be forgotten.
 
 `AllowedActions` lists the actions that the actor may do to the object, so that a client offers only those: every action of `actions.Allowable()`, which is `<type>:delete`, `<type>:update:<field>` and the further actions, read ones too, such as `group:readMembers`.
-It holds no `<type>:read`, `<type>:read:<field>` (the object and its visible fields tell those) and no `<type>:create:<field>` (no existing object has them).
+It holds no `<type>:read`, `<type>:read:<field>` (the object and its visible fields tell those), no `<type>:create:<field>` (no existing object has them) and no collection action (one object says nothing about them).
 `Access` enforces the field reads with `Can` and asks about the actions with `Decider.Hint`, which decides alike but counts as a hint in the decisions metric.
+An action whose hint fails is left out rather than failing the read, since the request it hints at fails the same way.
 The list is advisory: the service still checks every request.
 
 The service gets the access of one object after its read check, of a list only for the rows on the page, and of a write before writing, as the object was before it.
