@@ -57,6 +57,7 @@ Shared components take the decision as a prop instead of being wrapped in a cond
 - `NavItem` takes `action`, and hides when `NavList`'s `allowedActions` (from `usePermissions()`) don't list it; a `NavSection` without a visible item hides.
   `NavSection` inspects its children, so pass the `NavItem`s themselves, not wrappers.
 - `InlineEdit`, `InlineTextField` and the form's `InlineTextField` take `isReadOnly`: the value as plain text, without the edit mode.
+  An edit that is open when it turns read-only, as after a refetch, ends as a cancel does, once a running save has finished.
 - `DataTable` takes `canDelete(row)`: Delete shows while one of the selected rows qualifies, and deletes only those.
 - `ActionMenu` items and `PageHeader` actions take `isVisible`; a menu without a visible item doesn't render its trigger, and a header without a visible action has no actions container.
   Hide the header action that holds a menu with the same booleans, so that no empty place stays.
@@ -80,10 +81,18 @@ An object's page needs no guard: an object that isn't there, since the identity 
 ## Freshness
 
 - The list refetches on every window focus and reconnect, and stays fresh otherwise, so that a component that mounts later reads the list the route loaded.
-- Any `403`, `fields-denied` included, invalidates every permissions query and the affected collection, in one place for every request (`invalidateOnForbidden`, which `AuthenticatedLayout` subscribes to through `useInvalidateOnForbidden`): don't handle that per feature.
+- Any `403` of a write, `fields-denied` included, invalidates every permissions query and the affected collection, in one place for every request (`invalidateOnForbidden`, which `AuthenticatedLayout` subscribes to through `useInvalidateOnForbidden`): don't handle that per feature.
+  A denied read invalidates nothing, since its own query would refetch and be denied again without end.
 - An object's `allowedActions` refresh with its collection.
 - The slices of policies, groups and group members invalidate the permissions queries (`permissionsQueryKeyPrefix`) after the signed-in identity's own writes there, since those writes change what it may do.
 - Signing out removes every query, the permissions too.
+
+## An unknown list
+
+A permissions list that fails with a server error, or without an answer, is unknown rather than an error, so that no page fails over a hint (`permissionsQueryOptions`).
+It allows every action: `can` answers yes, `allowedActions` is `undefined`, which `NavList` takes as hiding nothing, and `requirePermission` lets the route through.
+It loads again every 10 seconds while a component shows it, and on focus and reconnect.
+Every other error response is an answer: a `401` leads to the sign-in page, a `404` with `owner` fails the route.
 
 ## Tests
 

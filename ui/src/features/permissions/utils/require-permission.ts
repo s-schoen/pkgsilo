@@ -2,6 +2,7 @@ import { notFound } from "@tanstack/react-router";
 
 import {
   allowedActionsOf,
+  allowsAction,
   permissionsQueryOptions,
 } from "@/features/permissions/api/permissions-query.ts";
 
@@ -10,8 +11,9 @@ import type { Action } from "@/features/permissions/types/action.ts";
 import type { QueryClient } from "@tanstack/react-query";
 
 // For a route's beforeLoad: renders the page that doesn't exist (NotFound) unless the signed-in
-// identity's permissions list action, as the API answers an object that it may not read. With
-// owner, the list of the actions on owner's resources, which it loads first:
+// identity's permissions list action, as the API answers an object that it may not read, or are
+// unknown, as the API failed. With owner, the list of the actions on owner's resources, which it
+// loads first:
 //
 //   beforeLoad: ({ context }) => requirePermission(context.queryClient, "identity:create:username"),
 //   notFoundComponent: NotFound,
@@ -27,7 +29,7 @@ export async function requirePermission(
     await queryClient.ensureQueryData(permissionsQueryOptions(owner)),
   );
   const required: ReadonlyArray<Action> = typeof action === "string" ? [action] : action;
-  if (!required.every((each) => allowedActions.includes(each))) {
+  if (!required.every((each) => allowsAction(allowedActions, each))) {
     throw notFound();
   }
 }
