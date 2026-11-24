@@ -11,7 +11,8 @@ type InlineTextFieldProps = {
   // Called when the edit mode starts and ends, as the UI library's InlineEdit's.
   onEditingChange?: (isEditing: boolean) => void;
   placeholder?: string;
-  isDisabled?: boolean;
+  // Renders the value as plain text, without the edit mode, as for a value the actor may not change.
+  isReadOnly?: boolean;
   variant?: "default" | "title";
 };
 

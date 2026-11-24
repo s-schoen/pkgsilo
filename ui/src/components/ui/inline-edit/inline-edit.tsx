@@ -43,8 +43,8 @@ export type InlineEditProps<T> = {
   // value: a caller whose value can change meanwhile, such as from another tab, takes the latest
   // one while the user isn't editing.
   onEditingChange?: (isEditing: boolean) => void;
-  // Renders the value as plain text, without the edit mode, as for a value the actor can't change.
-  isDisabled?: boolean;
+  // Renders the value as plain text, without the edit mode, as for a value the actor may not change.
+  isReadOnly?: boolean;
   // The size: default for a sidebar's value, title for a page's large title.
   variant?: "default" | "title";
 };
@@ -65,7 +65,7 @@ export function InlineEdit<T>({
   renderEdit,
   onSave,
   onEditingChange,
-  isDisabled = false,
+  isReadOnly = false,
   variant = "default",
 }: InlineEditProps<T>) {
   const [isEditing, setIsEditing] = useState(false);
@@ -91,7 +91,7 @@ export function InlineEdit<T>({
 
   const rootClassName = `${styles.inlineEdit} ${variant === "title" ? styles.title : ""}`;
 
-  if (isDisabled) {
+  if (isReadOnly) {
     return (
       <div className={rootClassName}>
         <div className={styles.value}>{renderView(value)}</div>
