@@ -1,4 +1,3 @@
-import IconDots from "@tabler/icons-react/icons/IconDots";
 import IconTrash from "@tabler/icons-react/icons/IconTrash";
 import { eq, useLiveQuery } from "@tanstack/react-db";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
@@ -8,9 +7,8 @@ import { useGetCurrentSession } from "@/api/gen/client/sessions/sessions.ts";
 import { NotFound } from "@/components/errors/not-found.tsx";
 import { DetailLayout } from "@/components/layouts/detail-layout.tsx";
 import { PageHeader } from "@/components/layouts/page-header.tsx";
-import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Menu, MenuItem, MenuTrigger } from "@/components/ui/menu";
+import { ActionMenu } from "@/components/ui/menu";
 import { identitiesCollection } from "@/features/identities/api/identities-collection.ts";
 import { IdentityProperties } from "@/features/identities/components/identity-properties.tsx";
 import { IdentityTextField } from "@/features/identities/components/identity-text-field.tsx";
@@ -54,13 +52,15 @@ export function IdentityPage() {
     <>
       <PageHeader
         breadcrumbs={[{ label: m.identities(), href: "/identities" }, { label: name }]}
-        actions={
-          // The signed-in identity can't delete itself; nothing is offered until the session
-          // tells which one that is.
-          currentId !== undefined && currentId !== identity.id ? (
-            <IdentityActions identity={identity} onDeletingChange={setDeleting} />
-          ) : undefined
-        }
+        actions={[
+          {
+            id: "menu",
+            element: <IdentityActions identity={identity} onDeletingChange={setDeleting} />,
+            // The signed-in identity can't delete itself; nothing is offered until the session
+            // tells which one that is.
+            isVisible: currentId !== undefined && currentId !== identity.id,
+          },
+        ]}
       />
       <DetailLayout
         title={
@@ -116,21 +116,20 @@ function IdentityActions({ identity, onDeletingChange }: IdentityActionsProps) {
 
   return (
     <>
-      <MenuTrigger>
-        <Button variant="ghost" icon={IconDots} aria-label={m.identityActions()} />
-        <Menu
-          placement="bottom end"
-          onAction={(action) => {
-            if (action === "delete") {
+      <ActionMenu
+        aria-label={m.identityActions()}
+        items={[
+          {
+            id: "delete",
+            label: m.identityDelete(),
+            icon: IconTrash,
+            variant: "danger",
+            onAction: () => {
               setDeleteOpen(true);
-            }
-          }}
-        >
-          <MenuItem id="delete" icon={IconTrash} variant="danger">
-            {m.identityDelete()}
-          </MenuItem>
-        </Menu>
-      </MenuTrigger>
+            },
+          },
+        ]}
+      />
       <ConfirmDialog
         isOpen={isDeleteOpen}
         onOpenChange={setDeleteOpen}

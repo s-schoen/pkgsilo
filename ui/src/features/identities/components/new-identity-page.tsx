@@ -52,19 +52,25 @@ export function NewIdentityPage() {
       <form.Form layout="page">
         <PageHeader
           breadcrumbs={[{ label: m.identities(), href: "/identities" }, { label: m.identityNew() }]}
-          actions={
-            <div className={styles.actions}>
-              <Button
-                variant="secondary"
-                onPress={() => {
-                  void navigate({ to: "/identities" });
-                }}
-              >
-                {m.cancel()}
-              </Button>
-              <form.SubmitButton label={m.identityCreate()} />
-            </div>
-          }
+          actions={[
+            {
+              // Cancel and Create stay side by side, as one action: they don't wrap apart.
+              id: "form",
+              element: (
+                <div className={styles.actions}>
+                  <Button
+                    variant="secondary"
+                    onPress={() => {
+                      void navigate({ to: "/identities" });
+                    }}
+                  >
+                    {m.cancel()}
+                  </Button>
+                  <form.SubmitButton label={m.identityCreate()} />
+                </div>
+              ),
+            },
+          ]}
         />
         <DetailLayout
           title={
