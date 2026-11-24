@@ -15,7 +15,8 @@ import { isUnauthorized } from "@/features/session/utils/unauthorized.ts";
 //
 // The signed-in identity's permissions load together with the session, so that no page renders
 // without them: the pages hide what the policies deny (usePermissions). A route that the identity
-// may not use renders NotFound in the app's frame (requirePermission).
+// may not use renders NotFound in the app's frame (requirePermission), with a notFoundComponent of
+// its own: this route's would replace the frame.
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ context, location }) => {
     try {

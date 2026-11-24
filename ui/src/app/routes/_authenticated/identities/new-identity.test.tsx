@@ -9,7 +9,7 @@ import { displayNameSchema, usernameSchema } from "@/features/identities/utils/i
 import { m } from "@/paraglide/messages.js";
 import { renderRoute } from "@/test/render.tsx";
 import { server } from "@/test/server.ts";
-import { signedIn, testIdentity } from "@/test/session.ts";
+import { permissions, signedIn, testIdentity } from "@/test/session.ts";
 
 import type { CreateIdentityRequest } from "@/api/gen/client/model/createIdentityRequest.ts";
 import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
@@ -74,6 +74,21 @@ describe("/identities/new", () => {
     expect(within(breadcrumbs).getByText(m.identityNew())).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: m.identityCreate() })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: m.cancel() })).toBeInTheDocument();
+  });
+
+  it("is a page that doesn't exist without the create of every field", async () => {
+    server.use(...signedIn(), listIdentities());
+    // After signedIn(), whose permissions it replaces.
+    server.use(permissions(["identity:read", "identity:create:username"]));
+    renderRoute("/identities/new");
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: m.notFound() }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: m.username() })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: m.identityCreate() })).not.toBeInTheDocument();
+    // In the app's frame, with its navigation.
+    expect(screen.getByRole("navigation", { name: m.mainNavigation() })).toBeInTheDocument();
   });
 
   it("creates the identity and replaces the page with its own", async () => {
