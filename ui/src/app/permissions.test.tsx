@@ -1,6 +1,7 @@
+import { focusManager } from "@tanstack/react-query";
 import { screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { patchIdentity } from "@/api/gen/client/identities/identities.ts";
 import { getListPermissionsMockHandler } from "@/api/gen/client/permissions/permissions.msw.ts";
@@ -24,6 +25,10 @@ function countedPermissions() {
 
 // The permissions of the signed-in identity, through the whole app.
 describe("permissions", () => {
+  afterEach(() => {
+    focusManager.setFocused(undefined);
+  });
+
   it("loads the permissions with the session", async () => {
     server.use(...signedIn());
     const requests = countedPermissions();
@@ -33,29 +38,33 @@ describe("permissions", () => {
     expect(requests.count).toBe(1);
   });
 
-  it("fails a page at once when the permissions don't load", async () => {
-    const requests = { count: 0 };
+  it("hides nothing while the permissions don't load, and loads them again", async () => {
+    const answer = { failing: true };
     server.use(...signedIn());
     // After signedIn(), whose permissions it replaces.
     server.use(
-      http.get("/api/v1/identities/me/permissions", () => {
-        requests.count++;
-        return HttpResponse.json(
-          { type: "about:blank", title: "Bad Gateway", status: 502 },
-          { status: 502, headers: { "Content-Type": "application/problem+json" } },
-        );
-      }),
+      http.get("/api/v1/identities/me/permissions", () =>
+        answer.failing
+          ? HttpResponse.json(
+              { type: "about:blank", title: "Bad Gateway", status: 502 },
+              { status: 502, headers: { "Content-Type": "application/problem+json" } },
+            )
+          : HttpResponse.json({ data: { id: testIdentity.id, allowedActions: [] } }),
+      ),
     );
-    const { router } = renderRoute(
-      "/",
-      createClients({ defaultOptions: { queries: { retryDelay: 0 } } }),
-    );
+    renderRoute("/", createClients({ defaultOptions: { queries: { retryDelay: 0 } } }));
+
+    expect(await screen.findByText(m.welcome())).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: m.identities() })).toBeInTheDocument();
+
+    answer.failing = false;
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
 
     await waitFor(() => {
-      expect(router.state.matches.some((match) => match.status === "error")).toBe(true);
+      expect(screen.queryByRole("link", { name: m.identities() })).not.toBeInTheDocument();
     });
-    expect(screen.queryByText(m.welcome())).not.toBeInTheDocument();
-    expect(requests.count).toBe(1);
+    expect(screen.getByText(m.welcome())).toBeInTheDocument();
   });
 
   it("refetches the permissions after a denied request", async () => {

@@ -1,7 +1,11 @@
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
-import { getGetGroupQueryKey } from "@/api/gen/client/groups/groups.ts";
+import {
+  getGetGroupQueryKey,
+  getListGroupMembersQueryKey,
+  listGroupMembers,
+} from "@/api/gen/client/groups/groups.ts";
 import {
   getGetIdentityQueryKey,
   getListIdentitiesQueryKey,
@@ -45,6 +49,7 @@ const keys = {
   identity: getGetIdentityQueryKey(id),
   apiKeys: [`/api/v1/identities/${id}/api-keys`],
   group: getGetGroupQueryKey(id),
+  members: getListGroupMembersQueryKey(id),
 };
 
 describe("collectionPath", () => {
@@ -84,6 +89,27 @@ describe("invalidateOnForbidden", () => {
     // Not the collections below an identity, nor another type's.
     expect(isInvalidated(keys.apiKeys)).toBe(false);
     expect(isInvalidated(keys.group)).toBe(false);
+  });
+
+  it("leaves the queries after a denied read, whose refetch would be denied again", async () => {
+    server.use(
+      http.get("/api/v1/groups/:id/members", () =>
+        HttpResponse.json(
+          { type: "about:blank", title: "Forbidden", status: 403 },
+          { status: 403, headers: { "Content-Type": "application/problem+json" } },
+        ),
+      ),
+    );
+    const queryClient = clientWith(Object.values(keys));
+    const stop = invalidateOnForbidden(queryClient);
+
+    await expect(listGroupMembers(id)).rejects.toMatchObject({ status: 403 });
+    stop();
+
+    const invalidated = Object.entries(keys)
+      .filter(([, key]) => queryClient.getQueryState(key)?.isInvalidated)
+      .map(([name]) => name);
+    expect(invalidated).toEqual([]);
   });
 
   it("leaves the queries after another error", async () => {

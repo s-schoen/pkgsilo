@@ -14,6 +14,11 @@ export function collectionPath(path: string): string {
   return objectSegment.test(segments.at(-1) ?? "") ? segments.slice(0, -1).join("/") : path;
 }
 
+// Whether a request of this method only reads.
+function isRead(method: string): boolean {
+  return ["GET", "HEAD"].includes(method.toUpperCase());
+}
+
 // Whether a query's key, whose first element is its path as the generated client builds it, is of
 // the collection at path: the list or one of its objects.
 function isOfCollection(queryKey: ReadonlyArray<unknown>, path: string): boolean {
@@ -27,14 +32,15 @@ function isOfCollection(queryKey: ReadonlyArray<unknown>, path: string): boolean
   );
 }
 
-// Refreshes what a denied request (403, fields-denied too) shows to be outdated, for every request
-// of the generated client, whichever query, mutation or collection sent it: the signed-in identity's
+// Refreshes what a denied write (403, fields-denied too) shows to be outdated, for every request of
+// the generated client, whichever mutation or collection sent it: the signed-in identity's
 // permissions, and the collection that the request was about, whose objects' allowedActions may
 // have changed too. A collection of TanStack DB loads through its query, so it refetches too.
-// Returns the function that stops it.
+// A denied read is left alone: it's a query of the collection that it would refresh, whose refetch
+// would only be denied again, and so on without end. Returns the function that stops it.
 export function invalidateOnForbidden(queryClient: QueryClient): () => void {
-  return onErrorResponse(({ status, path }) => {
-    if (status !== 403) {
+  return onErrorResponse(({ method, status, path }) => {
+    if (status !== 403 || isRead(method)) {
       return;
     }
     // Every list, even one that no component shows at the moment: a route's requirePermission

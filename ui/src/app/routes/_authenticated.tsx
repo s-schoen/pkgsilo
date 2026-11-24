@@ -14,7 +14,9 @@ import { isUnauthorized } from "@/features/session/utils/unauthorized.ts";
 // page blank for seconds before the error shows.
 //
 // The signed-in identity's permissions load together with the session, so that no page renders
-// without them: the pages hide what the policies deny (usePermissions). A route that the identity
+// without them: the pages hide what the policies deny (usePermissions). A list that fails to load
+// with a server error fails no page: it's unknown and hides nothing until it loads
+// (permissionsQueryOptions); only its 401 leads to the sign-in page. A route that the identity
 // may not use renders NotFound in the app's frame (requirePermission), with a notFoundComponent of
 // its own: this route's would replace the frame.
 export const Route = createFileRoute("/_authenticated")({

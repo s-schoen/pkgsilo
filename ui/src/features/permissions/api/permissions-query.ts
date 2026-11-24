@@ -11,6 +11,18 @@ import type { listPermissionsResponseSuccess } from "@/api/gen/client/permission
 // signed-in identity's own.
 export type PermissionsOwner = string;
 
+// What a permissions query holds: the API's answer, or null while the list is unknown, since the
+// API failed or didn't answer.
+export type PermissionsResponse = listPermissionsResponseSuccess | null;
+
+// The actions that a permissions list allows, or undefined while the list is unknown: then every
+// action counts as allowed (allowsAction), since the UI may offer what's then denied but never
+// hides what's allowed, and the API still decides every request.
+export type AllowedActions = ReadonlyArray<string> | undefined;
+
+// How often an unknown list is loaded again, in milliseconds, while a component shows it.
+export const unknownPermissionsRefetchInterval = 10_000;
+
 // The prefix of every permissions query's key, with and without owner: invalidating it refreshes
 // them all.
 export const permissionsQueryKeyPrefix = getListPermissionsQueryKey("me");
@@ -24,19 +36,51 @@ export const permissionsQueryKeyPrefix = getListPermissionsQueryKey("me");
 // otherwise, so that a component that mounts later, such as the navigation, reads the list that the
 // route loaded. Built with queryOptions instead of the generated query options, whose queryFn
 // useSuspenseQuery doesn't take.
+//
+// A list that fails to load with a server error, or without an answer, is unknown rather than an
+// error, so that no page fails over a hint: it allows every action, and loads again every
+// unknownPermissionsRefetchInterval until it's known. Any other error response is an answer: a
+// 401 leads to the sign-in page (redirectOnUnauthorized), and a 404 tells an owner that the
+// identity may not read.
 export function permissionsQueryOptions(owner?: PermissionsOwner) {
   const params = owner === undefined ? undefined : { owner };
   return queryOptions({
     queryKey: getListPermissionsQueryKey("me", params),
-    queryFn: ({ signal }) => listPermissions("me", params, { signal }),
-    staleTime: Infinity,
+    queryFn: async ({ signal }): Promise<PermissionsResponse> => {
+      try {
+        return await listPermissions("me", params, { signal });
+      } catch (error) {
+        if (signal.aborted || !leavesUnknown(error)) {
+          throw error;
+        }
+        return null;
+      }
+    },
+    staleTime: (query) => (query.state.data === null ? 0 : Infinity),
+    refetchInterval: (query) =>
+      query.state.data === null ? unknownPermissionsRefetchInterval : false,
     refetchOnWindowFocus: "always",
     refetchOnReconnect: "always",
     select: allowedActionsOf,
   });
 }
 
-// The actions that a response of the permissions endpoint lists.
-export function allowedActionsOf(response: listPermissionsResponseSuccess): Array<string> {
-  return response.data.data.allowedActions ?? [];
+// Whether a failed request leaves the list unknown: an error response of the server (5xx), or no
+// response at all, which has no status.
+function leavesUnknown(error: unknown): boolean {
+  const status =
+    error instanceof Error && "status" in error && typeof error.status === "number"
+      ? error.status
+      : undefined;
+  return status === undefined || status >= 500;
+}
+
+// The actions that a permissions query's data lists, or undefined if the list is unknown.
+export function allowedActionsOf(response: PermissionsResponse): AllowedActions {
+  return response === null ? undefined : (response.data.data.allowedActions ?? []);
+}
+
+// Whether allowedActions allow action: if they list it, or if the list is unknown.
+export function allowsAction(allowedActions: AllowedActions, action: string): boolean {
+  return allowedActions === undefined || allowedActions.includes(action);
 }
