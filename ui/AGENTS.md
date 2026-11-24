@@ -54,7 +54,7 @@ The prek hooks `oxfmt` and `oxlint`, which runs `task ui:lint` and so stylelint 
 Rules:
 
 - Imports go one way: shared code (`api`, `components`, `hooks`, `lib`, `utils`) → `features` → `app`; `no-restricted-imports` in `oxlint.config.ts` checks it.
-  A route composes features: a feature imports no other feature, which no lint rule checks.
+  A route composes features: a feature imports no other feature, which no lint rule checks, except the permissions feature, which a resource's permissions hook imports (`ui/docs/agents/permissions.md`).
 - Import the file itself through the `@/` alias, as in `@/features/home/components/home-page.tsx`.
   A component of the UI library is the exception: import it by its folder, as `@/components/ui/button`, whose `index.ts` is its public API; `no-restricted-imports` checks it.
 - File names are kebab-case, except the route files, whose names are the URL's syntax.
@@ -115,5 +115,6 @@ Read before you work on:
 - **Collections** (TanStack DB, `useLiveQuery`): `ui/docs/agents/client-store.md`.
 - **Forms** (`useAppForm`, field components, zod schemas): `ui/docs/agents/forms.md`.
 - **Messages** (`messages/`, locales): `ui/docs/agents/translations.md`.
+- **Permissions** (hiding what the signed-in identity may not do, `use<Resource>Permissions`, route guards): `ui/docs/agents/permissions.md`.
 - **Tests** (`*.test.ts(x)`, MSW, `@/test/render`): `ui/docs/agents/tests.md`.
 - **Stories** (`*.stories.tsx`, `.storybook/`): `ui/docs/agents/stories.md`.

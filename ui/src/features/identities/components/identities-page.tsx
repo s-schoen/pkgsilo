@@ -15,6 +15,7 @@ import {
   identityGroupingOptions,
 } from "@/features/identities/components/identity-columns.tsx";
 import { useDeleteIdentities } from "@/features/identities/hooks/use-delete-identities.ts";
+import { useIdentityPermissions } from "@/features/identities/hooks/use-identity-permissions.ts";
 import { m } from "@/paraglide/messages.js";
 import { routeHref } from "@/utils/route-href.ts";
 
@@ -27,7 +28,8 @@ const defaults: DataTableSearchDefaults = { sorting: [{ id: "displayName", desc:
 
 // The list of identities, at /identities: every identity the actor may read, which the route's
 // loader has loaded into identitiesCollection. Its search, filter, order and grouping live in the
-// URL. The user deletes the selected identities, except the signed-in one.
+// URL. The user creates an identity and deletes the selected ones, as far as the actor may
+// (useIdentityPermissions).
 export function IdentitiesPage() {
   const { data: identities, isLoading } = useLiveQuery((q) =>
     q.from({ identity: identitiesCollection }),
@@ -37,6 +39,7 @@ export function IdentitiesPage() {
   const search = useDataTableSearch(route, { filters: IDENTITY_FILTERS, defaults });
   const navigate = useNavigate();
   const deleteIdentities = useDeleteIdentities();
+  const { canCreate, of } = useIdentityPermissions();
   const newIdentity = () => {
     void navigate({ to: "/identities/new" });
   };
@@ -60,6 +63,7 @@ export function IdentitiesPage() {
                 {m.identityNew()}
               </Button>
             ),
+            isVisible: canCreate,
           },
         ]}
       />
@@ -74,14 +78,14 @@ export function IdentitiesPage() {
         onDelete={async (selected) => {
           await deleteIdentities(selected);
         }}
-        // The signed-in identity can't delete itself; nothing is deleted until the session tells
-        // which one that is.
-        canDelete={(identity) => currentId !== undefined && identity.id !== currentId}
+        canDelete={(identity) => of(identity).canDelete}
         emptyState={
           <DataTableEmptyState icon={IconUsers} message={m.identitiesEmpty()}>
-            <Button variant="secondary" onPress={newIdentity}>
-              {m.identityNew()}
-            </Button>
+            {canCreate && (
+              <Button variant="secondary" onPress={newIdentity}>
+                {m.identityNew()}
+              </Button>
+            )}
           </DataTableEmptyState>
         }
         {...search}

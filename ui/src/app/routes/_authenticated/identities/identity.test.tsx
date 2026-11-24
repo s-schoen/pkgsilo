@@ -7,6 +7,7 @@ import {
   getGetIdentityMockHandler,
   getListIdentitiesMockHandler,
 } from "@/api/gen/client/identities/identities.msw.ts";
+import { IdentityResponseAllowedActionsItem } from "@/api/gen/client/model/identityResponseAllowedActionsItem.ts";
 import { toastQueue } from "@/components/ui/toast";
 import { identitiesCollection } from "@/features/identities/api/identities-collection.ts";
 import { PKGSILO_ID } from "@/features/identities/utils/identity-name.ts";
@@ -14,12 +15,15 @@ import { m } from "@/paraglide/messages.js";
 import { createTestClients } from "@/test/clients.ts";
 import { renderRoute } from "@/test/render.tsx";
 import { server } from "@/test/server.ts";
-import { signedIn, testIdentity } from "@/test/session.ts";
+import { permissions, signedIn, testIdentity } from "@/test/session.ts";
 
 import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
 import type { PatchIdentityRequest } from "@/api/gen/client/model/patchIdentityRequest.ts";
 
 const hour = 60 * 60 * 1000;
+
+// Every action on an identity: the actor may do everything to ada and grace.
+const allowedActions = Object.values(IdentityResponseAllowedActionsItem);
 
 // The signed-in identity, which pkgsilo created and grace changed last; grace, without a display
 // name, whom ada created; and an identity of which the actor reads only the id and a creator that
@@ -30,20 +34,22 @@ const ada: IdentityResponse = {
   createdAt: new Date(Date.now() - 48 * hour).toISOString(),
   updatedBy: "00000000-0000-4000-8000-000000000003",
   updatedAt: new Date(Date.now() - 3 * hour).toISOString(),
+  allowedActions,
 };
 const grace: IdentityResponse = {
   id: "00000000-0000-4000-8000-000000000003",
   username: "grace",
   createdBy: testIdentity.id,
+  allowedActions,
 };
 const hidden: IdentityResponse = {
   id: "00000000-0000-4000-8000-000000000004",
   createdBy: "00000000-0000-4000-8000-000000000099",
 };
 
-function listIdentities() {
+function listIdentities(identities: Array<IdentityResponse> = [ada, grace, hidden]) {
   return getListIdentitiesMockHandler({
-    data: [ada, grace, hidden],
+    data: identities,
     pagination: { offset: 0, limit: 100, nextOffset: null },
   });
 }
@@ -366,5 +372,112 @@ describe("/identities/$id", () => {
 
     await screen.findByRole("heading", { level: 1, name: testIdentity.displayName });
     expect(screen.queryByRole("button", { name: m.identityActions() })).not.toBeInTheDocument();
+  });
+});
+
+// The pages of an actor that may do less than everything: the permissions list and each identity's
+// allowedActions, as the API answers them for that actor.
+describe("/identities/$id with fewer permissions", () => {
+  beforeEach(() => {
+    toastQueue.clear();
+  });
+
+  // An actor that may only read: no identity allows it anything.
+  function signedInAsReader() {
+    server.use(
+      ...signedIn(),
+      listIdentities([{ ...ada, allowedActions: [] }, { ...grace, allowedActions: [] }, hidden]),
+    );
+    server.use(permissions(["identity:read"]));
+  }
+
+  // An actor that may edit only its own identity's fields.
+  function signedInAsSelf() {
+    server.use(
+      ...signedIn(),
+      listIdentities([
+        { ...ada, allowedActions: ["identity:update:username", "identity:update:displayName"] },
+        { ...grace, allowedActions: [] },
+        hidden,
+      ]),
+    );
+    server.use(
+      permissions(["identity:read", "identity:update:username", "identity:update:displayName"]),
+    );
+  }
+
+  function editButton(label: string) {
+    return screen.queryByRole("button", { name: m.inlineEditLabel({ label }) });
+  }
+
+  it("shows a reader the fields as plain text, without the menu", async () => {
+    signedInAsReader();
+    renderRoute(`/identities/${ada.id}`);
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: testIdentity.displayName }),
+    ).toBeInTheDocument();
+    expect(property(m.username())).toHaveTextContent(testIdentity.username);
+    expect(editButton(m.identityDisplayName())).not.toBeInTheDocument();
+    expect(editButton(m.username())).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: m.identityActions() })).not.toBeInTheDocument();
+  });
+
+  it("lets a reader see another identity, without deleting it", async () => {
+    signedInAsReader();
+    renderRoute(`/identities/${grace.id}`);
+
+    await screen.findByRole("heading", { level: 1, name: "grace" });
+    expect(editButton(m.username())).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: m.identityActions() })).not.toBeInTheDocument();
+  });
+
+  it("lets self edit its own fields, but not delete itself", async () => {
+    signedInAsSelf();
+    renderRoute(`/identities/${ada.id}`);
+
+    await screen.findByRole("heading", { level: 1, name: testIdentity.displayName });
+    expect(editButton(m.identityDisplayName())).toBeInTheDocument();
+    expect(editButton(m.username())).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: m.identityActions() })).not.toBeInTheDocument();
+  });
+
+  it("doesn't let self edit another identity", async () => {
+    signedInAsSelf();
+    renderRoute(`/identities/${grace.id}`);
+
+    await screen.findByRole("heading", { level: 1, name: "grace" });
+    expect(editButton(m.username())).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: m.identityActions() })).not.toBeInTheDocument();
+  });
+
+  it("hides Delete once a denied delete has refreshed a stale identity", async () => {
+    // The page loaded while grace allowed a delete; the policies have changed since.
+    server.use(
+      ...signedIn(),
+      listIdentities(),
+      http.delete("/api/v1/identities/:id", () =>
+        HttpResponse.json(
+          { type: "about:blank", title: "Forbidden", status: 403 },
+          { status: 403, headers: { "Content-Type": "application/problem+json" } },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/identities/${grace.id}`);
+
+    await screen.findByRole("heading", { level: 1, name: "grace" });
+    server.use(listIdentities([ada, { ...grace, allowedActions: [] }, hidden]));
+    await user.click(screen.getByRole("button", { name: m.identityActions() }));
+    await user.click(await screen.findByRole("menuitem", { name: m.identityDelete() }));
+    const title = m.identityDeleteTitle({ name: "grace" });
+    const dialog = await screen.findByRole("alertdialog", { name: title });
+    await user.click(within(dialog).getByRole("button", { name: m.identityDelete() }));
+
+    expect(await screen.findByText(m.identitiesDeleteForbidden({ count: 1 }))).toBeInTheDocument();
+    // The 403 refetched the list, whose grace no longer allows the delete.
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: m.identityActions() })).not.toBeInTheDocument();
+    });
   });
 });

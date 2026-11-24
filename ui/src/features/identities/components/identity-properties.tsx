@@ -15,14 +15,20 @@ import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.t
 
 type IdentityPropertiesProps = {
   identity: IdentityResponse;
+  // Whether the actor may update the username; without, it's plain text.
+  canEditUsername: boolean;
   // Saves a changed username, which the user edits in place.
   onSaveUsername: (username: string) => Promise<void>;
 };
 
-// An identity's properties in its page's sidebar: its username, which the user edits in place, who
-// created and last changed it, and when. A field that the actor can't read is absent, and its row
-// with it.
-export function IdentityProperties({ identity, onSaveUsername }: IdentityPropertiesProps) {
+// An identity's properties in its page's sidebar: its username, which the user edits in place if
+// the actor may, who created and last changed it, and when. A field that the actor can't read is
+// absent, and its row with it.
+export function IdentityProperties({
+  identity,
+  canEditUsername,
+  onSaveUsername,
+}: IdentityPropertiesProps) {
   const { username, createdBy, createdAt, updatedBy, updatedAt } = identity;
 
   return (
@@ -33,6 +39,7 @@ export function IdentityProperties({ identity, onSaveUsername }: IdentityPropert
             value={username}
             schema={usernameSchema}
             label={m.username()}
+            isReadOnly={!canEditUsername}
             onSave={onSaveUsername}
           />
         </PropertyItem>
