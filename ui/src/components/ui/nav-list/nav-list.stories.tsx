@@ -228,3 +228,54 @@ export const WithSectionsGerman = meta.story({
     ).toBeVisible();
   },
 });
+
+// The app's menu with actions on its items, as AppNavigation passes the signed-in identity's
+// allowedActions: Identities needs identity:read, API keys apikey:read.
+function PermittedNavigation(args: {
+  "aria-label": string;
+  allowedActions?: ReadonlyArray<string>;
+}) {
+  return (
+    <div style={{ inlineSize: "var(--size-sidebar)" }}>
+      <NavList {...args}>
+        <NavItem href="/" icon={IconHome}>
+          {m.home()}
+        </NavItem>
+        <NavSection title={m.administration()}>
+          <NavItem href="/" icon={IconUsers} action="identity:read">
+            {m.identities()}
+          </NavItem>
+          <NavItem href="/" icon={IconKey} action="apikey:read">
+            {text.apiKeys}
+          </NavItem>
+        </NavSection>
+      </NavList>
+    </div>
+  );
+}
+
+// An item whose action allowedActions doesn't hold hides; its section shows with the rest.
+export const HiddenItem = meta.story({
+  args: { allowedActions: ["identity:read"] },
+  render: (args) => <PermittedNavigation {...args} />,
+  play: async ({ canvas }) => {
+    const section = canvas.getByRole("list", { name: m.administration() });
+    await expect(within(section).getByRole("link", { name: m.identities() })).toBeVisible();
+    await expect(canvas.queryByRole("link", { name: text.apiKeys })).not.toBeInTheDocument();
+  },
+});
+
+// A section none of whose items is allowed hides with its heading; an item without an action
+// shows whatever the list holds.
+export const HiddenSection = meta.story({
+  args: { allowedActions: [] },
+  render: (args) => <PermittedNavigation {...args} />,
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole("link", { name: m.home() })).toBeVisible();
+    await expect(
+      canvas.queryByRole("heading", { name: m.administration() }),
+    ).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("list", { name: m.administration() })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("link", { name: m.identities() })).not.toBeInTheDocument();
+  },
+});
