@@ -34,6 +34,10 @@ func (a Access) AllowedActions() AllowedActions {
 // Access checks what the decider allows on the resource: reading each field of the Model, and each action
 // of Allowable, which count as hints. The resource must be one that the decider allows reading at all. The
 // allowed actions are never nil, so that an object that the actor may do nothing to tells so.
+//
+// An error from a field read fails it, since it would hide a field that may be readable. An action whose hint
+// fails is left out instead, since the request it hints at fails the same way: a forbid on a write that
+// fails to evaluate must not fail every read of the type. The decider counts such a hint as an error.
 func (a TypeActions) Access(decider Decider, resource Resource) (Access, error) {
 	fields, err := a.readFields.Readable(decider, resource)
 	if err != nil {
@@ -42,11 +46,7 @@ func (a TypeActions) Access(decider Decider, resource Resource) (Access, error) 
 
 	allowed := AllowedActions{}
 	for _, action := range a.allowable {
-		can, err := decider.Hint(action, resource)
-		if err != nil {
-			return Access{}, fmt.Errorf("check allowed actions: %w", err)
-		}
-		if can {
+		if can, err := decider.Hint(action, resource); can && err == nil {
 			allowed = append(allowed, action.Name())
 		}
 	}
@@ -77,8 +77,8 @@ func (a TypeActions) NoAccess() Access {
 }
 
 // Allowable returns the names of the actions that AllowedActions can hold, in its order: <type>:delete,
-// <type>:update:<field> for each field of Update, and the further actions of the TypeSpec. They're the
-// values that an API can declare for it.
+// <type>:update:<field> for each field of Update, and the further Actions of the TypeSpec, but not its
+// CollectionActions. They're the values that an API can declare for it.
 func (a TypeActions) Allowable() []string {
 	names := make([]string, len(a.allowable))
 	for i, action := range a.allowable {

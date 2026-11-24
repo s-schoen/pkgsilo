@@ -121,6 +121,9 @@ type Decider interface {
 	// Hint decides like Can, for an answer that only guides a client about what it may do, such as the
 	// allowed actions of an object, and is counted as a hint rather than as a check that a request passes
 	// or fails by. It must never decide whether a request is allowed.
+	//
+	// A caller counts an error as not allowed rather than failing on it: the request that it hints at fails
+	// the same way, and the decider counts the error.
 	Hint(action Action, resource Resource) (bool, error)
 	// CanSome reports whether the actor may do the action to some resource of the type, such as "may the
 	// actor delete identities?", for a client that has no object in hand. It's decided as a hint, like
@@ -131,7 +134,8 @@ type Decider interface {
 	// `resource is` another type, or whose condition refers to the resource: neither can deny every
 	// resource of the type. Only an unscoped forbid and one scoped to `resource is <the type>` without a
 	// condition on the resource deny. The principal's scope and conditions are evaluated exactly. As for
-	// Can, a forbid that fails to evaluate results in an error, and a permit that fails grants nothing.
+	// Can, a forbid that fails to evaluate results in an error, and a permit that fails grants nothing. A
+	// caller counts an error as not allowed, as for Hint: such a forbid fails the action on every resource.
 	CanSome(action Action, resourceType string) (bool, error)
 }
 

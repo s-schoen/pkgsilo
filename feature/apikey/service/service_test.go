@@ -761,23 +761,6 @@ func TestAPIKeyService_AuthorizationFails(t *testing.T) {
 		})
 	}
 
-	// The allowed action decisions, after every other decision allowed the request. They come before any
-	// write too.
-	for _, name := range []string{"create", "get", "list"} {
-		t.Run(name+" no allowed action decision", func(t *testing.T) {
-			t.Parallel()
-			authorizer, decider := newDeciding(t)
-			// The mock fails the test if the repository writes anything.
-			svc, repo := newTestServiceWith(t, authorizer)
-			repo.EXPECT().Get(mock.Anything, identityID, stored.ID).Return(stored, nil).Maybe()
-			repo.EXPECT().ListAll(mock.Anything, identityID).Return([]repository.APIKeyRecord{stored}, nil).Maybe()
-			decider.EXPECT().Can(mock.Anything, mock.Anything).Return(true, nil).Maybe()
-			decider.EXPECT().Hint(mock.Anything, mock.Anything).Return(false, errDecision)
-
-			assertFailed(t, all[name](svc))
-		})
-	}
-
 	t.Run("delete no action decision", func(t *testing.T) {
 		t.Parallel()
 		authorizer, decider := newDeciding(t)

@@ -26,6 +26,9 @@ type PermissionService interface {
 	// With owner, it lists exactly the actions of the owned types for that identity: the creates of each
 	// owned type on a new resource of the owner, and every action of a type that is OnePerOwner on the
 	// owner's one resource. An owner that the actor may not read is reported with ErrIdentityNotFound.
+	//
+	// An action whose decision fails is left out rather than failing the list, since a request for it fails
+	// the same way.
 	List(ctx context.Context, actor, identityID uuid.UUID, owner *uuid.UUID) (Permissions, error)
 }
 
@@ -75,7 +78,8 @@ func (s *permissionService) List(
 }
 
 // allowedOnSome returns the names of the actions that the decider allows on some resource of their type, never
-// nil.
+// nil. An action whose decision fails is left out, as authz.Decider.Hint asks: one broken forbid must not fail
+// the whole list.
 func (s *permissionService) allowedOnSome(ctx context.Context, decider authz.Decider) (authz.AllowedActions, error) {
 	allowed := authz.AllowedActions{}
 	for _, t := range s.types {
@@ -93,10 +97,7 @@ func (s *permissionService) allowedOnSome(ctx context.Context, decider authz.Dec
 			} else {
 				can, err = decider.CanSome(action, t.Type())
 			}
-			if err != nil {
-				return nil, fmt.Errorf("check %s: %w", action.Name(), err)
-			}
-			if can {
+			if can && err == nil {
 				allowed = append(allowed, action.Name())
 			}
 		}
@@ -107,7 +108,7 @@ func (s *permissionService) allowedOnSome(ctx context.Context, decider authz.Dec
 
 // allowedForOwner returns the names of the actions of the owned types that the decider allows for the
 // identity with the given ID as their owner, never nil, or authz.ErrOwnerNotFound translated if the decider
-// doesn't allow reading the identity.
+// doesn't allow reading the identity. An action whose decision fails is left out, like in allowedOnSome.
 func (s *permissionService) allowedForOwner(
 	ctx context.Context, decider authz.Decider, ownerID uuid.UUID,
 ) (authz.AllowedActions, error) {
@@ -128,11 +129,7 @@ func (s *permissionService) allowedForOwner(
 				continue
 			}
 
-			can, err := decider.Hint(action, resource)
-			if err != nil {
-				return nil, fmt.Errorf("check %s: %w", action.Name(), err)
-			}
-			if can {
+			if can, err := decider.Hint(action, resource); can && err == nil {
 				allowed = append(allowed, action.Name())
 			}
 		}

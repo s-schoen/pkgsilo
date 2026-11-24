@@ -88,7 +88,7 @@ func TestTools_AllowedActions(t *testing.T) {
 			schema = schema.Properties["items"].Items
 		}
 
-		assert.Equal(t, []any{"policy:delete", "policy:update:name", "policy:update:source", "policy:readSchema"},
+		assert.Equal(t, []any{"policy:delete", "policy:update:name", "policy:update:source"},
 			schema.Properties["allowedActions"].Items.Enum, name)
 	}
 }
