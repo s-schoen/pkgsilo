@@ -40,21 +40,26 @@ const meta = preview.meta({
   ],
 });
 
-const newIdentity = (
-  <Button variant="primary" icon={IconPlus}>
-    {text.newIdentity}
-  </Button>
-);
+const newIdentity = {
+  id: "new",
+  element: (
+    <Button variant="primary" icon={IconPlus}>
+      {text.newIdentity}
+    </Button>
+  ),
+};
 
 // The header of an identity's details page.
 const detailsArgs = {
   breadcrumbs: [{ label: text.identities, href: "/" as const }, { label: text.identity }],
-  actions: <Button variant="ghost" icon={IconDots} aria-label={text.actions} />,
+  actions: [
+    { id: "menu", element: <Button variant="ghost" icon={IconDots} aria-label={text.actions} /> },
+  ],
 };
 
 // A list page's header: its title, the page's <h1>, and its primary action at the end.
 export const ListPage = meta.story({
-  args: { title: text.identities, actions: newIdentity },
+  args: { title: text.identities, actions: [newIdentity] },
   play: async ({ canvas }) => {
     await expect(canvas.getByRole("heading", { level: 1, name: text.identities })).toBeVisible();
     await expect(canvas.getByRole("button", { name: text.newIdentity })).toBeVisible();
@@ -94,11 +99,32 @@ export const CrumbPreloaded = meta.story({
   },
 });
 
+// An action that isn't visible, as one the actor may not take, isn't rendered; the others are.
+export const HiddenAction = meta.story({
+  args: {
+    title: text.identities,
+    actions: [{ ...newIdentity, isVisible: false }, ...detailsArgs.actions],
+  },
+  play: async ({ canvas }) => {
+    await expect(canvas.queryByRole("button", { name: text.newIdentity })).not.toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: text.actions })).toBeVisible();
+  },
+});
+
+// Without a visible action, the header is its title alone.
+export const NoVisibleAction = meta.story({
+  args: { title: text.identities, actions: [{ ...newIdentity, isVisible: false }] },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole("heading", { level: 1, name: text.identities })).toBeVisible();
+    await expect(canvas.queryByRole("button")).not.toBeInTheDocument();
+  },
+});
+
 // A name longer than the page is wide wraps, and the actions move below it.
 export const LongTitle = meta.story({
   args: {
     title: `${text.identities} ${"·".repeat(20)} ${text.identity.repeat(6)}`,
-    actions: newIdentity,
+    actions: [newIdentity],
   },
   decorators: [
     (Story) => (

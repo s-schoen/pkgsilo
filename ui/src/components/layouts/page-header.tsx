@@ -1,4 +1,5 @@
 import IconChevronRight from "@tabler/icons-react/icons/IconChevronRight";
+import { Fragment } from "react";
 import { Breadcrumb, Breadcrumbs } from "react-aria-components/Breadcrumbs";
 import { Link } from "react-aria-components/Link";
 
@@ -20,6 +21,16 @@ export type PageHeaderCrumb = {
   href?: Href;
 };
 
+// An action at the end of the header: a Button, such as the primary one that creates an item, or
+// an ActionMenu.
+export type PageHeaderAction = {
+  id: string;
+  element: ReactNode;
+  // false hides the action, as one that the actor may not take; a named boolean of a resource's
+  // permissions hook, such as canCreate.
+  isVisible?: boolean;
+};
+
 type PageHeaderProps = {
   // The way to the page, from its section: Identities › Ada Lovelace.
   breadcrumbs?: Array<PageHeaderCrumb>;
@@ -27,12 +38,14 @@ type PageHeaderProps = {
   // title of its main column is its <h1>.
   title?: string;
   // The page's actions, at the end, such as the button that creates an item: one primary at most.
-  actions?: ReactNode;
+  actions?: Array<PageHeaderAction>;
 };
 
-// The top of a page: its breadcrumbs, whose links preload their routes, its title, and its actions
-// at the end, which wrap below the rest when the page is narrow.
-export function PageHeader({ breadcrumbs, title, actions }: PageHeaderProps) {
+// The top of a page: its breadcrumbs, whose links preload their routes, its title, and its visible
+// actions at the end, which wrap below the rest when the page is narrow.
+export function PageHeader({ breadcrumbs, title, actions = [] }: PageHeaderProps) {
+  const visibleActions = actions.filter((action) => action.isVisible !== false);
+
   return (
     <header className={styles.header}>
       <div className={styles.start}>
@@ -52,7 +65,13 @@ export function PageHeader({ breadcrumbs, title, actions }: PageHeaderProps) {
         )}
         {title !== undefined && <h1 className={styles.title}>{title}</h1>}
       </div>
-      {actions !== undefined && <div className={styles.actions}>{actions}</div>}
+      {visibleActions.length > 0 && (
+        <div className={styles.actions}>
+          {visibleActions.map((action) => (
+            <Fragment key={action.id}>{action.element}</Fragment>
+          ))}
+        </div>
+      )}
     </header>
   );
 }

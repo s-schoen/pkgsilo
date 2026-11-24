@@ -52,11 +52,16 @@ export function IdentitiesPage() {
     <>
       <PageHeader
         title={m.identities()}
-        actions={
-          <Button icon={IconPlus} onPress={newIdentity}>
-            {m.identityNew()}
-          </Button>
-        }
+        actions={[
+          {
+            id: "new",
+            element: (
+              <Button icon={IconPlus} onPress={newIdentity}>
+                {m.identityNew()}
+              </Button>
+            ),
+          },
+        ]}
       />
       <DataTable
         label={m.identities()}
