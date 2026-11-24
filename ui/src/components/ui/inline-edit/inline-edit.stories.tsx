@@ -348,9 +348,9 @@ export const Composing = meta.story({
   },
 });
 
-// A value that the actor can't change is plain text.
-export const Disabled = meta.story({
-  args: { isDisabled: true },
+// A value that the actor may not change is plain text, without the edit mode.
+export const ReadOnly = meta.story({
+  args: { isReadOnly: true },
   play: async ({ canvas }) => {
     await expect(canvas.getByText(text.value)).toBeVisible();
     await expect(canvas.queryByRole("button")).not.toBeInTheDocument();

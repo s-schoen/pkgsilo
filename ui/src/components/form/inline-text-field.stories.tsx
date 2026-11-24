@@ -113,3 +113,14 @@ export const Reverted = meta.story({
     await expect(await canvas.findByText(text.value)).toBeVisible();
   },
 });
+
+// A value that the actor may not change is the field's value as plain text, without the edit mode.
+export const ReadOnly = meta.story({
+  args: { isReadOnly: true },
+  play: async ({ args, canvas }) => {
+    await expect(canvas.getByText(text.value)).toBeVisible();
+    await expect(
+      canvas.queryByRole("button", { name: m.inlineEditLabel({ label: args.label }) }),
+    ).not.toBeInTheDocument();
+  },
+});

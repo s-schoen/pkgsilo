@@ -12,6 +12,8 @@ type IdentityTextFieldProps = {
   // Saves the changed value, as useSaveIdentityField's function for this field.
   onSave: (value: string) => Promise<void>;
   placeholder?: string;
+  // The value as plain text, without the edit mode, as for a field the actor may not update.
+  isReadOnly?: boolean;
   variant?: "default" | "title";
 };
 
