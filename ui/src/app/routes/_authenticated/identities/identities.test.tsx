@@ -4,16 +4,20 @@ import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { getListIdentitiesMockHandler } from "@/api/gen/client/identities/identities.msw.ts";
+import { IdentityResponseAllowedActionsItem } from "@/api/gen/client/model/identityResponseAllowedActionsItem.ts";
 import { toastQueue } from "@/components/ui/toast";
 import { PKGSILO_ID } from "@/features/identities/utils/identity-name.ts";
 import { m } from "@/paraglide/messages.js";
 import { renderRoute } from "@/test/render.tsx";
 import { server } from "@/test/server.ts";
-import { signedIn, testIdentity } from "@/test/session.ts";
+import { permissions, signedIn, testIdentity } from "@/test/session.ts";
 
 import type { IdentityResponse } from "@/api/gen/client/model/identityResponse.ts";
 
 const hour = 60 * 60 * 1000;
+
+// Every action on an identity: the actor may do everything to the identities it can read.
+const allowedActions = Object.values(IdentityResponseAllowedActionsItem);
 
 // The signed-in identity, which pkgsilo created; grace, whom it created, without a display name;
 // and an identity whose name and username the actor can't read, by a creator it can't read either.
@@ -24,6 +28,7 @@ const identities: Array<IdentityResponse> = [
     updatedBy: PKGSILO_ID,
     createdAt: new Date(Date.now() - 48 * hour).toISOString(),
     updatedAt: new Date(Date.now() - 3 * hour).toISOString(),
+    allowedActions,
   },
   {
     id: "00000000-0000-4000-8000-000000000003",
@@ -31,10 +36,12 @@ const identities: Array<IdentityResponse> = [
     createdBy: testIdentity.id,
     createdAt: new Date(Date.now() - 24 * hour).toISOString(),
     updatedAt: new Date(Date.now() - 24 * hour).toISOString(),
+    allowedActions,
   },
   {
     id: "00000000-0000-4000-8000-000000000004",
     createdBy: "00000000-0000-4000-8000-000000000099",
+    allowedActions,
   },
 ];
 const [ada, grace, hidden] = identities as [IdentityResponse, IdentityResponse, IdentityResponse];
@@ -347,5 +354,73 @@ describe("/identities", () => {
     expect(await screen.findByText(m.identityDeleted({ name: "grace" }))).toBeInTheDocument();
     expect(requested).toEqual([grace.id]);
     expect(rowOf(ada.id)).toBeInTheDocument();
+  });
+});
+
+// The list of an actor that may do less than everything: the permissions list and each identity's
+// allowedActions, as the API answers them for that actor.
+describe("/identities with fewer permissions", () => {
+  beforeEach(() => {
+    toastQueue.clear();
+  });
+
+  // An actor that may only read: no identity allows it anything.
+  function signedInAsReader() {
+    stored = identities.map((identity) => ({ ...identity, allowedActions: [] }));
+    server.use(...signedIn(), listIdentities());
+    server.use(permissions(["identity:read"]));
+  }
+
+  it("doesn't offer a reader to create an identity", async () => {
+    signedInAsReader();
+    renderRoute("/identities");
+
+    await findRows();
+    expect(screen.queryByRole("button", { name: m.identityNew() })).not.toBeInTheDocument();
+  });
+
+  it("doesn't offer a reader to create the first identity either", async () => {
+    signedInAsReader();
+    stored = [];
+    renderRoute("/identities");
+
+    expect(await screen.findByText(m.identitiesEmpty())).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: m.identityNew() })).not.toBeInTheDocument();
+  });
+
+  it("doesn't offer a reader to delete", async () => {
+    signedInAsReader();
+    const user = userEvent.setup();
+    renderRoute("/identities");
+
+    await findRows();
+    await user.click(within(rowOf(grace.id)).getByRole("checkbox"));
+    expect(screen.getByText(m.dataTableSelected({ count: 1 }))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: m.dataTableDelete() })).not.toBeInTheDocument();
+  });
+
+  it("deletes only the identities that allow it", async () => {
+    // Self-service: the actor may delete only grace, and edit nothing else.
+    stored = identities.map((identity) => ({
+      ...identity,
+      allowedActions: identity.id === grace.id ? ["identity:delete" as const] : [],
+    }));
+    const requested: Array<string> = [];
+    server.use(...signedIn(), listIdentities(), deleteIdentities(requested));
+    server.use(permissions(["identity:read", "identity:delete"]));
+    const user = userEvent.setup();
+    renderRoute("/identities");
+
+    await findRows();
+    // Neither the "New identity" button…
+    expect(screen.queryByRole("button", { name: m.identityNew() })).not.toBeInTheDocument();
+    await user.click(within(rowOf(hidden.id)).getByRole("checkbox"));
+    expect(screen.queryByRole("button", { name: m.dataTableDelete() })).not.toBeInTheDocument();
+
+    // …nor Delete of hidden, which Delete leaves out among others.
+    await deleteSelected(user, [grace.id], 1);
+
+    expect(await screen.findByText(m.identityDeleted({ name: "grace" }))).toBeInTheDocument();
+    expect(requested).toEqual([grace.id]);
   });
 });

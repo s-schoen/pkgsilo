@@ -3,7 +3,6 @@ import { eq, useLiveQuery } from "@tanstack/react-db";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { useGetCurrentSession } from "@/api/gen/client/sessions/sessions.ts";
 import { NotFound } from "@/components/errors/not-found.tsx";
 import { DetailLayout } from "@/components/layouts/detail-layout.tsx";
 import { PageHeader } from "@/components/layouts/page-header.tsx";
@@ -13,6 +12,7 @@ import { identitiesCollection } from "@/features/identities/api/identities-colle
 import { IdentityProperties } from "@/features/identities/components/identity-properties.tsx";
 import { IdentityTextField } from "@/features/identities/components/identity-text-field.tsx";
 import { useDeleteIdentities } from "@/features/identities/hooks/use-delete-identities.ts";
+import { useIdentityPermissions } from "@/features/identities/hooks/use-identity-permissions.ts";
 import { useSaveIdentityField } from "@/features/identities/hooks/use-save-identity-field.ts";
 import { identityName } from "@/features/identities/utils/identity-name.ts";
 import { displayNameSchema } from "@/features/identities/utils/identity-schema.ts";
@@ -24,9 +24,10 @@ const route = getRouteApi("/_authenticated/identities/$id");
 
 // An identity's page, at /identities/<id>: its name as the title and its properties in the
 // sidebar, from identitiesCollection, which the route's loader has loaded. The user edits the
-// display name and the username in place; each save patches that one field. An identity that isn't
-// there, since it doesn't exist or the actor can't read it, is a page that doesn't exist. The
-// header's ⋯ menu deletes the identity, unless it's the signed-in one.
+// display name and the username in place, where the actor may update them; each save patches that
+// one field. An identity that isn't there, since it doesn't exist or the actor can't read it, is a
+// page that doesn't exist. The header's ⋯ menu deletes the identity, where the actor may
+// (useIdentityPermissions); without a visible item, there's no menu.
 export function IdentityPage() {
   const { id } = route.useParams();
   const { data: live } = useLiveQuery((q) =>
@@ -40,14 +41,14 @@ export function IdentityPage() {
   const [deleting, setDeleting] = useState<IdentityResponse>();
   const identity = live ?? deleting;
   const save = useSaveIdentityField(id);
-  const session = useGetCurrentSession();
-  const currentId = session.data?.data.data.identityId;
+  const permissions = useIdentityPermissions();
 
   if (identity === undefined) {
     return <NotFound />;
   }
 
   const name = identityName(identity);
+  const { canDelete, canEdit } = permissions.of(identity);
   return (
     <>
       <PageHeader
@@ -55,10 +56,14 @@ export function IdentityPage() {
         actions={[
           {
             id: "menu",
-            element: <IdentityActions identity={identity} onDeletingChange={setDeleting} />,
-            // The signed-in identity can't delete itself; nothing is offered until the session
-            // tells which one that is.
-            isVisible: currentId !== undefined && currentId !== identity.id,
+            element: (
+              <IdentityActions
+                identity={identity}
+                canDelete={canDelete}
+                onDeletingChange={setDeleting}
+              />
+            ),
+            isVisible: canDelete,
           },
         ]}
       />
@@ -75,6 +80,7 @@ export function IdentityPage() {
               label={m.identityDisplayName()}
               placeholder={m.identityDisplayName()}
               variant="title"
+              isReadOnly={!canEdit.displayName}
               onSave={async (value) => save("displayName", value)}
             />
           )
@@ -82,6 +88,7 @@ export function IdentityPage() {
         sidebar={
           <IdentityProperties
             identity={identity}
+            canEditUsername={canEdit.username}
             onSaveUsername={async (value) => save("username", value)}
           />
         }
@@ -92,13 +99,16 @@ export function IdentityPage() {
 
 type IdentityActionsProps = {
   identity: IdentityResponse;
+  // Whether the menu offers Delete.
+  canDelete: boolean;
   // Gets the identity while its delete runs, and undefined once it failed.
   onDeletingChange: (identity: IdentityResponse | undefined) => void;
 };
 
-// The ⋯ menu of an identity's page, with Delete, which asks first. Once the API has deleted it, the
+// The ⋯ menu of an identity's page, with Delete, which asks first; without a visible item, it
+// renders nothing. Once the API has deleted it, the
 // page goes to the list; if the delete fails, which a toast reports, the dialog and the page stay.
-function IdentityActions({ identity, onDeletingChange }: IdentityActionsProps) {
+function IdentityActions({ identity, canDelete, onDeletingChange }: IdentityActionsProps) {
   const [isDeleteOpen, setDeleteOpen] = useState(false);
   const deleteIdentities = useDeleteIdentities();
   const navigate = useNavigate();
@@ -124,6 +134,7 @@ function IdentityActions({ identity, onDeletingChange }: IdentityActionsProps) {
             label: m.identityDelete(),
             icon: IconTrash,
             variant: "danger",
+            isVisible: canDelete,
             onAction: () => {
               setDeleteOpen(true);
             },
