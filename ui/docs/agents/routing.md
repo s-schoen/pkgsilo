@@ -10,6 +10,8 @@ TanStack Router routes by the files in `src/app/routes/`: `__root.tsx` is the la
   Its `beforeLoad` loads the current session, and without one leads to `/signin?redirect=<the page's URL>`, so that a sign-in leads back; `safeRedirectTarget` (`features/session/utils/redirect-target.ts`) drops a redirect that isn't a path of the app.
   It loads the signed-in identity's permissions (`features/permissions`) together with the session, so no page renders without them.
 - A route that the identity may not use renders `NotFound` in the app's frame, as an object that it may not read does: its `beforeLoad` calls `requirePermission(context.queryClient, action)` (`features/permissions/utils/require-permission.ts`), which throws `notFound()` when the permissions don't list the action.
+  The route sets `notFoundComponent: NotFound`, which renders in its own place, inside the layouts above it: without it, the error reaches `_authenticated`'s, which replaces the frame.
+  The router's `defaultNotFoundComponent` doesn't help, since an ancestor's own `notFoundComponent` wins over it.
 - Once a query or a mutation fails with 401 on a page, as when the session ends, `redirectOnUnauthorized`, which `createAppRouter` starts, leads to the sign-in page the same way and removes what the clients hold of the session (`clearSessionData`: every collection and cached response).
   The sign-in page replaces the page in the history, as after a sign-out, so that Back doesn't lead to the page and its 401 back again.
   A failed sign-in's 401 is the form's to show.

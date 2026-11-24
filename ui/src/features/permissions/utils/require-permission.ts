@@ -14,6 +14,10 @@ import type { QueryClient } from "@tanstack/react-query";
 // owner, the list of the actions on owner's resources, which it loads first:
 //
 //   beforeLoad: ({ context }) => requirePermission(context.queryClient, "identity:create:username"),
+//   notFoundComponent: NotFound,
+//
+// The route's own notFoundComponent renders NotFound in the app's frame; without it, the
+// authenticated layout's replaces the frame.
 export async function requirePermission(
   queryClient: QueryClient,
   action: Action | ReadonlyArray<Action>,
